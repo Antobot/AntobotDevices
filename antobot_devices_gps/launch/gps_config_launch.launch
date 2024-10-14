@@ -1,0 +1,27 @@
+<!--
+# Copyright (c) 2023, ANTOBOT LTD.
+# All rights reserved.
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # Code Description:   
+# Contact: soyoung.kim@antobot.ai
+# # # #  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+-->
+
+<launch>
+  <arg name="exec_name" default="gps_ppp.py" />
+  <arg name="node_name" default="gps_ppp" />
+  <arg name="device_port" default="/dev/ttyTHS0" />
+  <arg name="ppp_device_id" default="None" />
+
+  <param name="gps_node_name" value="$(arg node_name)" />
+
+  <node pkg="antobot_devices_gps" type="$(arg exec_name)" name="$(arg node_name)" output="screen">
+    <param name="device_port" value="$(arg device_port)"/>
+    <param name="ppp_device_id" value="$(arg ppp_device_id)" />
+  </node>
+
+  <node pkg="antobot_devices_gps" type="movingbase_enu_conversion.py" name="MovingBaseConversion" output="screen">
+  </node>
+
+</launch>
