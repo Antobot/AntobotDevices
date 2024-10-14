@@ -15,7 +15,7 @@
 
 import rospy
 import rosservice
-from antobot_manager_msgs.srv import antoRec, antoRecRequest, antoRecResponse
+from antobot_devices_msgs.srv import antoRec, antoRecRequest, antoRecResponse
 
 
 class antoRecClient():

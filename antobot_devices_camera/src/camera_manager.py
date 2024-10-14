@@ -25,9 +25,9 @@ from datetime import datetime
 from std_msgs.msg import Bool, String
 
 
-from antobot_manager_msgs.srv import camManager, camManagerResponse
-from antobot_manager_msgs.srv import antoRec, antoRecResponse
-from antobot_manager_jobs.updateProgressClient import progressUpdateClient
+from antobot_devices_msgs.srv import camManager, camManagerResponse
+from antobot_devices_msgs.srv import antoRec, antoRecResponse
+# from antobot_manager_jobs.updateProgressClient import progressUpdateClient
 from antoRecClient import antoRecClient
 
 

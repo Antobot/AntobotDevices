@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(antobot_msgs)
+project(antobot_devices_msgs)
 
 add_compile_options(-std=c++11)
 
@@ -9,18 +9,15 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
 )
 
-add_message_files(
-    FILES
-    Float32_Array.msg
-    UInt8_Array.msg
-    UInt16_Array.msg
-)
+# add_message_files()
 
 add_service_files(
   FILES
   camManager.srv
-  softShutdown.srv
   antoRec.srv
+  costmapToggleObservation.srv
+  lidarManager.srv
+  progressUpdate.srv
 )
 
 generate_messages(

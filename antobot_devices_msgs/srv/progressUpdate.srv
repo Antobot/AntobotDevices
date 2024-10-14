@@ -1,0 +1,5 @@
+string sourceString
+int8 progressCode
+---
+int8 responseCode
+string responseString

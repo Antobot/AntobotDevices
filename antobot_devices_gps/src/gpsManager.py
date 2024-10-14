@@ -19,7 +19,6 @@ import roslaunch
 import rospkg
 
 from antobot_manager_software.launchManager import Node, RoslaunchWrapperObject
-# from antobot_manager_msgs.srv import netMonitorLaunch, netMonitorLaunchResponse
 
 
 class gpsManager():
