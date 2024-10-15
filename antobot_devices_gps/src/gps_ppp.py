@@ -159,7 +159,7 @@ def main(args):
     baudrate = 460800
 
     #Publisher to publish nRTK
-    gps_pub = rospy.Publisher('am_gps_urcu', NavSatFix, queue_size=10) # am_nRTK_urcu
+    gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10) # am_nRTK_urcu
     gps_f9p = F9P_GPS()
     gps_f9p.uart2_config(baudrate)
 

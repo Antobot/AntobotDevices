@@ -99,7 +99,7 @@ def main(args):
         baudrate_rtk = 38400
         gps_f9p.uart2_config(baudrate_rtk)
 
-        gps_pub = rospy.Publisher('am_gps_urcu', NavSatFix, queue_size=10)
+        gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10)
         gpsfix = NavSatFix()
         gpsfix.header.stamp = rospy.Time.now()
         gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID

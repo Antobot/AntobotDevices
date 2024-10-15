@@ -58,7 +58,7 @@ class MovingBase_Ros:
         self.time_buf_len = 10
 
         # Create the message for ROS
-        self.gps_pub = rospy.Publisher('am_gps_urcu', NavSatFix, queue_size=10)
+        self.gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10)
         self.gpsfix = NavSatFix()
         self.gpsfix.header.stamp = rospy.Time.now()
         self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
