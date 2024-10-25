@@ -27,6 +27,6 @@
 <launch>
 
   <!-- antoManager -->
-  <node pkg="anto_manager" type="av_cam_mgr.py" name="av_cam_mgr" output="screen"></node>
+  <node pkg="antobot_devices_camera" type="camera_manager.py" name="camera_manager" output="screen"></node>
 
 </launch>
