@@ -26,10 +26,7 @@ class gpsManager():
 
         self.gps_nodes = []
 
-        # self._launch = roslaunch.scriptapi.ROSLaunch()
-        # self._launch.start()
-
-        gps_data,device_type = self.read_gps_config()
+        gps_data = self.read_gps_config()
         base_id = None
 
         if len(gps_data.items()) == 2: # Dual GPS setting
@@ -70,30 +67,14 @@ class gpsManager():
         device_type = None
 
         rospack = rospkg.RosPack()
-        packagePath=rospack.get_path('antobot_manager_software')
-        path = packagePath + "/config/software_config.yaml"
-        
-        with open(path, 'r') as yamlfile:
-            data = yaml.safe_load(yamlfile)
-            device_type = data['device_type']
-
-        if device_type == "robot":
-            print("Loading robot parameters!")
-            rospack = rospkg.RosPack()
-            packagePath=rospack.get_path('antobot_platform_robot')
-            path = packagePath + "/config/robot_config.yaml"
-        elif device_type == "tower":
-            print("Loading sensor tower parameters!")
-            rospack = rospkg.RosPack()
-            packagePath=rospack.get_path('antobot_platform_tower')
-            path = packagePath + "/config/tower_config.yaml"
+        packagePath=rospack.get_path('antobot_description')
+        path = packagePath + "/config/platform_config.yaml"
 
         with open(path, 'r') as yamlfile:
             data = yaml.safe_load(yamlfile)
             gps_data = data['gps']
-            # rtk_type = ???    # should launch all gps-related scripts from gpsManager instead
 
-        return gps_data,device_type
+        return gps_data
 
     def check_gps(self):
         # Checks whether there have been any changes to the robot's network
