@@ -63,7 +63,7 @@ class cameraManager:
         # Create a service to allow other nodes to start/stop cameras
         self.srvCamMgr = rospy.Service("/antobot/camera_manager/camera", camManager, self._serviceCallbackCamMgr)
 
-        self.updateClient = progressUpdateClient(state=0, sourceID='camManager')
+        # self.updateClient = progressUpdateClient(state=0, sourceID='camManager')
         
         self.pub_scout_light = rospy.Publisher("/antobot_manager_device/scout_light",Bool, queue_size=1)
 
@@ -71,8 +71,8 @@ class cameraManager:
         rospack = rospkg.RosPack()
 
         try:
-            path = rospack.get_path('antobot_platform_robot')
-            with open(path + '/config/robot_config.yaml', 'r') as file:
+            path = rospack.get_path('antobot_description')
+            with open(path + '/config/platform_config.yaml', 'r') as file:
                 params = yaml.safe_load(file)
 
             if "camera" in params:
@@ -170,16 +170,16 @@ class cameraManager:
         return return_msg
 
 
-    def updateJobManagerState(self):
-        """ Update the camera state in jobManager """
-
-        serviceState=self.updateClient.checkForService()
-        if serviceState: # If the service is available
-            managerResponse = self.updateClient.sendProgressUpdate()
-        else:
-            print('UV Manager: Unable to make request')
-            print('UV Manager: ROS service ' + self.updateClient.serviceName + ' is not available')
-            # TODO - Add an exception
+    # def updateJobManagerState(self):
+    #     """ Update the camera state in jobManager """
+# 
+    #     serviceState=self.updateClient.checkForService()
+    #     if serviceState: # If the service is available
+    #         managerResponse = self.updateClient.sendProgressUpdate()
+    #     else:
+    #         print('UV Manager: Unable to make request')
+    #         print('UV Manager: ROS service ' + self.updateClient.serviceName + ' is not available')
+    #         # TODO - Add an exception
 
 
 class Camera:
@@ -219,8 +219,6 @@ class Camera:
             rospy.loginfo(
                 'SW2312: CameraManager - ROS service ' + self.antoRecClient.serviceName + ' is not available')
 
-
-
         return response
 
 
@@ -247,7 +245,6 @@ class Camera:
             rospy.loginfo('SW2312: CameraManager - Unable to make request - toggle camera recording state')
             rospy.loginfo(
                 'SW2312: CameraManager - ROS service ' + self.antoRecClient.serviceName + ' is not available')
-
 
         return response
 
