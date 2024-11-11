@@ -1,0 +1,14 @@
+<launch>
+    <!-- Define the local machine to avoid defaulting to localhost -->
+    <machine name="local_machine" address="127.0.0.1" default="true" />
+
+    <!-- Start Controller Node under the "controller" namespace -->
+    <group ns="controller">
+        <node pkg="control_server" type="controller_test.py" name="controller_node" machine="local_machine" output="screen" />
+    </group>
+    
+    <!-- Start Localisation Node under the "localisation" namespace -->
+    <group ns="localisation">
+        <node pkg="control_server" type="localisation_test.py" name="localisation_node" machine="local_machine" output="screen" />
+    </group>
+</launch>
