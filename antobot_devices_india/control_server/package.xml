@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>antobot_devices_india</name>
+  <name>control_server</name>
   <version>0.0.1</version>
     <description>This package provides a node that integrates the fotenix system into ROS.</description>
 

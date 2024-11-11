@@ -3,9 +3,9 @@
 import time
 import logging
 import rospy
-from antobot_devices_india.srv import Start, StartResponse, Stop, StopResponse
-from antobot_devices_india.srv import Ready, ReadyResponse, Config, ConfigResponse
-from antobot_devices_india.srv import Restart, RestartResponse, Sleep, SleepResponse
+from control_server.srv import Start, StartResponse, Stop, StopResponse
+from control_server.srv import Ready, ReadyResponse, Config, ConfigResponse
+from control_server.srv import Restart, RestartResponse, Sleep, SleepResponse
 import numpy as np
 
 # Configure logging
