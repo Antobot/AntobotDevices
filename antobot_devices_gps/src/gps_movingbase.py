@@ -58,7 +58,7 @@ class MovingBase_Ros:
         self.time_buf_len = 10
 
         # Create the message for ROS
-        self.gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10)
+        self.gps_pub = rospy.Publisher('am_gps_urcu', NavSatFix, queue_size=10)
         self.gpsfix = NavSatFix()
         self.gpsfix.header.stamp = rospy.Time.now()
         self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
@@ -216,8 +216,9 @@ if __name__ == '__main__':
     GPIO.setmode(GPIO.BOARD)
     GPIO.setup(gpioID, GPIO.OUT)
 
-    base_port_uart = "/dev/ttyTHS0"
-    rovel_port = "/dev/AntoF9P"
+    
+    base_port_uart = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
+    rovel_port = rospy.get_param("/gps/ublox_rover/device_port","/dev/AntoF9P")
     base_port_spi = None
     
     rtk_type = rospy.get_param("/gps/urcu/rtk_type","ppp") # or "base_station"

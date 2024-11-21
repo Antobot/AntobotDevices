@@ -83,7 +83,7 @@ class nRTK:
 
         # Topic names and QoS
         rospack = rospkg.RosPack()
-        packagePath=rospack.get_path('antobot_description')
+        packagePath=rospack.get_path('antobot_devices_gps')
         self.mqtt_topics = [(f"/pp/ip/eu", 0), ("/pp/ubx/mga", 0), ("/pp/ubx/0236/ip", 0)]
         self.userdata = { 'gnss': self.nRTK_correction, 'topics': self.mqtt_topics }
         self.client = mqtt.Client(client_id=self.client_id, userdata=self.userdata)
@@ -151,15 +151,22 @@ def main(args):
 
     rospy.init_node (node_name)
 
-    dev_port = rospy.get_param('~device_port')
-    client_id = rospy.get_param('~ppp_device_id')
+    dev_port = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
 
+    parent_directory = os.path.dirname(os.path.abspath(__file__))
+    yaml_file_path = os.path.join(parent_directory, "../config/ppp_config.yaml")
+
+    with open(yaml_file_path, 'r') as file:
+        config = yaml.safe_load(file)
+        client_id = config['device_ID']
+
+    print(client_id)
     rate = rospy.Rate(8)
     
     baudrate = 460800
 
     #Publisher to publish nRTK
-    gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10) # am_nRTK_urcu
+    gps_pub = rospy.Publisher('am_gps_urcu', NavSatFix, queue_size=10) # am_nRTK_urcu
     gps_f9p = F9P_GPS()
     gps_f9p.uart2_config(baudrate)
 
