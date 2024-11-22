@@ -71,13 +71,13 @@ class gpsManager():
         if device_type == "robot":
             print("Loading robot parameters!")
             rospack = rospkg.RosPack()
-            packagePath=rospack.get_path('antobot_platform_robot')
-            path = packagePath + "/config/robot_config.yaml"
+            packagePath=rospack.get_path('antobot_description')
+            path = packagePath + "/config/platform_config.yaml"
         elif device_type == "tower":
             print("Loading sensor tower parameters!")
             rospack = rospkg.RosPack()
-            packagePath=rospack.get_path('antobot_platform_tower')
-            path = packagePath + "/config/tower_config.yaml"
+            packagePath=rospack.get_path('antobot_description')
+            path = packagePath + "/config/platform_config.yaml"
 
         with open(path, 'r') as yamlfile:
             data = yaml.safe_load(yamlfile)
