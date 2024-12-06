@@ -369,7 +369,8 @@ class UbloxGps(object):
         :return: Returns NMEA data.
         :rtype: string
         """
-        return self.hard_port.readline().decode('utf-8')
+        #return self.hard_port.read()
+        return self.hard_port.readline()
         
     def imu_alignment(self):
         """
@@ -849,7 +850,7 @@ class sfeSpiWrapper(object):
         #self.spi_port.open(0,0) # This needs to be
         #self.spi_port.max_speed_hz = 5500 #Hz
         self.spi_port.mode = 0b00
-
+    
     def read(self, read_data = 1):
         """
         Reads a byte or bytes of data from the SPI port. The bytes are
@@ -860,10 +861,37 @@ class sfeSpiWrapper(object):
         """
 
         data = self.spi_port.readbytes(read_data)
+
         byte_data = bytes([])
         for d in data:
             byte_data = byte_data + bytes([d])
         return byte_data
+        #return data
+        
+    def readline(self, read_data = 1):
+        """
+        Reads a byte or bytes of data from the SPI port. The bytes are
+        converted to a bytes object before being returned.
+
+        :return: The requested bytes
+        :rtype: bytes
+        """
+        buffer = bytearray()
+        start_pattern=b"$"
+        end_pattern = b"\r"
+        while True:
+        
+        #data = self.spi_port.readbytes(read_data)
+          data = self.spi_port.readbytes(read_data)
+          buffer.extend(data)
+          start_idx = buffer.find(start_pattern)
+          if start_idx != -1:  # Start pattern found
+            end_idx = buffer.find(end_pattern, start_idx)
+            if end_idx != -1:  # End pattern found
+              sentence = buffer[start_idx:end_idx + len(end_pattern)]
+              buffer = buffer[end_idx + len(end_pattern):]
+              return sentence.decode('utf-8')  # Decode the bytes into a string
+
 
     def write(self, data):
         """

@@ -204,7 +204,7 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x00 # 0:disable, 1:enable
+        packet[14] = 0x01 # 0:disable, 1:enable
         packet[15] = 0x00
         # calculate ubx checksum
         chk_a = 0
@@ -237,7 +237,7 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x00 #0: disable, 1: enable
+        packet[14] = 0x01 #0: disable, 1: enable
         packet[15] = 0x00
         # calculate ubx checksum
         chk_a = 0
@@ -270,7 +270,7 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x00 # 0: disbale, 1: enable
+        packet[14] = 0x01 # 0: disbale, 1: enable
         packet[15] = 0x00
         # calculate ubx checksum
         chk_a = 0
@@ -303,7 +303,7 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x00 # 0: disbale, 1: enable
+        packet[14] = 0x01 # 0: disbale, 1: enable
         packet[15] = 0x00
         # calculate ubx checksum
         chk_a = 0
@@ -336,7 +336,7 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x00 # 0: disbale, 1: enable
+        packet[14] = 0x01 # 0: disbale, 1: enable
         packet[15] = 0x00
         # calculate ubx checksum
         chk_a = 0

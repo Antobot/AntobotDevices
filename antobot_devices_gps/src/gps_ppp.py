@@ -147,7 +147,7 @@ class nRTK:
 
 def main(args):
 
-    node_name = rospy.get_param('gps_node_name')
+    node_name = 'gps_ppp' #rospy.get_param('gps_node_name')
 
     rospy.init_node (node_name)
 
@@ -161,7 +161,7 @@ def main(args):
         client_id = config['device_ID']
 
     print(client_id)
-    rate = rospy.Rate(8)
+    rate = rospy.Rate(50)
     
     baudrate = 460800
 
@@ -197,7 +197,8 @@ def main(args):
         gps_f9p.get_gps()
   
         # Check the new data is viable and update message
-        if gps_f9p.geo.lat is not None and gps_f9p.geo.lat != 0:                 
+        if not True:
+        #if gps_f9p.geo.lat is not None and gps_f9p.geo.lat != 0:                 
             gpsfix.latitude = gps_f9p.geo.lat 
             gpsfix.longitude = gps_f9p.geo.lon 
             gpsfix.altitude = gps_f9p.geo.height
@@ -223,7 +224,6 @@ def main(args):
 
             # Inverted average time to calculate hertz
             gps_hz = len(nRTK_node.gps_time_buf) / sum(nRTK_node.gps_time_buf)        
-
             if gps_f9p.geo.hAcc < 500:
                 gps_pub.publish(gpsfix)
 

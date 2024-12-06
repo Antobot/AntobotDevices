@@ -52,7 +52,9 @@ class F9P_GPS:
         # mode = 1: RTK base station, 2: PPP-IP, 3: LBand
                 
         # Get the data from the F9P
-        self.geo = self.gps_spi.geo_coords()
+        #self.geo = self.gps_spi.geo_coords()
+        self.geo = self.gps_spi.stream_nmea()
+        print(self.geo)
 
     def get_fix_status(self):
         h_acc = 75
@@ -93,7 +95,7 @@ def main(args):
     try:
         # init node
         rospy.init_node('rtk', anonymous=True)
-        rate = rospy.Rate(8)  # 8hz
+        rate = rospy.Rate(50)  # 8hz
         gps_f9p = F9P_GPS()
 
         baudrate_rtk = 38400
