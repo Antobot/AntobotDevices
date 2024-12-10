@@ -204,7 +204,7 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x01 # 0:disable, 1:enable
+        packet[14] = 0x00 # 0:disable, 1:enable
         packet[15] = 0x00
         # calculate ubx checksum
         chk_a = 0
@@ -270,7 +270,7 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x01 # 0: disbale, 1: enable
+        packet[14] = 0x00 # 0: disbale, 1: enable
         packet[15] = 0x00
         # calculate ubx checksum
         chk_a = 0
@@ -332,6 +332,39 @@ class GPS:
         packet[9] = 0x00 # reserved
         #keyid
         packet[10] = 0xcd 
+        packet[11] = 0x00 
+        packet[12] = 0x91
+        packet[13] = 0x20
+        #value
+        packet[14] = 0x00 # 0: disbale, 1: enable
+        packet[15] = 0x00
+        # calculate ubx checksum
+        chk_a = 0
+        chk_b = 0
+        for i in range(2, 16):
+            chk_a = chk_a + packet[i]
+            chk_b = chk_b + chk_a
+        packet[16] = chk_a & 0xff
+        packet[17] = chk_b & 0xff
+        return packet
+        
+    def disable_gxgst(self):
+        """ configure the GLL message in SPI"""
+        """ KEY ID: 0x209100d7"""
+        packet = bytearray(18)
+        # prepare packet
+        packet[0] = 0xb5 #header
+        packet[1] = 0x62 #header
+        packet[2] = 0x06 #class
+        packet[3] = 0x8a #id
+        packet[4] = 0x0a # length 0
+        packet[5] = 0x00 # length 1
+        packet[6] = 0x00 # version
+        packet[7] = 0x05 # layers # 01: RAM, 04: FLASH, 05: both RAM and FLASH
+        packet[8] = 0x00 # reserved
+        packet[9] = 0x00 # reserved
+        #keyid
+        packet[10] = 0xd7 
         packet[11] = 0x00 
         packet[12] = 0x91
         packet[13] = 0x20
@@ -403,6 +436,15 @@ class GPS:
         #print("Received bytes from set_baudrate",ubx_str)
         self.check_ubx_uart(received_bytes)
         print("disabled gxgll") 
+        
+        #disable the message type gxgst
+        ubx_disable_gxgst = self.disable_gxgst()
+        self.spiport.writebytes(ubx_disable_gxgst)
+    
+        received_bytes = self.receive_ubx_bytes_from_spi()
+        #print("Received bytes from set_baudrate",ubx_str)
+        self.check_ubx_uart(received_bytes)
+        print("disabled gxgst")
         
 if __name__ == '__main__':
     try:

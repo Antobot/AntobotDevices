@@ -53,14 +53,10 @@ class F9P_GPS:
         # mode = 1: RTK base station, 2: PPP-IP, 3: LBand
                 
         # Get the data from the F9P
-        #self.geo = self.gps_spi.geo_coords()
-        
-        
-        #data = self.spi_port.readbytes(read_data)
-        self.geo = self.gps_spi.stream_nmea()
-        #if sentence.startswith("$GNGGA"):
-        #   = pynmea2.parse(sentence)
-          #print(self.geo.horizontal_dil)
+        #self.geo = self.gps_spi.geo_coords() #poll method
+        self.geo = self.gps_spi.stream_nmea() #stream method
+        #print(self.geo)
+
 
     def get_fix_status(self):
         h_acc = 75
@@ -91,19 +87,22 @@ class F9P_GPS:
                 rospy.logerr("SN4010: GPS Fix Status: Critical")
                 self.gps_status = 'Critical'
         '''
-        if self.geo.gps_qual == 4 and self.gps_status != 'Good':
-            rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
-            self.gps_status = 'Good'
-        elif self.geo.gps_qual == 2 or 5:
-            self.fix_status = 1
-            if self.gps_status != 'Warning':
-              rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
-              self.gps_status = 'Warning'
-        else:
-            self.fix_status = 0 #no fix
-            if self.gps_status != 'Critical':
-                rospy.logerr("SN4010: GPS Fix Status: Critical")
-                self.gps_status = 'Critical'
+        if isinstance(self.geo,str) and self.geo.startswith("$GNGGA"):
+            self.geo = pynmea2.parse(self.geo)
+            if self.geo.gps_qual == 4 and self.gps_status != 'Good':
+                rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                self.gps_status = 'Good'
+                self.fix_status = 3
+            elif self.geo.gps_qual == 2 or 5:
+                self.fix_status = 1
+                if self.gps_status != 'Warning':
+                    rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
+                    self.gps_status = 'Warning'
+            else:
+                self.fix_status = 0 #no fix
+                if self.gps_status != 'Critical':
+                    rospy.logerr("SN4010: GPS Fix Status: Critical")
+                    self.gps_status = 'Critical'
         
 
         return self.fix_status

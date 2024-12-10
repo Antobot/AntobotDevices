@@ -59,6 +59,7 @@ class nRTK:
         self.horizontal_dilution = 0
         self.altitude_m = 0
         self.height_geoid = 0
+        
         #self.gpio_value = 2
         #self.baudrate = 460800
 
@@ -186,32 +187,54 @@ def main(args):
     gps_status = 'None'
     gps_freq_status = "None"
 
-    # Set the horizontal accuracy limit (in mm)
-    h_acc = 75 
-
+    # Set the horizontal accuracy limit (in m)
+    h_acc = 0.75 
+    hAcc = 500
     while not rospy.is_shutdown():
 
         #GPIO.output(nRTK_node.gpio01,nRTK_node.GPIO.HIGH)
 
         # Get the GPS data from the F9P
         gps_f9p.get_gps()
-        if gps_f9p.geo.startswith("$GNGGA"):
+        if isinstance(gps_f9p.geo,str) and gps_f9p.geo.startswith("$GNGST"):
             gps_f9p.geo = pynmea2.parse(gps_f9p.geo)
-            print(gps_f9p.geo)
-        # Check the new data is viable and update message
-        #if not True:
-        #if gps_f9p.geo.latitude is not None and gps_f9p.geo.latitude != 0:                  
+            hAcc=((gps_f9p.geo.std_dev_latitude)**2+(gps_f9p.geo.std_dev_longitude)**2)**0.5
+
+        elif isinstance(gps_f9p.geo,str) and gps_f9p.geo.startswith("$GNGGA"):
+            gps_f9p.geo = pynmea2.parse(gps_f9p.geo)
+
+        # Check the new data is viable and update message               
             gpsfix.latitude = gps_f9p.geo.latitude if gps_f9p.geo.lat_dir == 'N' else -gps_f9p.geo.latitude 
             gpsfix.longitude = gps_f9p.geo.longitude if gps_f9p.geo.lon_dir == 'E' else -gps_f9p.geo.longitude
-            gpsfix.altitude = float(gps_f9p.geo.altitude)
+            gpsfix.altitude = gps_f9p.geo.altitude
             
             # Get GPS fix status
-            gpsfix.status.status = gps_f9p.get_fix_status()
+            #gpsfix.status.status = gps_f9p.get_fix_status()
+            if gps_f9p.geo.gps_qual == 4 and gps_status != 'Good':
+                rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                gps_status = 'Good'
+                gpsfix.status.status = 3
+            elif gps_f9p.geo.gps_qual == 2 or 5:
+                if hAcc<h_acc:
+                    gpsfix.status.status = 3
+                    if gps_status != 'Good':
+                        rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                        gps_status = 'Good'
+                else:   
+                    gpsfix.status.status = 1
+                    if gps_status != 'Warning':
+                        rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
+                        gps_status = 'Warning'
+            else:
+                gpsfix.status.status = 0 #no fix
+                if gps_status != 'Critical':
+                    rospy.logerr("SN4010: GPS Fix Status: Critical")
+                    gps_status = 'Critical'
 
             # Assumptions made on covariance
-            gpsfix.position_covariance[0] = (float(gps_f9p.geo.horizontal_dil)*0.1*0.001)**2 
-            gpsfix.position_covariance[4] = (float(gps_f9p.geo.horizontal_dil)*0.1*0.001)**2 
-            gpsfix.position_covariance[8] = (4*float(gps_f9p.geo.horizontal_dil)*0.1*0.001)**2 
+            gpsfix.position_covariance[0] = (hAcc)**2 
+            gpsfix.position_covariance[4] = (hAcc)**2 
+            gpsfix.position_covariance[8] = (4*hAcc)**2 
 
             # Update the navsatfix messsage
             current_time = rospy.Time.now()
@@ -226,8 +249,8 @@ def main(args):
 
             # Inverted average time to calculate hertz
             gps_hz = len(nRTK_node.gps_time_buf) / sum(nRTK_node.gps_time_buf)  
-            print(gpsfix)      
-            if float(gps_f9p.geo.horizontal_dil) < 1:
+            #print(gpsfix)      
+            if hAcc < 0.75:
                 gps_pub.publish(gpsfix)
 
             #rospy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
