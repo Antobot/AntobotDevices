@@ -26,6 +26,7 @@ class gpsManager():
     def __init__(self):
 
         self.gps_nodes = []
+        self.dual_gps = 'false'
 
         # self._launch = roslaunch.scriptapi.ROSLaunch()
         # self._launch.start()
@@ -35,6 +36,7 @@ class gpsManager():
         if len(gps_data.items()) == 2: # Dual GPS setting
             for k, v in gps_data.items():
                 if k == "urcu":
+                    self.dual_gps = 'true'
                     self.createLauncher("gps_movingbase.py", "gps_movingbase")
         else: # One gps antenna 
             for k, v in gps_data.items():
@@ -115,7 +117,7 @@ class gpsManager():
         uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
         roslaunch.configure_logging(uuid)
 
-        cli_args = ['antobot_devices_gps', 'gps_config_launch.launch', 'exec_name:='+exec_name, 'node_name:='+node_name]
+        cli_args = ['antobot_devices_gps', 'gps_config_launch.launch', 'exec_name:='+exec_name, 'node_name:='+node_name, 'dual_gps:='+self.dual_gps]
 
         
         roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]

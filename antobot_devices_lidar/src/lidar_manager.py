@@ -141,7 +141,7 @@ class lidar: # Currently for C16 lidar
         roslaunch.configure_logging(uuid)
 
         #cli_args = ['antobot_move_cartograph', 'antoCartographer.launch']
-        cli_args = ['antobot_devices_lidar', 'lslidar_config_launch.launch', 'name_space:='+self.name_space, 'frame_id:='+self.frame_id,  'device_ip:='+self.ip, 'msop_port:='+self.m_port, 'difop_port:='+self.d_port]
+        cli_args = ['antobot_devices_lidar', 'lslidar_config_launch_updated.launch', 'name_space:='+self.name_space, 'frame_id:='+self.frame_id,  'device_ip:='+self.ip, 'msop_port:='+self.m_port, 'difop_port:='+self.d_port]
 
         roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
         print(roslaunch_file)
