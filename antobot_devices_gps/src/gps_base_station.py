@@ -22,6 +22,7 @@ import rospkg
 import spidev
 import sys
 import time
+import pynmea2
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8, Float32
@@ -34,7 +35,7 @@ class F9P_GPS:
         #self.baud = 460800# 38400
         self.port = spidev.SpiDev()
         self.gps_spi = UbloxGps(self.port)
-
+        self.geo = None
         self.fix_status = 0
         self.gps_status = "Critical"
         self.gps_time_buf = []
@@ -53,12 +54,17 @@ class F9P_GPS:
                 
         # Get the data from the F9P
         #self.geo = self.gps_spi.geo_coords()
+        
+        
+        #data = self.spi_port.readbytes(read_data)
         self.geo = self.gps_spi.stream_nmea()
-        print(self.geo)
+        #if sentence.startswith("$GNGGA"):
+        #   = pynmea2.parse(sentence)
+          #print(self.geo.horizontal_dil)
 
     def get_fix_status(self):
         h_acc = 75
-
+        '''
         if self.geo.flags.carrSoln == 2:  #fix mode =2 ; float mode = 1
             self.fix_status = self.geo.fixType #3: 3Dfix, 2:2Dfix
 
@@ -84,6 +90,21 @@ class F9P_GPS:
             if self.gps_status != 'Critical':
                 rospy.logerr("SN4010: GPS Fix Status: Critical")
                 self.gps_status = 'Critical'
+        '''
+        if self.geo.gps_qual == 4 and self.gps_status != 'Good':
+            rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+            self.gps_status = 'Good'
+        elif self.geo.gps_qual == 2 or 5:
+            self.fix_status = 1
+            if self.gps_status != 'Warning':
+              rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
+              self.gps_status = 'Warning'
+        else:
+            self.fix_status = 0 #no fix
+            if self.gps_status != 'Critical':
+                rospy.logerr("SN4010: GPS Fix Status: Critical")
+                self.gps_status = 'Critical'
+        
 
         return self.fix_status
 
@@ -113,18 +134,18 @@ def main(args):
             gps_f9p.get_gps()
 
             # Check the new data is viable and update message
-            if gps_f9p.geo.lat is not None and gps_f9p.geo.lat != 0:                 
-                gpsfix.latitude = gps_f9p.geo.lat 
-                gpsfix.longitude = gps_f9p.geo.lon 
-                gpsfix.altitude = gps_f9p.geo.height
+            if gps_f9p.geo.latitude is not None and gps_f9p.geo.latitude != 0:                 
+                gpsfix.latitude = gps_f9p.geo.latitude if gps_f9p.geo.lat_dir == 'N' else -gps_f9p.geo.latitude
+                gpsfix.longitude = gps_f9p.geo.longitude if gps_f9p.geo.lon_dir == 'E' else -gps_f9p.geo.longitude
+                gpsfix.altitude = float(gps_f9p.geo.altitude)
                 
                 # Get GPS fix status
                 gpsfix.status.status = gps_f9p.get_fix_status()
 
                 # Assumptions made on covariance
-                gpsfix.position_covariance[0] = (gps_f9p.geo.hAcc*0.001)**2 
-                gpsfix.position_covariance[4] = (gps_f9p.geo.hAcc*0.001)**2 
-                gpsfix.position_covariance[8] = (4*gps_f9p.geo.hAcc*0.001)**2 
+                gpsfix.position_covariance[0] = (float(gps_f9p.geo.horizontal_dil)*0.1*0.001)**2 
+                gpsfix.position_covariance[4] = (float(gps_f9p.geo.horizontal_dil)*0.1*0.001)**2 
+                gpsfix.position_covariance[8] = (4*gps_f9p.geo.horizontal_dil*0.1*0.001)**2 
 
                 # Update the navsatfix messsage
                 current_time = rospy.Time.now()
@@ -140,7 +161,7 @@ def main(args):
                 # Inverted average time to calculate hertz
                 gps_hz = len(gps_f9p.gps_time_buf) / sum(gps_f9p.gps_time_buf)        
 
-                if gps_f9p.geo.hAcc < 500:
+                if gps_f9p.geo.horizontal_dil < 1:
                     gps_pub.publish(gpsfix)
 
                 #rospy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')

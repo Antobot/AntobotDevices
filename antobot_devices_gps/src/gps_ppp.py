@@ -25,7 +25,7 @@ import time
 import sys
 import serial
 import spidev
-
+import pynmea2
 import yaml
 import os
 
@@ -195,21 +195,23 @@ def main(args):
 
         # Get the GPS data from the F9P
         gps_f9p.get_gps()
-  
+        if gps_f9p.geo.startswith("$GNGGA"):
+            gps_f9p.geo = pynmea2.parse(gps_f9p.geo)
+            print(gps_f9p.geo)
         # Check the new data is viable and update message
-        if not True:
-        #if gps_f9p.geo.lat is not None and gps_f9p.geo.lat != 0:                 
-            gpsfix.latitude = gps_f9p.geo.lat 
-            gpsfix.longitude = gps_f9p.geo.lon 
-            gpsfix.altitude = gps_f9p.geo.height
+        #if not True:
+        #if gps_f9p.geo.latitude is not None and gps_f9p.geo.latitude != 0:                  
+            gpsfix.latitude = gps_f9p.geo.latitude if gps_f9p.geo.lat_dir == 'N' else -gps_f9p.geo.latitude 
+            gpsfix.longitude = gps_f9p.geo.longitude if gps_f9p.geo.lon_dir == 'E' else -gps_f9p.geo.longitude
+            gpsfix.altitude = float(gps_f9p.geo.altitude)
             
             # Get GPS fix status
             gpsfix.status.status = gps_f9p.get_fix_status()
 
             # Assumptions made on covariance
-            gpsfix.position_covariance[0] = (gps_f9p.geo.hAcc*0.001)**2 
-            gpsfix.position_covariance[4] = (gps_f9p.geo.hAcc*0.001)**2 
-            gpsfix.position_covariance[8] = (4*gps_f9p.geo.hAcc*0.001)**2 
+            gpsfix.position_covariance[0] = (float(gps_f9p.geo.horizontal_dil)*0.1*0.001)**2 
+            gpsfix.position_covariance[4] = (float(gps_f9p.geo.horizontal_dil)*0.1*0.001)**2 
+            gpsfix.position_covariance[8] = (4*float(gps_f9p.geo.horizontal_dil)*0.1*0.001)**2 
 
             # Update the navsatfix messsage
             current_time = rospy.Time.now()
@@ -223,8 +225,9 @@ def main(args):
                 nRTK_node.gps_time_buf.pop(0)
 
             # Inverted average time to calculate hertz
-            gps_hz = len(nRTK_node.gps_time_buf) / sum(nRTK_node.gps_time_buf)        
-            if gps_f9p.geo.hAcc < 500:
+            gps_hz = len(nRTK_node.gps_time_buf) / sum(nRTK_node.gps_time_buf)  
+            print(gpsfix)      
+            if float(gps_f9p.geo.horizontal_dil) < 1:
                 gps_pub.publish(gpsfix)
 
             #rospy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')

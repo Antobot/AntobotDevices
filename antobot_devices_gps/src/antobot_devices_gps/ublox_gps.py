@@ -878,7 +878,7 @@ class sfeSpiWrapper(object):
         """
         buffer = bytearray()
         start_pattern=b"$"
-        end_pattern = b"\r"
+        end_pattern = b"\r\n"
         while True:
         
         #data = self.spi_port.readbytes(read_data)
