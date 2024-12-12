@@ -188,7 +188,7 @@ def main(args):
     gps_freq_status = "None"
 
     # Set the horizontal accuracy limit (in m)
-    h_acc = 0.75 
+    h_acc = 0.075 
     hAcc = 500
     while not rospy.is_shutdown():
 
@@ -249,7 +249,8 @@ def main(args):
 
             # Inverted average time to calculate hertz
             gps_hz = len(nRTK_node.gps_time_buf) / sum(nRTK_node.gps_time_buf)  
-            #print(gpsfix)      
+            # print(gpsfix)
+            # print(hAcc)      
             if hAcc < 0.75:
                 gps_pub.publish(gpsfix)
 
