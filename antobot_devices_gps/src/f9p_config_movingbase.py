@@ -23,8 +23,50 @@ class GPS:
         self.spiport = spiport
         # Initialize null starting values for GPS attributes.
 
-    def revet_to_default_mode(self):
-        packet = bytearray(21)
+    def prepare_cfg_packet(self, length):
+        
+        packet = bytearray(length)
+        
+        # prepare packet
+        packet[0] = 0xb5
+        packet[1] = 0x62
+        packet[2] = 0x06
+        packet[3] = 0x8a
+        packet = set_length(packet, length)
+        packet[6] = 0x00 # version
+        packet[7] = 0x05 # layers 
+        packet[8] = 0x00 # reserved
+        packet[9] = 0x00 # reserved
+
+    def set_length(self, packet, length):
+        if length==20:
+            packet[4] = 0x0a
+        elif length==19:
+            packet[4] = 0x09
+        else:
+            length_i = length - 8
+            packet[4] = length_i.to_bytes(1,'big')
+        packet[5] = 0x00 # length 1
+
+        return packet
+
+    def calculate_checksum(self, packet, length):
+        # calculate ubx checksum
+        chk_a = 0
+        chk_b = 0
+        for i in range(2, length-2):
+            chk_a = chk_a + packet[i]
+            chk_b = chk_b + chk_a        
+        packet[length-2] = chk_a & 0xff
+        packet[length-1] = chk_b & 0xff
+
+        return packet
+    
+    def revert_to_default_mode(self):
+        
+        length = 21
+        
+        packet = bytearray(length)
         # prepare packet
         packet[0] = 0xb5
         packet[1] = 0x62
@@ -46,53 +88,34 @@ class GPS:
         packet[16] = 0xff
         packet[17] = 0xff
         packet[18] = 0x0f
-        chk_a = 0
-        chk_b = 0
-
-        for i in range(2, 19):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-
-        packet[19] = chk_a & 0xff
-        packet[20] = chk_b & 0xff
+        
+        self.calculate_checksum(packet, length)
         
         return packet
 
-    def cfg_rate_meas(self):
+    def cfg_rate_meas(self, rate):
         """Prepares UBX protocol sentence to set the measurement rate configuration"""
         """ Measurement rate is Nominal time between GNSS measurements"""
         """Key ID: 0x30210001"""
         #print("In config_rate")
         #CFG-RATE-MEAS ; VALUE = 0x7d = 125ms = 8Hz
         
-        packet = bytearray(18)
-        # prepare packet
-        packet[0] = 0xb5
-        packet[1] = 0x62
-        packet[2] = 0x06
-        packet[3] = 0x8a
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers 
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0x01
         packet[11] = 0x00
         packet[12] = 0x21
         packet[13] = 0x30
         #value
-        packet[14] = 0xc8 #5hz:c8; 8hz:7d; 
+        if rate == 5:
+            packet[14] = 0xc8 #5hz:c8; 8hz:7d;
+        elif rate == 8:
+            packet[14] = 0x7d
         packet[15] = 0x00
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
-        #print("Packet in config_rate ",packet)
+        packet = self.calculate_checksum(packet, length)
+
         return packet
         
     def cfg_rate_nav(self):
@@ -101,18 +124,11 @@ class GPS:
         """ KEY ID: 0x30210002"""
         #print("In config_rate_nav")
         #CFG-RATE-NAV ; VALUE = 0x01
-        packet = bytearray(18)
+
         # prepare packet
-        packet[0] = 0xb5
-        packet[1] = 0x62
-        packet[2] = 0x06
-        packet[3] = 0x8a
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0x02
         packet[11] = 0x00
@@ -121,30 +137,16 @@ class GPS:
         #value
         packet[14] = 0x01 
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
+
         return packet
     
     def cfg_valget_uart1_baudrate(self):
-        
-        packet = bytearray(20)
+
         # prepare packet
-        packet[0] = 0xb5
-        packet[1] = 0x62
-        packet[2] = 0x06
-        packet[3] = 0x8a
-        packet[4] = 0x0c # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers 
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 20
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0x01
         packet[11] = 0x00
@@ -155,30 +157,13 @@ class GPS:
         packet[15] = 0x08
         packet[16] = 0x07
         packet[17] = 0x00
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 18):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[18] = chk_a & 0xff
-        packet[19] = chk_b & 0xff
-        #print("Packet in cfg_port_baud_uart_2 ",packet)
+        packet = self.calculate_checksum(packet, length)
         return packet
     
     def cfg_valget_uart2_baudrate(self):
         
-        packet = bytearray(20)
         # prepare packet
-        packet[0] = 0xb5
-        packet[1] = 0x62
-        packet[2] = 0x06
-        packet[3] = 0x8a
-        packet[4] = 0x0c # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers 
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        packet = self.prepare_cfg_packet(20)
         #keyid
         packet[10] = 0x01
         packet[11] = 0x00
@@ -189,14 +174,9 @@ class GPS:
         packet[15] = 0x08
         packet[16] = 0x07
         packet[17] = 0x00
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 18):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[18] = chk_a & 0xff
-        packet[19] = chk_b & 0xff
-        #print("Packet in cfg_port_baud_uart_2 ",packet)
+
+        packet = self.calculate_checksum(packet, length)
+        
         return packet
     
     def receive_gps(self):
@@ -209,15 +189,8 @@ class GPS:
         packet[3] = 0x14 #message id
         packet[4] = 0
         packet[5] = 0
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 6):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[6] = chk_a & 0xff
-        packet[7] = chk_b & 0xff
-        #self.spiport.writebytes(packet)
+        packet = self.calculate_checksum(packet, length)
+
         return packet
     
     def get_ver(self):
@@ -230,14 +203,8 @@ class GPS:
         packet[3] = 0x04 #message id
         packet[4] = 0
         packet[5] = 0
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 6):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[6] = chk_a & 0xff
-        packet[7] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
+
         return packet
 
     def write(self,payload):
@@ -289,18 +256,10 @@ class GPS:
     def disable_gxgsv(self):
         """ configure the GSV message in SPI"""
         """ KEY ID: 0x209100c8"""
-        packet = bytearray(18)
         # prepare packet
-        packet[0] = 0xb5 # header
-        packet[1] = 0x62 #header
-        packet[2] = 0x06 #class 
-        packet[3] = 0x8a #id
-        packet[4] = 0x0a # length 0 length of payload
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version 
-        packet[7] = 0x05 # layers  # 01: RAM, 04: FLASH, 05: both RAM and FLASH
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length=18
+        packet = self.prepare_cfg_packet(length)
+
         #key id
         packet[10] = 0xc8
         packet[11] = 0x00
@@ -309,31 +268,16 @@ class GPS:
         #value
         packet[14] = 0x00 # 0:disable, 1:enable
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
         return packet
         
     def disable_gxrmc(self):
         """ configure the RMC message in SPI"""
         """ KEY ID: 0x209100af"""
-        packet = bytearray(18)
         # prepare packet
-        packet[0] = 0xb5 #header
-        packet[1] = 0x62 #header
-        packet[2] = 0x06 #class
-        packet[3] = 0x8a #id
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers # 01: RAM, 04: FLASH, 05: both RAM and FLASH
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #key id
         packet[10] = 0xaf
         packet[11] = 0x00
@@ -342,31 +286,16 @@ class GPS:
         #value
         packet[14] = 0x00 #0: disable, 1: enable
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a        
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
         return packet
         
     def disable_gxgsa(self):
         """ configure the GSA message in SPI"""
         """ KEY ID: 0x209100c3"""
-        packet = bytearray(18)
         # prepare packet
-        packet[0] = 0xb5 #header
-        packet[1] = 0x62 #header
-        packet[2] = 0x06 #class
-        packet[3] = 0x8a #id
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers # 01: RAM, 04: FLASH, 05: both RAM and FLASH
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0xc3 
         packet[11] = 0x00
@@ -375,31 +304,17 @@ class GPS:
         #value
         packet[14] = 0x00 # 0: disbale, 1: enable
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
         return packet
         
     def disable_gxvtg(self):
         """ configure the VTG message in SPI"""
         """ KEY ID: 0x209100b4"""
-        packet = bytearray(18)
+
         # prepare packet
-        packet[0] = 0xb5 #header
-        packet[1] = 0x62 #header
-        packet[2] = 0x06 #class
-        packet[3] = 0x8a #id
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers # 01: RAM, 04: FLASH, 05: both RAM and FLASH
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0xb4 
         packet[11] = 0x00
@@ -408,31 +323,16 @@ class GPS:
         #value
         packet[14] = 0x00 # 0: disbale, 1: enable
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
         return packet
         
     def disable_gxgll(self):
         """ configure the GLL message in SPI"""
         """ KEY ID: 0x209100cd"""
-        packet = bytearray(18)
         # prepare packet
-        packet[0] = 0xb5 #header
-        packet[1] = 0x62 #header
-        packet[2] = 0x06 #class
-        packet[3] = 0x8a #id
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers # 01: RAM, 04: FLASH, 05: both RAM and FLASH
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(18)
+        
         #keyid
         packet[10] = 0xcd 
         packet[11] = 0x00 
@@ -441,14 +341,7 @@ class GPS:
         #value
         packet[14] = 0x00 # 0: disbale, 1: enable
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
         return packet
         
     def config_f9p(self):      
@@ -467,7 +360,6 @@ class GPS:
         self.spiport.writebytes(ubx_disable_gxgsv)
         
         received_bytes = self.receive_ubx_bytes_from_spi()
-        #print("Received bytes from ubx_disable_gxgsv",received_bytes)
         self.check_ubx_uart(received_bytes) 
         print("disabled gxgsv") 
         
@@ -510,18 +402,10 @@ class GPS:
     # moving base
     # HPG 1.32
     def cfg_msgout_uart2_rtcm1074(self):
-        packet = bytearray(18)
         # prepare packet
-        packet[0] = 0xb5
-        packet[1] = 0x62
-        packet[2] = 0x06
-        packet[3] = 0x8a
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0x60
         packet[11] = 0x03
@@ -530,29 +414,14 @@ class GPS:
         #value
         packet[14] = 0x01 
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
         return packet
 
     def cfg_msgout_uart2_rtcm1084(self):
-        packet = bytearray(18)
         # prepare packet
-        packet[0] = 0xb5
-        packet[1] = 0x62
-        packet[2] = 0x06
-        packet[3] = 0x8a
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0x65
         packet[11] = 0x03
@@ -561,29 +430,14 @@ class GPS:
         #value
         packet[14] = 0x01 
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
         return packet
     
     def cfg_msgout_uart2_rtcm1094(self):
-        packet = bytearray(18)
         # prepare packet
-        packet[0] = 0xb5
-        packet[1] = 0x62
-        packet[2] = 0x06
-        packet[3] = 0x8a
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0x6a
         packet[11] = 0x03
@@ -592,29 +446,15 @@ class GPS:
         #value
         packet[14] = 0x01 
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
+
         return packet
     
     def cfg_msgout_uart2_rtcm1124(self):
-        packet = bytearray(18)
         # prepare packet
-        packet[0] = 0xb5
-        packet[1] = 0x62
-        packet[2] = 0x06
-        packet[3] = 0x8a
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0x6f
         packet[11] = 0x03
@@ -623,29 +463,14 @@ class GPS:
         #value
         packet[14] = 0x01 
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
         return packet
  
     def cfg_msgout_uart2_rtcm1230(self):
-        packet = bytearray(18)
         # prepare packet
-        packet[0] = 0xb5
-        packet[1] = 0x62
-        packet[2] = 0x06
-        packet[3] = 0x8a
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0x05
         packet[11] = 0x03
@@ -654,29 +479,14 @@ class GPS:
         #value
         packet[14] = 0x01 
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
         return packet
     
     def cfg_msgout_uart2_rtcm4072_0(self):
-        packet = bytearray(18)
         # prepare packet
-        packet[0] = 0xb5
-        packet[1] = 0x62
-        packet[2] = 0x06
-        packet[3] = 0x8a
-        packet[4] = 0x0a # length 0
-        packet[5] = 0x00 # length 1
-        packet[6] = 0x00 # version
-        packet[7] = 0x05 # layers
-        packet[8] = 0x00 # reserved
-        packet[9] = 0x00 # reserved
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
         #keyid
         packet[10] = 0x00
         packet[11] = 0x03
@@ -685,40 +495,33 @@ class GPS:
         #value
         packet[14] = 0x01 
         packet[15] = 0x00
-        # calculate ubx checksum
-        chk_a = 0
-        chk_b = 0
-        for i in range(2, 16):
-            chk_a = chk_a + packet[i]
-            chk_b = chk_b + chk_a
-        packet[16] = chk_a & 0xff
-        packet[17] = chk_b & 0xff
+        packet = self.calculate_checksum(packet, length)
         return packet    
 
     
     def config_uart2_rtcm(self):
         ## HPG 1.32
-        packet = gps.cfg_msgout_uart2_rtcm1074()
+        packet = self.cfg_msgout_uart2_rtcm1074()
         self.spiport.writebytes(packet)
         print('set uart2 output rtcm1074')
 
-        packet = gps.cfg_msgout_uart2_rtcm1084()
+        packet = self.cfg_msgout_uart2_rtcm1084()
         self.spiport.writebytes(packet)
         print('set uart2 output rtcm1084')
 
-        packet = gps.cfg_msgout_uart2_rtcm1094()
+        packet = self.cfg_msgout_uart2_rtcm1094()
         self.spiport.writebytes(packet)
         print('set uart2 output rtcm1094')
 
-        packet = gps.cfg_msgout_uart2_rtcm1124()
+        packet = self.cfg_msgout_uart2_rtcm1124()
         self.spiport.writebytes(packet)
         print('set uart2 output rtcm1124')
 
-        packet = gps.cfg_msgout_uart2_rtcm1230()
+        packet = self.cfg_msgout_uart2_rtcm1230()
         self.spiport.writebytes(packet)
         print('set uart2 output rtcm1230')
 
-        packet = gps.cfg_msgout_uart2_rtcm4072_0()
+        packet = self.cfg_msgout_uart2_rtcm4072_0()
         self.spiport.writebytes(packet)
         print('set uart2 output rtcm4072.0')
 
@@ -743,8 +546,8 @@ if __name__ == '__main__':
         received_bytes = gps.receive_ubx_bytes_from_spi()
         #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
 
-        # revet to the default mode
-        packet = gps.revet_to_default_mode()
+        # revert to the default mode
+        packet = gps.revert_to_default_mode()
         gps.write(packet)
 
         #configure the f9p to block unwanted messages
