@@ -43,10 +43,10 @@ import Jetson.GPIO as GPIO
 from antobot_devices_gps.movingbase import MovingBase
 
 class MovingBase_Ros:
-    def __init__(self, base_port_uart, rovel_port, base_port_spi, mode):
+    def __init__(self, base_port_uart, rover_port, base_port_spi, mode):
         
         self.base_port_uart = base_port_uart
-        self.rovel_port = rovel_port
+        self.rover_port = rover_port
         self.base_port_spi = base_port_spi
         self.mode = mode
         
@@ -182,7 +182,7 @@ class MovingBase_Ros:
     async def create_MovingBase(self):
         while not self.device_connect:
             try:
-                MB = await MovingBase.create(self.base_port_uart, self.rovel_port, self.base_port_spi, self.mode)
+                MB = await MovingBase.create(self.base_port_uart, self.rover_port, self.base_port_spi, self.mode)
                 self.device_connect = True
                 return MB
             except Exception as e:
@@ -218,7 +218,7 @@ if __name__ == '__main__':
 
     
     base_port_uart = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
-    rovel_port = rospy.get_param("/gps/ublox_rover/device_port","/dev/AntoF9P")
+    rover_port = rospy.get_param("/gps/ublox_rover/device_port","/dev/AntoF9P")
     base_port_spi = None
     
     rtk_type = rospy.get_param("/gps/urcu/rtk_type","ppp") # or "base_station"
@@ -227,7 +227,7 @@ if __name__ == '__main__':
     else:
         mode = 1 #1: RTK base station, 2: PPP-IP
 
-    movebase = MovingBase_Ros(base_port_uart, rovel_port, base_port_spi, mode)
+    movebase = MovingBase_Ros(base_port_uart, rover_port, base_port_spi, mode)
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(movebase.main())

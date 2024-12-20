@@ -19,9 +19,12 @@ class GPS:
     """GPS parsing module.	Can parse simple NMEA data sentences from SPI
 	GPS modules to read latitude, longitude, and more.
     """
-    def __init__(self,spiport):
-        self.spiport = spiport
+    def __init__(self,spiport, desired_messages, meas_rate):
         # Initialize null starting values for GPS attributes.
+        self.spiport = spiport
+        self.desired_messages = desired_messages
+        self.meas_rate = meas_rate
+        
 
     def prepare_cfg_packet(self, length):
         
@@ -93,7 +96,7 @@ class GPS:
         
         return packet
 
-    def cfg_rate_meas(self, rate):
+    def cfg_rate_meas(self):
         """Prepares UBX protocol sentence to set the measurement rate configuration"""
         """ Measurement rate is Nominal time between GNSS measurements"""
         """Key ID: 0x30210001"""
@@ -109,9 +112,9 @@ class GPS:
         packet[12] = 0x21
         packet[13] = 0x30
         #value
-        if rate == 5:
+        if self.meas_rate == 5:
             packet[14] = 0xc8 #5hz:c8; 8hz:7d;
-        elif rate == 8:
+        elif self.meas_rate == 8:
             packet[14] = 0x7d
         packet[15] = 0x00
         packet = self.calculate_checksum(packet, length)
@@ -163,7 +166,8 @@ class GPS:
     def cfg_valget_uart2_baudrate(self):
         
         # prepare packet
-        packet = self.prepare_cfg_packet(20)
+        length = 20
+        packet = self.prepare_cfg_packet(length)
         #keyid
         packet[10] = 0x01
         packet[11] = 0x00
@@ -253,7 +257,7 @@ class GPS:
             j = j + 1
         return received_bytes
 
-    def disable_gxgsv(self):
+    def set_gxgsv(self, enable):
         """ configure the GSV message in SPI"""
         """ KEY ID: 0x209100c8"""
         # prepare packet
@@ -266,12 +270,15 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x00 # 0:disable, 1:enable
+        if enable:
+            packet[14] = 0x01 # 0:disable, 1:enable
+        else:
+            packet[14] = 0x00 # 0:disable, 1:enable
         packet[15] = 0x00
         packet = self.calculate_checksum(packet, length)
         return packet
         
-    def disable_gxrmc(self):
+    def set_gxrmc(self):
         """ configure the RMC message in SPI"""
         """ KEY ID: 0x209100af"""
         # prepare packet
@@ -284,12 +291,15 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x00 #0: disable, 1: enable
+        if enable:
+            packet[14] = 0x01 # 0:disable, 1:enable
+        else:
+            packet[14] = 0x00 # 0:disable, 1:enable
         packet[15] = 0x00
         packet = self.calculate_checksum(packet, length)
         return packet
         
-    def disable_gxgsa(self):
+    def set_gxgsa(self, enable):
         """ configure the GSA message in SPI"""
         """ KEY ID: 0x209100c3"""
         # prepare packet
@@ -302,12 +312,15 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x00 # 0: disbale, 1: enable
+        if enable:
+            packet[14] = 0x01 # 0:disable, 1:enable
+        else:
+            packet[14] = 0x00 # 0:disable, 1:enable
         packet[15] = 0x00
         packet = self.calculate_checksum(packet, length)
         return packet
         
-    def disable_gxvtg(self):
+    def set_gxvtg(self):
         """ configure the VTG message in SPI"""
         """ KEY ID: 0x209100b4"""
 
@@ -321,12 +334,15 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x00 # 0: disbale, 1: enable
+        if enable:
+            packet[14] = 0x01 # 0:disable, 1:enable
+        else:
+            packet[14] = 0x00 # 0:disable, 1:enable
         packet[15] = 0x00
         packet = self.calculate_checksum(packet, length)
         return packet
         
-    def disable_gxgll(self):
+    def set_gxgll(self):
         """ configure the GLL message in SPI"""
         """ KEY ID: 0x209100cd"""
         # prepare packet
@@ -339,66 +355,14 @@ class GPS:
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x00 # 0: disbale, 1: enable
+        if enable:
+            packet[14] = 0x01 # 0:disable, 1:enable
+        else:
+            packet[14] = 0x00 # 0:disable, 1:enable
         packet[15] = 0x00
         packet = self.calculate_checksum(packet, length)
         return packet
         
-    def config_f9p(self):      
-
-        #disable the message type gxgsv
-        ubx_rate_meas = self.cfg_rate_meas()
-        self.spiport.writebytes(ubx_rate_meas)
-        
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        #print("Received bytes from ubx_disable_gxgsv",received_bytes)
-        self.check_ubx_uart(received_bytes) 
-        print("configured the measurement rate as 8Hz") 
-
-        #disable the message type gxgsv
-        ubx_disable_gxgsv = self.disable_gxgsv()
-        self.spiport.writebytes(ubx_disable_gxgsv)
-        
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        self.check_ubx_uart(received_bytes) 
-        print("disabled gxgsv") 
-        
-        #disable the message type gxrmc
-        ubx_disable_gxrmc = self.disable_gxrmc()
-        self.spiport.writebytes(ubx_disable_gxrmc)
-    
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        #print("Received bytes from set_baudrate",ubx_str)
-        self.check_ubx_uart(received_bytes)
-        print("disabled gxrmc") 
-        
-        #disable the message type gxgsa
-        ubx_disable_gxgsa = self.disable_gxgsa()
-        self.spiport.writebytes(ubx_disable_gxgsa)
-    
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        #print("Received bytes from set_baudrate",ubx_str)
-        self.check_ubx_uart(received_bytes)
-        print("disabled gxgsa") 
-        
-        #disable the message type gxvtg
-        ubx_disable_gxvtg = self.disable_gxvtg()
-        self.spiport.writebytes(ubx_disable_gxvtg)
-    
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        #print("Received bytes from set_baudrate",ubx_str)
-        self.check_ubx_uart(received_bytes)
-        print("disabled gxvtg") 
-        
-        #disable the message type gxgll
-        ubx_disable_gxgll = self.disable_gxgll()
-        self.spiport.writebytes(ubx_disable_gxgll)
-    
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        #print("Received bytes from set_baudrate",ubx_str)
-        self.check_ubx_uart(received_bytes)
-        print("disabled gxgll") 
-
     # moving base
     # HPG 1.32
     def cfg_msgout_uart2_rtcm1074(self):
@@ -500,6 +464,8 @@ class GPS:
 
     
     def config_uart2_rtcm(self):
+        ## Configure the F9P chip to be able to output RTCM messages for the dual-GPS setup (moving base)
+
         ## HPG 1.32
         packet = self.cfg_msgout_uart2_rtcm1074()
         self.spiport.writebytes(packet)
@@ -531,36 +497,102 @@ class GPS:
         gps.spiport.writebytes(packet)
         print('set uart2 baud 460800')
 
+    def set_gx_messages(self):
+        all_messages = ['GSV', 'RMC', 'GSA', 'VTG', 'GLL', 'GST']
+    
+    def config_f9p(self):      
+
+        # configure the measurement rate of the chip
+        
+        ubx_rate_meas = self.cfg_rate_meas()
+        self.spiport.writebytes(ubx_rate_meas)
+        
+        received_bytes = self.receive_ubx_bytes_from_spi()
+        self.check_ubx_uart(received_bytes) 
+        print("configured the measurement rate as 8Hz") 
+
+        self.set_gx_messages():
+        
+        #disable the message type gxgsv
+        ubx_disable_gxgsv = self.set_gxgsv()
+        self.spiport.writebytes(ubx_disable_gxgsv)
+        
+        received_bytes = self.receive_ubx_bytes_from_spi()
+        self.check_ubx_uart(received_bytes) 
+        print("disabled gxgsv") 
+        
+        #disable the message type gxrmc
+        ubx_disable_gxrmc = self.set_gxrmc()
+        self.spiport.writebytes(ubx_disable_gxrmc)
+    
+        received_bytes = self.receive_ubx_bytes_from_spi()
+        #print("Received bytes from set_baudrate",ubx_str)
+        self.check_ubx_uart(received_bytes)
+        print("disabled gxrmc") 
+        
+        #disable the message type gxgsa
+        ubx_disable_gxgsa = self.set_gxgsa()
+        self.spiport.writebytes(ubx_disable_gxgsa)
+    
+        received_bytes = self.receive_ubx_bytes_from_spi()
+        #print("Received bytes from set_baudrate",ubx_str)
+        self.check_ubx_uart(received_bytes)
+        print("disabled gxgsa") 
+        
+        #disable the message type gxvtg
+        ubx_disable_gxvtg = self.set_gxvtg()
+        self.spiport.writebytes(ubx_disable_gxvtg)
+    
+        received_bytes = self.receive_ubx_bytes_from_spi()
+        #print("Received bytes from set_baudrate",ubx_str)
+        self.check_ubx_uart(received_bytes)
+        print("disabled gxvtg") 
+        
+        #disable the message type gxgll
+        ubx_disable_gxgll = self.set_gxgll()
+        self.spiport.writebytes(ubx_disable_gxgll)
+    
+        received_bytes = self.receive_ubx_bytes_from_spi()
+        #print("Received bytes from set_baudrate",ubx_str)
+        self.check_ubx_uart(received_bytes)
+        print("disabled gxgll") 
+
+
 if __name__ == '__main__':
-    try:
-        spiport = spidev.SpiDev()
-        spiport.open(2, 0)  # (2,0) for spi1, (0,0) for spi0
-        spiport.max_speed_hz =  7800000 # 1000000, 15600000,62400000....
-        spiport.mode = 0
-        spiport.no_cs      
-        gps = GPS(spiport)         
+    
+    moving_base = False
+    desired_messages = ['GST', 'VTG', 'RMC']
+    meas_rate = 8
+    if moving_base:
+        meas_rate = 5
 
-        #function to get the f9p firmware version
-        packet = gps.get_ver()
-        gps.write(packet)
-        received_bytes = gps.receive_ubx_bytes_from_spi()
-        #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
+    spiport = spidev.SpiDev()
+    spiport.open(2, 0)  # (2,0) for spi1, (0,0) for spi0
+    spiport.max_speed_hz =  7800000 # 1000000, 15600000,62400000....
+    spiport.mode = 0
+    spiport.no_cs
 
-        # revert to the default mode
+    gps = GPS(spiport, desired_messages, meas_rate)         
+
+    #function to get the f9p firmware version
+    packet = gps.get_ver()
+    gps.write(packet)
+    received_bytes = gps.receive_ubx_bytes_from_spi()
+    #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
+
+    # revert to the default mode
+    if moving_base:
         packet = gps.revert_to_default_mode()
         gps.write(packet)
 
-        #configure the f9p to block unwanted messages
-        gps.config_f9p()
-        
+    #configure the f9p to block unwanted messages
+    gps.config_f9p()
+    
+    if moving_base:
         # configure the uart2's output (for movingbase)
         gps.config_uart2_rtcm()
 
-        #receive GPS messages
-        packet = gps.receive_gps()
-        gps.write(packet)
-        received_bytes = gps.receive_ubx_bytes_from_spi()
-        #print("GPS Message: ",received_bytes) # To print out the firmware version of F9P if required      
-
-    except:
-        pass
+    #receive GPS messages
+    packet = gps.receive_gps()
+    gps.write(packet)
+    received_bytes = gps.receive_ubx_bytes_from_spi()     
