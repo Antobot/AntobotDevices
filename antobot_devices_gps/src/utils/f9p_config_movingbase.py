@@ -257,111 +257,6 @@ class GPS:
             j = j + 1
         return received_bytes
 
-    def set_gxgsv(self, enable):
-        """ configure the GSV message in SPI"""
-        """ KEY ID: 0x209100c8"""
-        # prepare packet
-        length=18
-        packet = self.prepare_cfg_packet(length)
-
-        #key id
-        packet[10] = 0xc8
-        packet[11] = 0x00
-        packet[12] = 0x91
-        packet[13] = 0x20
-        #value
-        if enable:
-            packet[14] = 0x01 # 0:disable, 1:enable
-        else:
-            packet[14] = 0x00 # 0:disable, 1:enable
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-        return packet
-        
-    def set_gxrmc(self):
-        """ configure the RMC message in SPI"""
-        """ KEY ID: 0x209100af"""
-        # prepare packet
-        length = 18
-        packet = self.prepare_cfg_packet(length)
-
-        #key id
-        packet[10] = 0xaf
-        packet[11] = 0x00
-        packet[12] = 0x91
-        packet[13] = 0x20
-        #value
-        if enable:
-            packet[14] = 0x01 # 0:disable, 1:enable
-        else:
-            packet[14] = 0x00 # 0:disable, 1:enable
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-        return packet
-        
-    def set_gxgsa(self, enable):
-        """ configure the GSA message in SPI"""
-        """ KEY ID: 0x209100c3"""
-        # prepare packet
-        length = 18
-        packet = self.prepare_cfg_packet(length)
-
-        #keyid
-        packet[10] = 0xc3 
-        packet[11] = 0x00
-        packet[12] = 0x91
-        packet[13] = 0x20
-        #value
-        if enable:
-            packet[14] = 0x01 # 0:disable, 1:enable
-        else:
-            packet[14] = 0x00 # 0:disable, 1:enable
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-        return packet
-        
-    def set_gxvtg(self):
-        """ configure the VTG message in SPI"""
-        """ KEY ID: 0x209100b4"""
-
-        # prepare packet
-        length = 18
-        packet = self.prepare_cfg_packet(length)
-
-        #keyid
-        packet[10] = 0xb4 
-        packet[11] = 0x00
-        packet[12] = 0x91
-        packet[13] = 0x20
-        #value
-        if enable:
-            packet[14] = 0x01 # 0:disable, 1:enable
-        else:
-            packet[14] = 0x00 # 0:disable, 1:enable
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-        return packet
-        
-    def set_gxgll(self):
-        """ configure the GLL message in SPI"""
-        """ KEY ID: 0x209100cd"""
-        # prepare packet
-        length = 18
-        packet = self.prepare_cfg_packet(18)
-        
-        #keyid
-        packet[10] = 0xcd 
-        packet[11] = 0x00 
-        packet[12] = 0x91
-        packet[13] = 0x20
-        #value
-        if enable:
-            packet[14] = 0x01 # 0:disable, 1:enable
-        else:
-            packet[14] = 0x00 # 0:disable, 1:enable
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-        return packet
         
     # moving base
     # HPG 1.32
@@ -499,7 +394,52 @@ class GPS:
 
     def set_gx_messages(self):
         all_messages = ['GSV', 'RMC', 'GSA', 'VTG', 'GLL', 'GST']
-    
+
+        for msg in all_messages:
+            if msg == 'GSV':
+                key_id = 0xc8
+            elif msg == 'RMC':
+                key_id = 0xaf
+            elif msg == 'GSA':
+                key_id = 0xc3
+            elif msg == 'VTG':
+                key_id = 0xb4
+            elif msg == 'GLL':
+                key_id = 0xcd
+
+            enable = msg in self.desired_messages
+
+            packet = self.config_gx_message(key_id, enable)
+            self.spiport.writebytes(packet)
+        
+            received_bytes = self.receive_ubx_bytes_from_spi()
+            self.check_ubx_uart(received_bytes)
+
+            enable_text = "Disabled"
+            if enable:
+                enable_text = "Enabled"
+            print("GPS Config: " + msg + "Message " + enable_text + "\n")
+
+    def config_gx_message(self, key_id, enable):
+        # prepare packet
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
+        #key id
+        packet[10] = key_id
+        packet[11] = 0x00
+        packet[12] = 0x91
+        packet[13] = 0x20
+        #value
+        if enable:
+            packet[14] = 0x01 # 0:disable, 1:enable
+        else:
+            packet[14] = 0x00 # 0:disable, 1:enable
+        packet[15] = 0x00
+        packet = self.calculate_checksum(packet, length)
+
+        return packet
+
     def config_f9p(self):      
 
         # configure the measurement rate of the chip
@@ -511,51 +451,8 @@ class GPS:
         self.check_ubx_uart(received_bytes) 
         print("configured the measurement rate as 8Hz") 
 
-        self.set_gx_messages():
+        self.set_gx_messages()
         
-        #disable the message type gxgsv
-        ubx_disable_gxgsv = self.set_gxgsv()
-        self.spiport.writebytes(ubx_disable_gxgsv)
-        
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        self.check_ubx_uart(received_bytes) 
-        print("disabled gxgsv") 
-        
-        #disable the message type gxrmc
-        ubx_disable_gxrmc = self.set_gxrmc()
-        self.spiport.writebytes(ubx_disable_gxrmc)
-    
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        #print("Received bytes from set_baudrate",ubx_str)
-        self.check_ubx_uart(received_bytes)
-        print("disabled gxrmc") 
-        
-        #disable the message type gxgsa
-        ubx_disable_gxgsa = self.set_gxgsa()
-        self.spiport.writebytes(ubx_disable_gxgsa)
-    
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        #print("Received bytes from set_baudrate",ubx_str)
-        self.check_ubx_uart(received_bytes)
-        print("disabled gxgsa") 
-        
-        #disable the message type gxvtg
-        ubx_disable_gxvtg = self.set_gxvtg()
-        self.spiport.writebytes(ubx_disable_gxvtg)
-    
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        #print("Received bytes from set_baudrate",ubx_str)
-        self.check_ubx_uart(received_bytes)
-        print("disabled gxvtg") 
-        
-        #disable the message type gxgll
-        ubx_disable_gxgll = self.set_gxgll()
-        self.spiport.writebytes(ubx_disable_gxgll)
-    
-        received_bytes = self.receive_ubx_bytes_from_spi()
-        #print("Received bytes from set_baudrate",ubx_str)
-        self.check_ubx_uart(received_bytes)
-        print("disabled gxgll") 
 
 
 if __name__ == '__main__':
