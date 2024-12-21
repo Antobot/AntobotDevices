@@ -15,7 +15,7 @@
 
 import spidev
 
-class GPS:
+class F9P_config:
     """GPS parsing module.	Can parse simple NMEA data sentences from SPI
 	GPS modules to read latitude, longitude, and more.
     """
@@ -255,142 +255,53 @@ class GPS:
             if (start == True and i == buffer_size):
                 break # if buffer is full, exit loop
             j = j + 1
-        return received_bytes
+        return received_bytes  
 
-        
-    # moving base
-    # HPG 1.32
-    def cfg_msgout_uart2_rtcm1074(self):
+    def set_rtcm_messages(self):
+        all_messages = ['1074','1084','1094','1124','1230','4072']
+
+        for msg in all_messages:
+            if msg == '1074':
+                key_id = 0x60
+            elif msg == '1084':
+                key_id = 0x65
+            elif msg == '1094':
+                key_id = 0x6a
+            elif msg == '1124':
+                key_id = 0x6f
+            elif msg == '1230':
+                key_id = 0x05
+            elif msg == '4072':
+                key_id = 0x00
+
+            enable = True
+
+            packet = self.config_uart2_rtcm_msg(key_id, enable)
+            self.spiport.writebytes(packet)
+
+            enable_text = "Disabled"
+            if enable:
+                enable_text = "Enabled"
+            print("GPS Config: UART2 RTCM" + msg + " Message " + enable_text + "\n")
+
+    def config_uart2_rtcm_msg(self, key_id, enable):
         # prepare packet
         length = 18
         packet = self.prepare_cfg_packet(length)
 
         #keyid
-        packet[10] = 0x60
+        packet[10] = key_id
         packet[11] = 0x03
         packet[12] = 0x91
         packet[13] = 0x20
         #value
-        packet[14] = 0x01 
+        if enable:
+            packet[14] = 0x01 # 0:disable, 1:enable
+        else:
+            packet[14] = 0x00 # 0:disable, 1:enable
         packet[15] = 0x00
         packet = self.calculate_checksum(packet, length)
-        return packet
-
-    def cfg_msgout_uart2_rtcm1084(self):
-        # prepare packet
-        length = 18
-        packet = self.prepare_cfg_packet(length)
-
-        #keyid
-        packet[10] = 0x65
-        packet[11] = 0x03
-        packet[12] = 0x91
-        packet[13] = 0x20
-        #value
-        packet[14] = 0x01 
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-        return packet
-    
-    def cfg_msgout_uart2_rtcm1094(self):
-        # prepare packet
-        length = 18
-        packet = self.prepare_cfg_packet(length)
-
-        #keyid
-        packet[10] = 0x6a
-        packet[11] = 0x03
-        packet[12] = 0x91
-        packet[13] = 0x20
-        #value
-        packet[14] = 0x01 
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-
-        return packet
-    
-    def cfg_msgout_uart2_rtcm1124(self):
-        # prepare packet
-        length = 18
-        packet = self.prepare_cfg_packet(length)
-
-        #keyid
-        packet[10] = 0x6f
-        packet[11] = 0x03
-        packet[12] = 0x91
-        packet[13] = 0x20
-        #value
-        packet[14] = 0x01 
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-        return packet
- 
-    def cfg_msgout_uart2_rtcm1230(self):
-        # prepare packet
-        length = 18
-        packet = self.prepare_cfg_packet(length)
-
-        #keyid
-        packet[10] = 0x05
-        packet[11] = 0x03
-        packet[12] = 0x91
-        packet[13] = 0x20
-        #value
-        packet[14] = 0x01 
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-        return packet
-    
-    def cfg_msgout_uart2_rtcm4072_0(self):
-        # prepare packet
-        length = 18
-        packet = self.prepare_cfg_packet(length)
-
-        #keyid
-        packet[10] = 0x00
-        packet[11] = 0x03
-        packet[12] = 0x91
-        packet[13] = 0x20
-        #value
-        packet[14] = 0x01 
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-        return packet    
-
-    
-    def config_uart2_rtcm(self):
-        ## Configure the F9P chip to be able to output RTCM messages for the dual-GPS setup (moving base)
-
-        ## HPG 1.32
-        packet = self.cfg_msgout_uart2_rtcm1074()
-        self.spiport.writebytes(packet)
-        print('set uart2 output rtcm1074')
-
-        packet = self.cfg_msgout_uart2_rtcm1084()
-        self.spiport.writebytes(packet)
-        print('set uart2 output rtcm1084')
-
-        packet = self.cfg_msgout_uart2_rtcm1094()
-        self.spiport.writebytes(packet)
-        print('set uart2 output rtcm1094')
-
-        packet = self.cfg_msgout_uart2_rtcm1124()
-        self.spiport.writebytes(packet)
-        print('set uart2 output rtcm1124')
-
-        packet = self.cfg_msgout_uart2_rtcm1230()
-        self.spiport.writebytes(packet)
-        print('set uart2 output rtcm1230')
-
-        packet = self.cfg_msgout_uart2_rtcm4072_0()
-        self.spiport.writebytes(packet)
-        print('set uart2 output rtcm4072.0')
-
-
-        # set uart_2 baud 460800
-        packet = gps.cfg_valget_uart2_baudrate()
-        gps.spiport.writebytes(packet)
-        print('set uart2 baud 460800')
+        return packet 
 
     def set_gx_messages(self):
         all_messages = ['GSV', 'RMC', 'GSA', 'VTG', 'GLL', 'GST']
@@ -418,7 +329,7 @@ class GPS:
             enable_text = "Disabled"
             if enable:
                 enable_text = "Enabled"
-            print("GPS Config: " + msg + "Message " + enable_text + "\n")
+            print("GPS Config: " + msg + " Message " + enable_text + "\n")
 
     def config_gx_message(self, key_id, enable):
         # prepare packet
@@ -448,10 +359,21 @@ class GPS:
         self.spiport.writebytes(ubx_rate_meas)
         
         received_bytes = self.receive_ubx_bytes_from_spi()
-        self.check_ubx_uart(received_bytes) 
-        print("configured the measurement rate as 8Hz") 
+        self.check_ubx_uart(received_bytes)            
+        print("Configured the measurement rate as " + self.meas_rate + " Hz") 
 
         self.set_gx_messages()
+
+    def config_uart2_rtcm(self):
+        ## Configure the F9P chip to be able to output RTCM messages for the dual-GPS setup (moving base)
+
+        ## HPG 1.32
+        self.set_rtcm_messages()
+
+        # set uart_2 baud 460800
+        packet = gps.cfg_valget_uart2_baudrate()
+        gps.spiport.writebytes(packet)
+        print('set uart2 baud 460800')
         
 
 
@@ -469,27 +391,27 @@ if __name__ == '__main__':
     spiport.mode = 0
     spiport.no_cs
 
-    gps = GPS(spiport, desired_messages, meas_rate)         
+    f9p_cfg = f9p_cfg(spiport, desired_messages, meas_rate)         
 
     #function to get the f9p firmware version
-    packet = gps.get_ver()
-    gps.write(packet)
-    received_bytes = gps.receive_ubx_bytes_from_spi()
+    packet = f9p_cfg.get_ver()
+    f9p_cfg.write(packet)
+    received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()
     #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
 
     # revert to the default mode
     if moving_base:
-        packet = gps.revert_to_default_mode()
-        gps.write(packet)
+        packet = f9p_cfg.revert_to_default_mode()
+        f9p_cfg.write(packet)
 
     #configure the f9p to block unwanted messages
-    gps.config_f9p()
+    f9p_cfg.config_f9p()
     
     if moving_base:
         # configure the uart2's output (for movingbase)
-        gps.config_uart2_rtcm()
+        f9p_cfg.config_uart2_rtcm()
 
     #receive GPS messages
-    packet = gps.receive_gps()
-    gps.write(packet)
-    received_bytes = gps.receive_ubx_bytes_from_spi()     
+    packet = f9p_cfg.receive_gps()
+    f9p_cfg.write(packet)
+    received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()     
