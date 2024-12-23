@@ -38,6 +38,7 @@ class F9P_GPS:
         self.geo = None
         self.fix_status = 0
         self.gps_status = "Critical"
+        self.gps_freq_status = "Critical"
         self.gps_time_buf = []
 
         self.h_acc_thresh = 75  # 
@@ -53,7 +54,7 @@ class F9P_GPS:
     def get_gps(self, streamed_data):
         # Function to check whether the streamed data matches the desired 
                         
-        if isinstance(streamed_data,str) and gps_f9p.geo.startswith("$GNGGA"):
+        if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
             self.geo = pynmea2.parse(streamed_data)
             return True
 
@@ -87,6 +88,11 @@ class F9P_GPS:
         return self.fix_status
 
     def create_gps_msg(self, gpsfix):
+
+        gpsfix = NavSatFix()
+        gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
+        gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
+
         gpsfix.latitude = self.geo.latitude if gps_f9p.geo.lat_dir == 'N' else - self.geo.latitude
         gpsfix.longitude = self.geo.longitude if gps_f9p.geo.lon_dir == 'E' else - self.geo.longitude
         gpsfix.altitude = float(self.geo.altitude)
@@ -111,29 +117,31 @@ class F9P_GPS:
 
         # Create a buffer to find the average frequency
         time_buf_len = 10
-        gps_f9p.gps_time_buf.append(gps_time_i)
-        if len(gps_f9p.gps_time_buf) > time_buf_len:
-            gps_f9p.gps_time_buf.pop(0)
+        self.gps_time_buf.append(gps_time_i)
+        if len(self.gps_time_buf) > time_buf_len:
+            self.gps_time_buf.pop(0)
 
         # Inverted average time to calculate hertz
-        gps_hz = len(gps_f9p.gps_time_buf) / sum(gps_f9p.gps_time_buf)
+        gps_hz = len(self.gps_time_buf) / sum(self.gps_time_buf)
 
         #rospy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
-        if gps_hz < 2 and gps_freq_status != "Critical":
+        if gps_hz < 2 and self.gps_freq_status != "Critical":
             rospy.logerr("SN4012: GPS Frequency status: Critical (<2 hz)")
-            gps_freq_status = "Critical"
-        elif gps_hz >=2 and gps_hz < 6 and gps_freq_status != "Warning":
+            self.gps_freq_status = "Critical"
+        elif gps_hz >=2 and gps_hz < 6 and self.gps_freq_status != "Warning":
             rospy.logwarn("SN4012: GPS Frequency status: Warning (<6 hz)")
-            gps_freq_status = "Warning"
-        elif gps_hz >= 6 and gps_freq_status != "Good":
+            self.gps_freq_status = "Warning"
+        elif gps_hz >= 6 and self.gps_freq_status != "Good":
             rospy.loginfo("SN4012: GPS Frequency status: Good (>6 hz)")
-            gps_freq_status = "Good" 
+            self.gps_freq_status = "Good" 
 
     def get_gps_quality(self, streamed_data):
 
-        if isinstance(gps_f9p.geo,str) and gps_f9p.geo.startswith("$GNGST"):
-            gps_f9p.geo = pynmea2.parse(gps_f9p.geo)
-            self.hAcc=((gps_f9p.geo.std_dev_latitude)**2+(gps_f9p.geo.std_dev_longitude)**2)**0.5
+        if isinstance(streamed_data,str) and streamed_data.startswith("$GNGST"):
+            gst_parse = pynmea2.parse(streamed_data)
+            self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
+
+
         return
 
 
@@ -151,11 +159,6 @@ def main(args):
     gps_f9p.uart2_config(baudrate_rtk)
 
     gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10)
-    gpsfix = NavSatFix()
-    gpsfix.header.stamp = rospy.Time.now()
-    gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
-    gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
-    #last_print = time.monotonic()
 
     mode = 1 # 1: RTK base station; 2: PPP-IP; 3: LBand
     while not rospy.is_shutdown():
@@ -163,13 +166,13 @@ def main(args):
         #self.geo = self.gps_spi.geo_coords() #poll method
         streamed_data = self.gps_spi.stream_nmea() #stream method
 
-        # Check the new data is viable and update message
-        if gps_f9p.get_gps():                
-            
-            gpsfix = gps_f9p.create_gps_msg(gpsfix)
-            gps_f9p.get_gps_freq()   
+        gps_f9p.get_gps_quality(streamed_data)
 
-            gps_f9p.get_gps_quality(streamed_data)
+        # Check the new data is viable and update message
+        if gps_f9p.get_gps(streamed_data):                
+            
+            gpsfix = gps_f9p.create_gps_msg()
+            gps_f9p.get_gps_freq()   
 
             if gps_f9p.geo.horizontal_dil < 1:
                 gps_pub.publish(gpsfix)
