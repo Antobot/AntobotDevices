@@ -67,27 +67,26 @@ class F9P_GPS:
 
     def get_fix_status(self):
 
-        if isinstance(self.geo,str) and self.geo.startswith("$GNGGA"):
-            if self.geo.gps_qual == 4 and self.gps_status != 'Good':
-                rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
-                self.gps_status = 'Good'
-                self.fix_status = 3
-            elif self.geo.gps_qual == 2 or 5:
-                if self.hAcc < self.h_acc_thresh:
-                    self.gpsfix.status.status = 3
-                    if gps_status != 'Good':
-                        rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
-                        gps_status = 'Good'
-                else:   
-                    self.gpsfix.status.status = 1
-                    if gps_status != 'Warning':
-                        rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
-                        gps_status = 'Warning'
-            else:
-                self.fix_status = 0 #no fix
-                if self.gps_status != 'Critical':
-                    rospy.logerr("SN4010: GPS Fix Status: Critical")
-                    self.gps_status = 'Critical'
+        if self.geo.gps_qual == 4 and self.gps_status != 'Good':
+            rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+            self.gps_status = 'Good'
+            self.fix_status = 3
+        elif self.geo.gps_qual == 2 or 5:
+            if self.hAcc < self.h_acc_thresh:
+                self.gpsfix.status.status = 3
+                if gps_status != 'Good':
+                    rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                    gps_status = 'Good'
+            else:   
+                self.gpsfix.status.status = 1
+                if gps_status != 'Warning':
+                    rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
+                    gps_status = 'Warning'
+        else:
+            self.fix_status = 0 #no fix
+            if self.gps_status != 'Critical':
+                rospy.logerr("SN4010: GPS Fix Status: Critical")
+                self.gps_status = 'Critical'
         
         return self.fix_status
 
@@ -150,7 +149,7 @@ class F9P_GPS:
 ## Example function
 
 def main(args):
-    gps_freq_status = "Critical"
+    mqtt_publish = False
 
     # init node
     rospy.init_node('rtk', anonymous=True)
@@ -178,8 +177,9 @@ def main(args):
 
             if gps_f9p.geo.horizontal_dil < 1:
                 gps_pub.publish(gps_f9p.gpsfix)
-
-        
+            
+            if mqtt_publish:
+                print("Publishing GPS data to MQTT")    # TODO: Add this functionality
 
         rate.sleep()
 
