@@ -6,17 +6,17 @@
 
 # # # Code Description:     The purpose of this code is to process the GPS data received via SPI from the Ublox F9P chip
 # # #                       and publish a GPS message as a rostopic using this data.
-# # #                       This script is used when base station is used to get the 433MHz correction messages
 
 #This script reports the following on GPS status:
 # GPS status : Critical ; GPS status = 0
 # GPS status : Warning ;GPS status = 1 - Float
 # GPS status : Good ; GPS status = 3 - Fix
 
-# Contact: Aswathi Muralidharan 
-# email: aswathi.muralidharan@antobot.ai
+# Contact: Daniel Freer 
+# email: daniel.freer@antobot.ai
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 import rospy
 import rospkg
 import spidev

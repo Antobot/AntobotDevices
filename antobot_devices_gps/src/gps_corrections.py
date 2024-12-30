@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
 
+# Copyright (c) 2023, ANTOBOT LTD.
+# All rights reserved
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+# # # Code Description:     This code receives GPS correction messages from a variety of sources (usually MQTT) and writes 
+# # #                       the corrections to the F9P chip.
+
+# Contact: Daniel Freer 
+# email: daniel.freer@antobot.ai
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 
 import os
 import time
@@ -41,19 +54,6 @@ class gpsCorrections():
             mqtt_username = "antobot_device"
             mqtt_password = "SvHCWJFNP98h"
 
-        if self.corr_type == "ppp":
-
-            dev_port = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
-            self.mqtt_topics = [(f"/pp/ip/eu", 0), ("/pp/ubx/mga", 0), ("/pp/ubx/0236/ip", 0)]
-            self.userdata = { 'gnss': self.nRTK_correction, 'topics': self.mqtt_topics }
-            
-        elif self.corr_type == "ant_mqtt":
-            self.connect = False
-
-            # Topic names and QoS
-            self.mqtt_topic_sub = base_id
-            self.mqtt_topic_pub = "Antobot_robot_gps"
-            
         # Setting up hardware ports
         if serial_port == None:
             baud = 460800
@@ -61,6 +61,14 @@ class gpsCorrections():
             # May need a different option for antoScout
         else:
             self.serial_port = serial_port
+
+        # Configuring method-specific parameters (MQTT)
+        if self.corr_type == "ppp":
+            dev_port = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
+            self.mqtt_topics = [(f"/pp/ip/eu", 0), ("/pp/ubx/mga", 0), ("/pp/ubx/0236/ip", 0)]
+            self.userdata = { 'gnss': self.serial_port, 'topics': self.mqtt_topics } 
+        elif self.corr_type == "ant_mqtt":
+            self.connect = False
 
         # If the uRCU is being used, the appropriate GPIO pin must be set to "high" to enable corrections from Xavier 
         if dev_type == "urcu":
@@ -87,7 +95,7 @@ class gpsCorrections():
             
 
 
-    #call back when the broker is connected
+    # Attempts to connect to the broker
     def connect_broker(self):
         try:
             if self.corr_type == "ppp":
@@ -99,7 +107,7 @@ class gpsCorrections():
 
         time.sleep(2)
         
-    # The callback for when the client receives a CONNACK response from the server.
+    # The callback for when the client receives a CONNECT response from the server.
     def on_connect(self,client, userdata, flags, rc):
         
         if rc == 0:
@@ -107,7 +115,7 @@ class gpsCorrections():
             if self.corr_type == "ppp":
                 self.client.subscribe(userdata['topics'])
             elif self.corr_type == "ant_mqtt":
-                self.client.subscribe(self.mqtt_topic_sub)
+                self.client.subscribe(self.ant_mqtt_topic_sub)
         else: 
             print("Connection failed!", rc)
 
@@ -117,7 +125,7 @@ class gpsCorrections():
         if self.corr_type == "ppp":
             data = userdata['gnss'].write(msg.payload)
         elif self.corr_type == "ant_mqtt":
-            data = self.nRTK_correction.write(msg.payload)
+            data = self.serial_port.write(msg.payload)
 
 
 def main():

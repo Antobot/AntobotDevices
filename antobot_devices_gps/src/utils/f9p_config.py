@@ -8,8 +8,8 @@
 #			     The configuration must be written to both flash and ram layer if its required to save permanently, if so the value of 'layers' in packet must be set as 0x05
 #			     This script needs to run only once
 
-# Contact:Aswathi Muralidharan 
-# email: aswathi.muralidharan@antobot.ai
+# Contact: Daniel Freer 
+# email: daniel.freer@antobot.ai
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -371,8 +371,8 @@ class F9P_config:
         self.set_rtcm_messages()
 
         # set uart_2 baud 460800
-        packet = gps.cfg_valget_uart2_baudrate()
-        gps.spiport.writebytes(packet)
+        packet = self.cfg_valget_uart2_baudrate()
+        self.spiport.writebytes(packet)
         print('set uart2 baud 460800')
         
 
@@ -391,7 +391,7 @@ if __name__ == '__main__':
     spiport.mode = 0
     spiport.no_cs
 
-    f9p_cfg = f9p_cfg(spiport, desired_messages, meas_rate)         
+    f9p_cfg = F9P_config(spiport, desired_messages, meas_rate)         
 
     #function to get the f9p firmware version
     packet = f9p_cfg.get_ver()
