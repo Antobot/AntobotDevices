@@ -23,6 +23,9 @@ import spidev
 import sys
 import time
 import pynmea2
+
+import serial
+
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8, Float32
@@ -30,15 +33,28 @@ from antobot_devices_gps.ublox_gps import UbloxGps
 
 class F9P_GPS:
 
-    def __init__(self):
-        #GPS class initialisation 
-        #self.baud = 460800# 38400
+    def __init__(self, dev_type, serial_port=None):
+        # # # GPS class initialisation
+        #     Inputs: dev_type - the device type of the F9P chip. 
+        #           "urcu" - if using the F9P inside of the URCU
+        #           "usb" - if using an external F9P conncected via USB
+
+
+        
 
         self.gpsfix = NavSatFix()
         self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
-
-        self.port = spidev.SpiDev()
-        self.gps_spi = UbloxGps(self.port)
+        
+        self.dev_type = dev_type
+        if self.dev_type == "urcu":
+            self.port = spidev.SpiDev()
+        elif self.dev_type == "usb":
+            if serial_port == None:
+                self.baud = 460800  # 38400?? Need to resolve baudrate difference with baudrate_rtk below
+                self.port = serial.Serial("/dev/USB_0", self.baud)
+            else:
+                self.port = serial_port
+        self.gps_dev = UbloxGps(self.port)
         self.geo = None
         self.fix_status = 0
         self.gps_status = "Critical"
@@ -49,10 +65,10 @@ class F9P_GPS:
 
 
     def uart2_config(self,baud):
-        #set the baud rate of uart2 to 38400
-        self.gps_spi.ubx_set_val(0x40530001,baud)
+        #set the baud rate of uart2 to appropriate value (38400?)
+        self.gps_dev.ubx_set_val(0x40530001,baud)
         #set the uart2 enable true
-        self.gps_spi.ubx_set_val(0x10530005,0x01) #cfg-uart2-enable
+        self.gps_dev.ubx_set_val(0x10530005,0x01) #cfg-uart2-enable
 
         
     def get_gps(self, streamed_data):
@@ -154,9 +170,9 @@ def main(args):
     # init node
     rospy.init_node('rtk', anonymous=True)
     rate = rospy.Rate(50)  # 8hz
-    gps_f9p = F9P_GPS()
+    gps_f9p = F9P_GPS("urcu")
 
-    baudrate_rtk = 38400
+    baudrate_rtk = 38400            # Need to resolve baudrate
     gps_f9p.uart2_config(baudrate_rtk)
 
     gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10)
@@ -164,8 +180,8 @@ def main(args):
     mode = 1 # 1: RTK base station; 2: PPP-IP; 3: LBand
     while not rospy.is_shutdown():
         # Get the data from the F9P
-        #self.geo = self.gps_spi.geo_coords() #poll method
-        streamed_data = self.gps_spi.stream_nmea() #stream method
+        #self.geo = self.gps_dev.geo_coords() #poll method
+        streamed_data = gps_f9p.gps_dev.stream_nmea() #stream method
 
         gps_f9p.get_gps_quality(streamed_data)
 

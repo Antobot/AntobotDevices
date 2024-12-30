@@ -67,7 +67,7 @@ class TimeoutException(Exception):
         
 class MovingBase:
 
-    # read rtcm message from base and write it to rovel
+    # read rtcm message from base and write it to rover
     class RTCMFramer(asyncio.Protocol):
 
         START_BYTE = 0xd3
@@ -91,7 +91,7 @@ class MovingBase:
             self.transport.write(b'0')
 
         def data_received(self, data):
-            self.transport_rovel.write(data)
+            self.transport_rover.write(data)
             logger.debug(f"RTCMFramer received data: {data}")
 
             """          
@@ -139,7 +139,7 @@ class MovingBase:
                 
                 
                 if self.movebase._protocol_base:
-                    self.movebase._protocol_base.transport_rovel = self.movebase._transport_rovel
+                    self.movebase._protocol_base.transport_rover = self.movebase._transport_rover
                     
                     self.movebase.MyMQTT.set_transport(self.movebase._transport_base)
                     logger.info(f'Moving Base: Reconnection succeeded')
@@ -148,7 +148,7 @@ class MovingBase:
                 logger.error(f'Moving Base: Reconnection failed: {e}')
                 asyncio.get_event_loop().create_task(self.reconnect())
 
-    # read RELPOSNED message from rovel and parse it to get heading
+    # read RELPOSNED message from rover and parse it to get heading
     class RELPOSNEDFramer(asyncio.Protocol):
 
         SYNC1_BYTE = 0xb5
@@ -202,14 +202,14 @@ class MovingBase:
                         self._frame_count = 0
  
         def connection_lost(self, exc):
-            logger.error('Moving Rovel: Connection lost, attempting to reconnect...')
+            logger.error('Moving Rover: Connection lost, attempting to reconnect...')
             asyncio.get_event_loop().create_task(self.reconnect())
             #asyncio.get_event_loop().stop()
 
         async def reconnect(self):
             await asyncio.sleep(1)
             try:
-                self.movebase._transport_rovel, self.movebase._protocol_rovel = await serial_asyncio.create_serial_connection(
+                self.movebase._transport_rover, self.movebase._protocol_rover = await serial_asyncio.create_serial_connection(
                     asyncio.get_running_loop(),
                     lambda: MovingBase.RELPOSNEDFramer(self.movebase, self.port),
                     self.port,
@@ -217,11 +217,11 @@ class MovingBase:
                     )
                     
                 if self.movebase._protocol_base:
-                    self.movebase._protocol_base.transport_rovel = self.movebase._transport_rovel
-                    logger.info(f'Moving Rovel: Reconnection succeeded')
+                    self.movebase._protocol_base.transport_rover = self.movebase._transport_rover
+                    logger.info(f'Moving Rover: Reconnection succeeded')
                 
             except Exception as e:
-                logger.error(f'Moving Rovel: Reconnection failed: {e}')
+                logger.error(f'Moving Rover: Reconnection failed: {e}')
                 asyncio.get_event_loop().create_task(self.reconnect())
 
         def parse_NAV_RELPOSNED(self, relposnedMessage):
@@ -441,8 +441,8 @@ class MovingBase:
         self._transport_base = None
         self._protocol_base = None
 
-        self._transport_rovel = None
-        self._protocol_rovel = None
+        self._transport_rover = None
+        self._protocol_rover = None
 
         self.MyMQTT = None
         self.F9P_Base = None
@@ -450,7 +450,7 @@ class MovingBase:
         self.time_limit = 0.25
         
     @staticmethod
-    async def create(port1='port_movingbase', port2='port_rovel', port3='port_base', mode=1):
+    async def create(port1='port_movingbase', port2='port_rover', port3='port_base', mode=1):
         movebase = MovingBase()
         movebase._transport_base, movebase._protocol_base = await serial_asyncio.create_serial_connection(
             asyncio.get_running_loop(),
@@ -459,7 +459,7 @@ class MovingBase:
             baudrate=460800
             )
         
-        movebase._transport_rovel, movebase._protocol_rovel = await serial_asyncio.create_serial_connection(
+        movebase._transport_rover, movebase._protocol_rover = await serial_asyncio.create_serial_connection(
             asyncio.get_running_loop(),
             lambda: MovingBase.RELPOSNEDFramer(movebase, port2),
             port2,
@@ -467,7 +467,7 @@ class MovingBase:
             )
         
         if movebase._protocol_base:
-            movebase._protocol_base.transport_rovel = movebase._transport_rovel
+            movebase._protocol_base.transport_rover = movebase._transport_rover
         
         if movebase._transport_base:
             movebase.MyMQTT = MovingBase.MyMqtt(movebase._transport_base, mode)
@@ -481,7 +481,7 @@ class MovingBase:
     
     async def get_RELPOSNEDframe(self):
         try:
-            result = await asyncio.wait_for(self._protocol_rovel.frames.get(), timeout=self.time_limit)
+            result = await asyncio.wait_for(self._protocol_rover.frames.get(), timeout=self.time_limit)
             return result
         except Exception as e:
             #logger.error(f"Timeout: get_RELPOSNEDframe ({e})")
@@ -506,21 +506,21 @@ class MovingBase:
            self._transport_base.close()
            logger.error(f"close transport_base") 
 
-        if self._transport_rovel.is_closing():
-           logger.error(f"transport_rovel is closing")
+        if self._transport_rover.is_closing():
+           logger.error(f"transport_rover is closing")
         else: 
-           self._transport_rovel.close() 
-           logger.error(f"close transport_rovel")
+           self._transport_rover.close() 
+           logger.error(f"close transport_rover")
    
 async def main():
 
     logger.info(f"===============================================")
 
     base_port_uart2 = "/dev/ttyTHS0"
-    rovel_port2 = "/dev/AntoF9P"
+    rover_port2 = "/dev/AntoF9P"
     base_port_spi = None
     
-    movebase = await MovingBase.create(base_port_uart2, rovel_port2, base_port_spi)
+    movebase = await MovingBase.create(base_port_uart2, rover_port2, base_port_spi)
 
     #time_start = time.time()
     
