@@ -104,7 +104,7 @@ class gpsCorrections():
             if self.corr_type == "ppp":
                 self.client.connect(self.ppp_server, port=8883)
             elif self.corr_type == "ant_mqtt":
-                self.client.connect(self.ant_broker, self.mqtt_port, self.mqtt_keepalive)
+                self.client.connect(self.ant_broker, self.ant_mqtt_port, self.mqtt_keepalive)
         except:
             print("Trying to connect ...")
 
