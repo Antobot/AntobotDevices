@@ -39,9 +39,6 @@ class F9P_GPS:
         #           "urcu" - if using the F9P inside of the URCU
         #           "usb" - if using an external F9P conncected via USB
 
-
-        
-
         self.gpsfix = NavSatFix()
         self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
         
@@ -62,6 +59,9 @@ class F9P_GPS:
         self.gps_time_buf = []
 
         self.h_acc_thresh = 75  # 
+
+        current_time = rospy.Time.now()
+        self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
 
 
     def uart2_config(self,baud):
@@ -115,7 +115,7 @@ class F9P_GPS:
         self.gpsfix.altitude = float(self.geo.altitude)
         
         # Get GPS fix status
-        self.gpsfix.status.status = gps_f9p.get_fix_status()
+        self.gpsfix.status.status = self.get_fix_status()
 
         # Assumptions made on covariance
         self.gpsfix.position_covariance[0] = (float(self.geo.horizontal_dil)*0.1*0.001)**2 
@@ -124,7 +124,7 @@ class F9P_GPS:
 
         # Update the navsatfix messsage
         current_time = rospy.Time.now()
-        gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
+        self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
         self.gpsfix.header.stamp = current_time
 
         return
@@ -134,7 +134,7 @@ class F9P_GPS:
 
         # Create a buffer to find the average frequency
         time_buf_len = 10
-        self.gps_time_buf.append(gps_time_i)
+        self.gps_time_buf.append(self.gps_time_i)
         if len(self.gps_time_buf) > time_buf_len:
             self.gps_time_buf.pop(0)
 
@@ -157,7 +157,6 @@ class F9P_GPS:
         if isinstance(streamed_data,str) and streamed_data.startswith("$GNGST"):
             gst_parse = pynmea2.parse(streamed_data)
             self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
-
 
         return
 

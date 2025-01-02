@@ -35,7 +35,7 @@ class F9P_config:
         packet[1] = 0x62
         packet[2] = 0x06
         packet[3] = 0x8a
-        packet = set_length(packet, length)
+        packet = self.set_length(packet, length)
         packet[6] = 0x00 # version
         packet[7] = 0x05 # layers 
         packet[8] = 0x00 # reserved
@@ -185,7 +185,8 @@ class F9P_config:
     
     def receive_gps(self):
         """Prepares UBX protocol sentence to get the HPPOSLLH"""
-        packet = bytearray(8)
+        length = 8
+        packet = bytearray(length)
         # prepare packet
         packet[0] = 0xb5
         packet[1] = 0x62
@@ -199,7 +200,8 @@ class F9P_config:
     
     def get_ver(self):
         """Prepares UBX protocol sentence to get the firmware version"""
-        packet = bytearray(8)
+        length = 8
+        packet = bytearray(length)
         # prepare packet
         packet[0] = 0xb5
         packet[1] = 0x62
