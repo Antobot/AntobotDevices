@@ -40,15 +40,16 @@ class gpsCorrections():
         # Reading configuration file
         rospack = rospkg.RosPack()
         packagePath=rospack.get_path('antobot_devices_gps')
-        yaml_file_path = os.path.join(packagePath, "/config/corrections_config.yaml")
+        print("packagePath: {}".format(packagePath))
+        yaml_file_path = packagePath + "/config/corrections_config.yaml"
         with open(yaml_file_path, 'r') as file:
             config = yaml.safe_load(file)
             self.ppp_client_id = config['ppp']['device_ID']
-            self.ant_client_id = "Antobot_device_" + config['device_ID']
-            self.ant_mqtt_topic_sub = "Anto_MQTT_F9P_" + config['base_ID']
-            self.ant_broker = config['mqtt_Broker']
-            self.ant_mqtt_port = config['mqtt_Port']
-            self.mqtt_keepalive = config['mqtt_keepalive']
+            self.ant_client_id = "Antobot_device_" + config['ant_mqtt']['device_ID']
+            self.ant_mqtt_topic_sub = "Anto_MQTT_F9P_" + config['ant_mqtt']['base_ID']
+            self.ant_broker = config['ant_mqtt']['mqtt_Broker']
+            self.ant_mqtt_port = config['ant_mqtt']['mqtt_Port']
+            self.mqtt_keepalive = config['ant_mqtt']['mqtt_keepalive']
             # mqtt_UserName = config['mqtt_UserName']
             # mqtt_PassWord = config['mqtt_PassWord']
             mqtt_username = "antobot_device"
@@ -56,6 +57,7 @@ class gpsCorrections():
 
         # Setting up hardware ports
         if serial_port == None:
+            dev_port = "/dev/ttyTHS0"
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
             # May need a different option for antoScout
@@ -81,9 +83,9 @@ class gpsCorrections():
 
         # Setting up the MQTT Client
         if self.corr_type == "ppp":
-            self.client = mqtt.Client(client_id=self.client_id, userdata=self.userdata)
-            self.certfile=os.path.join(packagePath,"config/")+f'device-{self.client_id}-pp-cert.crt'
-            self.keyfile=os.path.join(packagePath,"config/")+f'device-{self.client_id}-pp-key.pem'
+            self.client = mqtt.Client(client_id=self.ppp_client_id, userdata=self.userdata)
+            self.certfile=os.path.join(packagePath,"config/")+f'device-{self.ppp_client_id}-pp-cert.crt'
+            self.keyfile=os.path.join(packagePath,"config/")+f'device-{self.ppp_client_id}-pp-key.pem'
             self.client.tls_set(certfile=self.certfile,keyfile=self.keyfile)
         elif self.corr_type == "ant_mqtt":
             self.client = mqtt.Client(self.ant_client_id)
@@ -129,12 +131,12 @@ class gpsCorrections():
 
 
 def main():
-    gps_corr = gpsCorrections("ppp")
+    gps_corr = gpsCorrections("urcu", "ppp")
     
     gps_corr.client.loop_start()
-    # while(True):
-    #     time.sleep(1)
-    #     print("Running")
+    while(True):
+        time.sleep(1)
+        print("Running")
 
 
 if __name__ == '__main__':

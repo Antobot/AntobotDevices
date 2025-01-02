@@ -57,7 +57,7 @@ class F9P_GPS:
         self.gps_status = "Critical"
         self.gps_freq_status = "Critical"
         self.gps_time_buf = []
-
+        self.hAcc = 500
         self.h_acc_thresh = 75  # 
 
         current_time = rospy.Time.now()
@@ -90,14 +90,14 @@ class F9P_GPS:
         elif self.geo.gps_qual == 2 or 5:
             if self.hAcc < self.h_acc_thresh:
                 self.gpsfix.status.status = 3
-                if gps_status != 'Good':
+                if self.gps_status != 'Good':
                     rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
-                    gps_status = 'Good'
+                    self.gps_status = 'Good'
             else:   
                 self.gpsfix.status.status = 1
-                if gps_status != 'Warning':
+                if self.gps_status != 'Warning':
                     rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
-                    gps_status = 'Warning'
+                    self.gps_status = 'Warning'
         else:
             self.fix_status = 0 #no fix
             if self.gps_status != 'Critical':
@@ -110,17 +110,19 @@ class F9P_GPS:
 
         self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
 
+        self.gpsfix.altitude = 0
+
         self.gpsfix.latitude = self.geo.latitude if self.geo.lat_dir == 'N' else - self.geo.latitude
         self.gpsfix.longitude = self.geo.longitude if self.geo.lon_dir == 'E' else - self.geo.longitude
-        self.gpsfix.altitude = float(self.geo.altitude)
+        self.gpsfix.altitude = self.geo.altitude
         
         # Get GPS fix status
         self.gpsfix.status.status = self.get_fix_status()
 
         # Assumptions made on covariance
-        self.gpsfix.position_covariance[0] = (float(self.geo.horizontal_dil)*0.1*0.001)**2 
-        self.gpsfix.position_covariance[4] = (float(self.geo.horizontal_dil)*0.1*0.001)**2 
-        self.gpsfix.position_covariance[8] = (4*self.geo.horizontal_dil*0.1*0.001)**2 
+        self.gpsfix.position_covariance[0] = (self.hAcc)**2 
+        self.gpsfix.position_covariance[4] = (self.hAcc)**2 
+        self.gpsfix.position_covariance[8] = (4*self.hAcc)**2 
 
         # Update the navsatfix messsage
         current_time = rospy.Time.now()
@@ -190,7 +192,7 @@ def main(args):
             gps_f9p.create_gps_msg()
             gps_f9p.get_gps_freq()   
 
-            if gps_f9p.geo.horizontal_dil < 1:
+            if gps_f9p.hAcc < 1:
                 gps_pub.publish(gps_f9p.gpsfix)
             
             if mqtt_publish:
