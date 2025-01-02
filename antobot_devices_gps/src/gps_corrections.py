@@ -45,6 +45,7 @@ class gpsCorrections():
         with open(yaml_file_path, 'r') as file:
             config = yaml.safe_load(file)
             self.ppp_client_id = config['ppp']['device_ID']
+            self.ppp_server = 'pp.services.u-blox.com'
             self.ant_client_id = "Antobot_device_" + config['ant_mqtt']['device_ID']
             self.ant_mqtt_topic_sub = "Anto_MQTT_F9P_" + config['ant_mqtt']['base_ID']
             self.ant_broker = config['ant_mqtt']['mqtt_Broker']
@@ -101,9 +102,9 @@ class gpsCorrections():
     def connect_broker(self):
         try:
             if self.corr_type == "ppp":
-                self.client.connect(self.server, port=8883)
+                self.client.connect(self.ppp_server, port=8883)
             elif self.corr_type == "ant_mqtt":
-                self.client.connect(self.broker, self.mqtt_port, self.mqtt_keepalive)
+                self.client.connect(self.ant_broker, self.mqtt_port, self.mqtt_keepalive)
         except:
             print("Trying to connect ...")
 
