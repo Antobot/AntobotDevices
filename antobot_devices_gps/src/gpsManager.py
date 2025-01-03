@@ -199,7 +199,7 @@ def main():
     rate = rospy.Rate(50)  # check at 50hz
     # rate = rospy.Rate(1) # check at 1hz
 
-    
+    # If movingbase is being used with dual-GPS
     if gpsMgr.movingbase:
         loop = asyncio.get_event_loop()
         try:
@@ -207,9 +207,10 @@ def main():
         except Exception as e:     
             GPIO.cleanup()
             loop.close()
-    else:
+    else:       # Most other situations
         while not rospy.is_shutdown():
-            gpsMgr.check_gps()
+            if not launch_nodes:
+                gpsMgr.check_gps()
             rate.sleep()
 
 
