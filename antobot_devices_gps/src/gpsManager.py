@@ -209,7 +209,7 @@ def main():
             loop.close()
     else:       # Most other situations
         while not rospy.is_shutdown():
-            if not launch_nodes:
+            if not gpsMgr.launch_nodes:
                 gpsMgr.check_gps()
             rate.sleep()
 
