@@ -13,6 +13,8 @@
 
 import yaml
 import socket
+import serial
+
 import rospy
 
 import roslaunch
@@ -35,9 +37,12 @@ class gpsManager():
         self.gps_nodes = []
         self.dual_gps = 'false'
 
-        gps_data, device_type = self.read_gps_config()
+        # Create serial interface placeholder
+        self.f9p_usb_port = None
+        self.f9p_urcu_serial_port = None
 
-        # Create serial interface (?)
+        # Read gps config
+        gps_data, device_type = self.read_gps_config()
 
         # Launch GPS nodes
         for k, v in gps_data.items():
@@ -126,48 +131,44 @@ class gpsManager():
 
         if k == "urcu":
             serial = None
-            gps_cls = F9P_GPS()
+            gps_cls = F9P_GPS("urcu")
         if k == "movingbase":
             serial = None
             gps_cls = MovingBase_Ros()
             # May need to also launch a separate node (movingbase_enu_conversion)
         if k == "f9p_usb" or k == "f9p_usb2":
-            serial = None
-            gps_cls = F9P_GPS()
+            baud = 460800
+            if self.f9p_usb_port == None:
+                self.f9p_usb_port = serial.Serial(v['device_port'], baud)
+            gps_cls = F9P_GPS("usb", serial_port=self.f9p_usb_port, pub_name="antobot_" + k)
 
         return gps_cls
-    
-    
-    def check_gps_nodes(self):
-        for gps_node in self.gps_nodes:
-            self.check_gps()
     
     def check_gps(self):
         # Checks whether there have been any changes to the robot's network
 
-        try:
-            # Check whether any node has died
+        for gps_node in self.gps_nodes:
+            if gps_node.node_type == "gps_f9p":
+                self.check_gps_node(gps_node)
 
-            # TODO: check RTK status of each GPS node
-
-            # TODO: check frequency of each GPS node
-
-            return
-        except KeyboardInterrupt:
-            exit()
         return
-        
     
-    def gps_status(self): 
-        # Gets the gps frequency and RTK status of each of the GPS receivers. If any are having issues, the rest of the system should be informed.
+    def check_gps_node(self, gps_node):
+        # If no longer running, re-launch
+
+        gps_node.get_gps()
+
+        # Publish any changes to fixed status, frequency, etc.
 
         return
+    
 
 def main():
     rospy.init_node ('gpsManager') 
     gpsMgr = gpsManager()
-    
-    rate = rospy.Rate(1) # 1hz
+
+    rate = rospy.Rate(50)  # check at 50hz
+    # rate = rospy.Rate(1) # check at 1hz
 
     while not rospy.is_shutdown():
         gpsMgr.check_gps()

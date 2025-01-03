@@ -33,11 +33,13 @@ from antobot_devices_gps.ublox_gps import UbloxGps
 
 class F9P_GPS:
 
-    def __init__(self, dev_type, serial_port=None):
+    def __init__(self, dev_type, serial_port=None, pub_name="antobot_gps"):
         # # # GPS class initialisation
         #     Inputs: dev_type - the device type of the F9P chip. 
         #           "urcu" - if using the F9P inside of the URCU
         #           "usb" - if using an external F9P conncected via USB
+
+        self.node_type = "gps_f9p"
 
         self.gpsfix = NavSatFix()
         self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
@@ -63,6 +65,10 @@ class F9P_GPS:
         current_time = rospy.Time.now()
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
 
+        self.gps_pub = rospy.Publisher(pub_name, NavSatFix, queue_size=10)
+
+        return
+
 
     def uart2_config(self,baud):
         #set the baud rate of uart2 to appropriate value (38400?)
@@ -71,7 +77,27 @@ class F9P_GPS:
         self.gps_dev.ubx_set_val(0x10530005,0x01) #cfg-uart2-enable
 
         
-    def get_gps(self, streamed_data):
+    def get_gps(self):
+        # Get the data from the F9P
+        #self.geo = self.gps_dev.geo_coords() #poll method
+        streamed_data = self.gps_dev.stream_nmea() #stream method
+
+        self.get_gps_quality(streamed_data)
+
+        # Check the new data is viable and update message
+        if self.correct_gps_format(streamed_data):                
+            
+            self.create_gps_msg()
+            self.get_gps_freq()   
+
+            if self.hAcc < 1:
+                self.gps_pub.publish(self.gpsfix)
+            
+                if self.mqtt_publish:
+                    print("Publishing GPS data to MQTT")    # TODO: Add this functionality
+    
+
+    def correct_gps_format(self, streamed_data):
         # Function to check whether the streamed data matches the desired 
                         
         if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
@@ -79,7 +105,6 @@ class F9P_GPS:
             return True
 
         return False
-
 
     def get_fix_status(self):
 
@@ -176,27 +201,9 @@ def main(args):
     baudrate_rtk = 38400            # Need to resolve baudrate
     gps_f9p.uart2_config(baudrate_rtk)
 
-    gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10)
-
     mode = 1 # 1: RTK base station; 2: PPP-IP; 3: LBand
     while not rospy.is_shutdown():
-        # Get the data from the F9P
-        #self.geo = self.gps_dev.geo_coords() #poll method
-        streamed_data = gps_f9p.gps_dev.stream_nmea() #stream method
-
-        gps_f9p.get_gps_quality(streamed_data)
-
-        # Check the new data is viable and update message
-        if gps_f9p.get_gps(streamed_data):                
-            
-            gps_f9p.create_gps_msg()
-            gps_f9p.get_gps_freq()   
-
-            if gps_f9p.hAcc < 1:
-                gps_pub.publish(gps_f9p.gpsfix)
-            
-            if mqtt_publish:
-                print("Publishing GPS data to MQTT")    # TODO: Add this functionality
+        gps_f9p.get_gps()
 
         rate.sleep()
 
