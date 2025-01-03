@@ -199,10 +199,7 @@ def main():
     rate = rospy.Rate(50)  # check at 50hz
     # rate = rospy.Rate(1) # check at 1hz
 
-    while not rospy.is_shutdown():
-        gpsMgr.check_gps()
-        rate.sleep()
-
+    
     if gpsMgr.movingbase:
         loop = asyncio.get_event_loop()
         try:
@@ -210,6 +207,11 @@ def main():
         except Exception as e:     
             GPIO.cleanup()
             loop.close()
+    else:
+        while not rospy.is_shutdown():
+            gpsMgr.check_gps()
+            rate.sleep()
+
 
 
 if __name__ == '__main__':
