@@ -46,6 +46,8 @@ from antobot_devices_gps.movingbase import MovingBase
 class MovingBase_Ros:
     def __init__(self, base_port_uart, rover_port, base_port_spi, mode):
         
+        self.node_type = "movingbase"
+        
         self.base_port_uart = base_port_uart
         self.rover_port = rover_port
         self.base_port_spi = base_port_spi
@@ -174,7 +176,6 @@ if __name__ == '__main__':
     GPIO.setmode(GPIO.BOARD)
     GPIO.setup(gpioID, GPIO.OUT)
 
-    
     base_port_uart = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
     rover_port = rospy.get_param("/gps/ublox_rover/device_port","/dev/AntoF9P")
     base_port_spi = None

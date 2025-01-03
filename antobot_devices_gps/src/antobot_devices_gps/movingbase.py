@@ -93,34 +93,6 @@ class MovingBase:
         def data_received(self, data):
             self.transport_rover.write(data)
             logger.debug(f"RTCMFramer received data: {data}")
-
-            """          
-            # parse the rtcm 
-            # just for test
-            # inf in production, please comment out
-            for b in data:
-                if self._in_frame:
-                    self._frame.append(b)
-                    if len(self._frame) == 3:
-                        self._frame_size = int.from_bytes(self._frame[1:3], byteorder='big', signed=False) 
-                    elif self._frame_count > self._frame_size+1: #checksum=3
-                        self._in_frame = False
-                        try:
-                            msgs = RTCMReader.parse(self._frame)
-                            print(msgs.identity)
-                        except:
-                            logger.error("RTCMFramer: can not parse the rtcm message")
-                    elif len(self._frame) > 3:
-                        self._frame_count += 1
-                else:
-                    if b == MovingBase.RTCMFramer.START_BYTE:
-                        #print(f'Data received: {self._frame}')
-                        self._in_frame = True
-                        self._frame.clear()
-                        self._frame.append(b)
-                        self._frame_size = 0
-                        self._frame_count = 0
-            """
             
         def connection_lost(self, exc):
             logger.error('Moving Base: Connection lost, attempting to reconnect...')

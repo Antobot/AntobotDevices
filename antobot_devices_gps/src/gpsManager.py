@@ -14,6 +14,7 @@
 import yaml
 import socket
 import serial
+import asyncio
 
 import rospy
 
@@ -27,6 +28,8 @@ from gps_f9p import F9P_GPS
 from gps_movingbase import MovingBase_Ros
 from gps_corrections import gpsCorrections
 
+import Jetson.GPIO as GPIO
+
 
 class gpsManager():
     def __init__(self):
@@ -36,6 +39,8 @@ class gpsManager():
 
         self.gps_nodes = []
         self.dual_gps = 'false'
+        self.movingbase = False
+        self.urcu_gps_node = None
 
         # Create serial interface placeholder
         self.f9p_usb_port = None
@@ -57,7 +62,7 @@ class gpsManager():
                 self.gps_nodes.append(gps_cls_tmp)
 
         # Launch corrections node
-        
+        # # # STILL NEEDS TO BE DONE!!!
 
         return
 
@@ -100,7 +105,6 @@ class gpsManager():
             exec_name = "gps_f9p.py"
         if k == "movingbase":
             exec_name = "gps_movingbase.py"
-            # May need to also launch a separate node (movingbase_enu_conversion)
         if k == "f9p_usb" or k == "f9p_usb2":
             exec_name = "gps_f9p.py"
 
@@ -134,14 +138,17 @@ class gpsManager():
             if self.f9p_urcu_serial_port == None:
                 self.f9p_urcu_serial_port = serial.Serial(v['device_port'], baud)
 
-            # Define the class
+            # Define the class object
             gps_cls = F9P_GPS("urcu")
+            self.urcu_gps_node = gps_cls
 
         if k == "movingbase":
+            # Define serial port for the movingbase F9P (connected via USB)
             if self.f9p_usb_port == None:
                 self.f9p_usb_port = serial.Serial(v['device_port'], baud)
+
+            # Define the class object
             gps_cls = MovingBase_Ros(self.f9p_urcu_serial_port, self.f9p_usb_port, None)
-            # May need to also launch a separate node (movingbase_enu_conversion)
         if k == "f9p_usb" or k == "f9p_usb2":
             baud = 460800
             if self.f9p_usb_port == None:
@@ -157,6 +164,22 @@ class gpsManager():
             if gps_node.node_type == "gps_f9p":
                 self.check_gps_node(gps_node)
 
+        return
+    
+    async def check_gps_async(self):
+
+        MB = await self.create_MovingBase()
+        while not rospy.is_shutdown():
+            try:
+
+                self.check_gps_node(self.urcu_gps_node)
+
+                headFrame = await MB.get_RELPOSNEDframe()
+                self.pub_head(headFrame)
+
+            except:
+                rospy.logerr(f"MovingBase: Close the MovingBase node")
+                break
         return
     
     def check_gps_node(self, gps_node):
@@ -179,6 +202,14 @@ def main():
     while not rospy.is_shutdown():
         gpsMgr.check_gps()
         rate.sleep()
+
+    if gpsMgr.movingbase:
+        loop = asyncio.get_event_loop()
+        try:
+            loop.run_until_complete(gpsMgr.check_gps_async)
+        except Exception as e:     
+            GPIO.cleanup()
+            loop.close()
 
 
 if __name__ == '__main__':
