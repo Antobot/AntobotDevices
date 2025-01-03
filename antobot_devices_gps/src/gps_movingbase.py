@@ -31,6 +31,7 @@
 import threading
 import asyncio
 import time
+import math
 
 import rospy,rostopic
 from sensor_msgs.msg import NavSatFix
@@ -57,81 +58,22 @@ class MovingBase_Ros:
 
         self.time_buf_len = 10
 
-        # Create the message for ROS
-        self.gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10)
-        self.gpsfix = NavSatFix()
-        self.gpsfix.header.stamp = rospy.Time.now()
-        self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
-        self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED 
-        self.gps_hz = 0 
-        self.gps_freq_status = None
-        self.gps_time_buf = []
-        self.gps_fix_status = 0
-        self.gps_fix_status_str = None
-        self.h_acc = 500
-
-        self.heading_pub = rospy.Publisher('am_heading_urcu', Float64, queue_size=10)
-        self.heading_pub_enu = rospy.Publisher('am_heading_enu', Float64, queue_size=10)
+        self.pub_heading_urcu = rospy.Publisher('antobot_heading_urcu', Float64, queue_size=10)
+        self.pub_heading_robot = rospy.Publisher('antobot_heading_robot', Float64, queue_size=10)
         self.heading_hz = 0
         self.heading_freq_status = None
         self.heading_time_buf = []
         self.heading_status = False
         self.heading_status_str = None
 
-    def pub_pvt(self, frame):
+        # Only considering px and py (two antennas should be placed at the same height)
+        urcu_px = rospy.get_param("/gps/urcu/px",0.1)
+        urcu_py = rospy.get_param("/gps/urcu/py",0.6)
 
-        if frame:
-            self.gps_time_buf.append(time.time())
+        rover_px = rospy.get_param("/gps/movingbase/px",0.1)
+        rover_py = rospy.get_param("/gps/movingbase/py",-0.6)
 
-            self.gpsfix.latitude = frame.lat
-            self.gpsfix.longitude = frame.lon 
-            self.gpsfix.altitude = frame.height
-
-            # Get GPS fix status
-            self.gpsfix.status.status = frame.status_fix
-            self.gps_fix_status = frame.status_fix
-
-            # Assumptions made on covariance
-            self.gpsfix.position_covariance[0] = (frame.hAcc*0.001)**2 
-            self.gpsfix.position_covariance[4] = (frame.hAcc*0.001)**2 
-            self.gpsfix.position_covariance[8] = (4*frame.hAcc*0.001)**2 
-        
-            if frame.hAcc < self.h_acc:
-                self.gps_pub.publish(self.gpsfix)
-        
-        elif len(self.gps_time_buf) > 0:
-            self.gps_time_buf.pop(0)
-        elif len(self.gps_time_buf) == 0:
-            self.gps_fix_status = 0
-       
-
-        if self.gps_fix_status == 0 and self.gps_fix_status_str != "Critical":
-            rospy.logerr("SN4010: GPS Fix Status: Crtitial")
-            self.gps_fix_status_str = "Critical"
-        elif self.gps_fix_status == 1 and self.gps_fix_status_str != "Warning":
-            self.gps_fix_status_str = "Warning"
-            rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
-        elif self.gps_fix_status == 3 and self.gps_fix_status_str != "Good":
-            self.gps_fix_status_str = "Good"
-            rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
-
-        if len(self.gps_time_buf) > self.time_buf_len:
-            self.gps_time_buf.pop(0)
-
-        if len(self.gps_time_buf)>2:
-            self.gps_hz = (len(self.gps_time_buf)-1) / (time.time() - self.gps_time_buf[0])  
-        else:
-            self.gps_hz = 0
-
-        if self.gps_hz < self.freq_low and self.gps_freq_status != "Critical":
-            rospy.logerr(f"SN4012: GPS Frequency status: Critical (<{self.freq_low} hz)")
-            self.gps_freq_status = "Critical"
-        elif self.gps_hz >= self.freq_low and self.gps_hz < self.freq_high and self.gps_freq_status != "Warning":
-            rospy.logwarn(f"SN4012: GPS Frequency status: Warning (<{self.freq_high} hz)")
-            self.gps_freq_status = "Warning"
-        elif self.gps_hz >= self.freq_high and self.gps_freq_status != "Good":
-            rospy.loginfo(f"SN4012: GPS Frequency status: Good (>{self.freq_high} hz) ")
-            self.gps_freq_status = "Good"   
+        self.robot_angle_correction = self.calculate_enu_angle(urcu_px, urcu_py, rover_px, rover_py)
 
     def pub_head(self, frame):
 
@@ -141,12 +83,15 @@ class MovingBase_Ros:
             self.heading_status = frame.relPosHeadingValid
 
             if self.heading_status:
-                self.heading_pub.publish(heading) # True North heading - keep it for debugging
+                self.pub_heading_urcu.publish(heading) # True North heading - keep it for debugging
 
                 # Convert the value to ENU (East-North-Up)
                 enu_heading = (450.0 - heading) % 360.0
 
-                self.heading_pub_enu.publish(enu_heading)
+                # Calculate and publish the robot heading
+                msgs = Float64()
+                msgs.data = ((enu_heading) - self.robot_angle_correction)%360.0 # Normalise the result to be within 0 to 360
+                self.pub_heading_robot.publish(msgs)
                 
         elif len(self.heading_time_buf) > 0:
             self.heading_time_buf.pop(0)
@@ -178,7 +123,24 @@ class MovingBase_Ros:
             rospy.loginfo(f"SN4022: Heading Frequency status: Good (>{self.freq_high} hz)")
             self.heading_freq_status = "Good"
     
-
+    def calculate_enu_angle(xA, yA, xB, yB):
+        # Compute the differences in the ENU (East-North) coordinate system
+        dx = xB - xA  # East-West difference (X axis)
+        dy = yB - yA  # North-South difference (Y axis)
+        
+        # Calculate the angle using atan2, relative to the East (positive X-axis)
+        angle_radians = math.atan2(dy, dx)
+        
+        # Convert the angle to degrees
+        angle_degrees = math.degrees(angle_radians)
+        
+        # Normalize the angle to be within 0 to 360 degrees
+        if angle_degrees < 0:
+            angle_degrees += 360
+        
+        return angle_degrees
+    
+    
     async def create_MovingBase(self):
         while not self.device_connect:
             try:
@@ -187,7 +149,7 @@ class MovingBase_Ros:
                 return MB
             except Exception as e:
                 if self.publish_first:
-                    rospy.logerr('MovingBase inilization failed: %s:', str(e))
+                    rospy.logerr('MovingBase initialization failed: %s:', str(e))
                     self.publish_first = False
                 time.sleep(1)
         
@@ -195,15 +157,11 @@ class MovingBase_Ros:
         MB = await self.create_MovingBase()
         while True:
             try:
-
-                pvtFrame = MB.get_PVTframe()
-                self.pub_pvt(pvtFrame)
-
                 headFrame = await MB.get_RELPOSNEDframe()
                 self.pub_head(headFrame)
 
             except:
-                rospy.logerr(f"nRTK: Close the nRTK Node")
+                rospy.logerr(f"MovingBase: Close the MovingBase node")
                 break
 
 if __name__ == '__main__':

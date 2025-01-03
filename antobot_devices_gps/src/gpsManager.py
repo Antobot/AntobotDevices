@@ -130,11 +130,17 @@ class gpsManager():
     def get_gps_class(self, k, v):
 
         if k == "urcu":
-            serial = None
+            # Define serial port for the F9P inside of the uRCU (for movingbase or otherwise)
+            if self.f9p_urcu_serial_port == None:
+                self.f9p_urcu_serial_port = serial.Serial(v['device_port'], baud)
+
+            # Define the class
             gps_cls = F9P_GPS("urcu")
+
         if k == "movingbase":
-            serial = None
-            gps_cls = MovingBase_Ros()
+            if self.f9p_usb_port == None:
+                self.f9p_usb_port = serial.Serial(v['device_port'], baud)
+            gps_cls = MovingBase_Ros(self.f9p_urcu_serial_port, self.f9p_usb_port, None)
             # May need to also launch a separate node (movingbase_enu_conversion)
         if k == "f9p_usb" or k == "f9p_usb2":
             baud = 460800

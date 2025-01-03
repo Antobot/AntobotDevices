@@ -340,77 +340,6 @@ class MovingBase:
         def set_transport(self, transport_):
             self.transport = transport_
 
-    class F9P_GPS:
-        def __init__(self, port = None):
-            if port is None:
-                self.port = spidev.SpiDev()
-                logger.debug(f"F9P_GPS: SPI")
-            else:
-                self.port = serial.Serial(port=port, baudrate=460800, timeout=0)
-                logger.debug(f"F9P_GPS: UART")
-
-            self.gps_port = UbloxGps(self.port)
-            self.h_acc = 500 
-            self.fix_status = None            
-        def get_gps(self):
-            #function to parse and publish the UBX parser GPS coordinates
-            try:
-                geo = self.gps_port.geo_coords()
-                #logger.info(f"geo: {geo}") 
-                self.get_fix_status(geo)
-
-                pvtFrame = MovingBase.PVTFrame(geo.iTOW, geo.fixType, geo.flags.carrSoln, geo.lon, geo.lat, geo.height, geo.hAcc, self.fix_status)
-                
-                return pvtFrame
-            except TimeoutException:
-                logger.error(f"F9P_GPS: can not read pvt from F9P")
-            except IOError:
-                logger.error(f"F9P_GPS: IOError")
-                pass
-
-        def get_fix_status(self, geo):
-            if geo.flags.carrSoln == 2:  #fix mode =2 ; float mode = 1
-                if self.fix_status != 3:
-                    #logger.info(f"GPS-PVT Fix status: Good (3)")
-                    self.fix_status = geo.fixType #3: 3Dfix, 2:2Dfix
-                
-            elif geo.flags.carrSoln == 1: # float conditions
-                #PPP-IP can show float even if the horizontal accuracy is good, so adding another loop to check the fix mode
-                if geo.hAcc < self.h_acc:
-                    if self.fix_status != 3:
-                        #logger.info(f"GPS-PVT Fix status: Good (3)")
-                        self.fix_status = 3
-                    
-                elif geo.hAcc > self.h_acc :
-                    if self.fix_status != 1:
-                        #logger.warning(f"GPS-PVT Fix status: Warning (1)")
-                        self.fix_status = 1
-            else:
-                if self.fix_status != 0:
-                    #logger.error(f"GPS-PVT Fix status: Critical (0)")
-                    self.fix_status = 0 #no fix
-                
-        # time limit
-        def wait_for(self, func, seconds, *args, **kwargs):
-            time_out = False
-            
-            def timeout_handler():
-               nonlocal time_out
-               time_out = True
-              
-            timer = threading.Timer(seconds, timeout_handler)
-            timer.start()
-            try:
-                result = func(*args, **kwargs)
-            except TimeoutException:
-                result = None
-            finally:
-                timer.cancel()
-                if time_out:
-                    raise TimeoutException("Function call timed out")
-                    
-            return result
-
     @dataclass
     class RELPOSNEDFrame:
         iTOW: int                 # GPS time of week of the navigation epoch. (ms)
@@ -487,14 +416,6 @@ class MovingBase:
             #logger.error(f"Timeout: get_RELPOSNEDframe ({e})")
             return None
     
-    def get_PVTframe(self):
-        try:
-            result=self.F9P_Base.wait_for(self.F9P_Base.get_gps, self.time_limit)
-            return result
-        except Exception as e:
-            #logger.error(f"Timeout: get_PVTframe ({e})")
-            return None
-    
     def pub_PVT_Heading(self, data):
         self.MyMQTT.publish_message(data)
     
@@ -528,14 +449,10 @@ async def main():
     while True:
         
         time1 = time.time()
-        pvtFrame = movebase.get_PVTframe()
-        time2 = time.time()
         headFrame = await movebase.get_RELPOSNEDframe()
-        time3 = time.time()
+        time2 = time.time()
         
         if publish_mqtt:
-            if pvtFrame:
-                movebase.pub_PVT_Heading(f'pvtFrame: {pvtFrame}')
             
             if headFrame:
                 movebase.pub_PVT_Heading(f'headFrame: {headFrame}')        
