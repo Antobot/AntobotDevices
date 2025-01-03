@@ -21,39 +21,38 @@ import rospkg
 from antobot_manager_software.launchManager import Node, RoslaunchWrapperObject
 # from antobot_manager_msgs.srv import netMonitorLaunch, netMonitorLaunchResponse
 
+from gps_f9p import F9P_GPS
+from gps_movingbase import MovingBase_Ros
+from gps_corrections import gpsCorrections
+
 
 class gpsManager():
     def __init__(self):
 
+        launch_nodes = False
+        use_class = True
+
         self.gps_nodes = []
         self.dual_gps = 'false'
 
-        # self._launch = roslaunch.scriptapi.ROSLaunch()
-        # self._launch.start()
+        gps_data, device_type = self.read_gps_config()
 
-        gps_data,device_type = self.read_gps_config()
+        # Create serial interface (?)
 
-        if len(gps_data.items()) == 2: # Dual GPS setting
-            for k, v in gps_data.items():
-                if k == "urcu":
-                    self.dual_gps = 'true'
-                    self.createLauncher("gps_movingbase.py", "gps_movingbase")
-        else: # One gps antenna 
-            for k, v in gps_data.items():
-                node_name = "gps"
-                if v['rtk_type'] == "ppp":
-                    node_name += "_ppp"
-                elif v['rtk_type'] == "base_station":
-                    node_name += "base_station"
-                elif v['rtk_type'] == "rtk_mqtt":
-                    node_name += "_rtk_mqtt"
-
-                exec_name = node_name + ".py" 
-
-                print("launching executable {}".format(exec_name))
-
+        # Launch GPS nodes
+        for k, v in gps_data.items():
+            if launch_nodes:
                 # Launch the appropriate GPS script
+                exec_name, node_name = self.get_node_name(k, v)
                 self.createLauncher(exec_name, node_name)
+                print("launching executable {}".format(exec_name))
+            elif use_class:
+                
+                gps_cls_tmp = self.get_gps_class(k, v)
+                self.gps_nodes.append(gps_cls_tmp)
+
+        # Launch corrections node
+        
 
         return
 
@@ -86,8 +85,63 @@ class gpsManager():
             gps_data = data['gps']
             # rtk_type = ???    # should launch all gps-related scripts from gpsManager instead
 
-        return gps_data,device_type
+        return gps_data, device_type
 
+    def get_node_name(self, k, v):
+
+        node_name = "gps_" + k
+
+        if k == "urcu":
+            exec_name = "gps_f9p.py"
+        if k == "movingbase":
+            exec_name = "gps_movingbase.py"
+            # May need to also launch a separate node (movingbase_enu_conversion)
+        if k == "f9p_usb" or k == "f9p_usb2":
+            exec_name = "gps_f9p.py"
+
+        return exec_name, node_name
+    
+    def createLauncher(self, exec_name, node_name):
+
+        # Generate a unique id for the node
+        uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
+        roslaunch.configure_logging(uuid)
+
+        cli_args = ['antobot_devices_gps', 'gps_config_launch.launch', 'exec_name:='+exec_name, 'node_name:='+node_name, 'dual_gps:='+self.dual_gps]
+
+        roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
+        print(roslaunch_file)
+        roslaunch_args = cli_args[2:]
+
+        launch_files = [(roslaunch_file, roslaunch_args)]
+
+        launcher = RoslaunchWrapperObject(run_id = uuid, roslaunch_files = launch_files)
+
+        # start the launch file
+        launcher.start_node_name(node_name)
+
+        return launcher
+    
+    def get_gps_class(self, k, v):
+
+        if k == "urcu":
+            serial = None
+            gps_cls = F9P_GPS()
+        if k == "movingbase":
+            serial = None
+            gps_cls = MovingBase_Ros()
+            # May need to also launch a separate node (movingbase_enu_conversion)
+        if k == "f9p_usb" or k == "f9p_usb2":
+            serial = None
+            gps_cls = F9P_GPS()
+
+        return gps_cls
+    
+    
+    def check_gps_nodes(self):
+        for gps_node in self.gps_nodes:
+            self.check_gps()
+    
     def check_gps(self):
         # Checks whether there have been any changes to the robot's network
 
@@ -108,30 +162,6 @@ class gpsManager():
         # Gets the gps frequency and RTK status of each of the GPS receivers. If any are having issues, the rest of the system should be informed.
 
         return
-    
-
-    def createLauncher(self, exec_name, node_name):
-        '''Starts a camera by calling the c16 launch file'''
-
-        # Generate a unique id for the node
-        uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-        roslaunch.configure_logging(uuid)
-
-        cli_args = ['antobot_devices_gps', 'gps_config_launch.launch', 'exec_name:='+exec_name, 'node_name:='+node_name, 'dual_gps:='+self.dual_gps]
-
-        
-        roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
-        print(roslaunch_file)
-        roslaunch_args = cli_args[2:]
-
-        launch_files = [(roslaunch_file, roslaunch_args)]
-
-        launcher = RoslaunchWrapperObject(run_id = uuid, roslaunch_files = launch_files)
-
-        # start the launch file
-        launcher.start_node_name(node_name)
-
-        return launcher
 
 def main():
     rospy.init_node ('gpsManager') 
