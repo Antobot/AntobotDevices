@@ -35,6 +35,7 @@ class gpsManager():
     def __init__(self):
 
         launch_nodes = False
+        launch_corrections = False
         use_class = True
 
         self.gps_nodes = []
@@ -47,7 +48,11 @@ class gpsManager():
         self.f9p_urcu_serial_port = None
 
         # Read gps config
-        gps_data, device_type = self.read_gps_config()
+        gps_data = self.read_gps_config()
+
+        # Initialise ROS Launcher
+        self._launch = roslaunch.scriptapi.ROSLaunch()
+        self._launch.start()
 
         # Launch GPS nodes
         for k, v in gps_data.items():
@@ -57,12 +62,14 @@ class gpsManager():
                 self.createLauncher(exec_name, node_name)
                 print("launching executable {}".format(exec_name))
             elif use_class:
-                
                 gps_cls_tmp = self.get_gps_class(k, v)
                 self.gps_nodes.append(gps_cls_tmp)
 
-        # Launch corrections node
-        # # # STILL NEEDS TO BE DONE!!!
+        # Launch corrections node - should it be launched directly from SW manager?
+        if launch_corrections:
+            self.node_c = Node(name_arg="gpsCorrections", package_arg="antobot_devices_gps", executable_arg="gps_corrections.py", err_code_id="SW234", node_type="sensor")
+            self.node_c.define_node()
+            self.node_c.launch(self._launch)
 
         return
 
@@ -72,30 +79,14 @@ class gpsManager():
         device_type = None
 
         rospack = rospkg.RosPack()
-        packagePath=rospack.get_path('antobot_manager_software')
-        path = packagePath + "/config/software_config.yaml"
-        
-        with open(path, 'r') as yamlfile:
-            data = yaml.safe_load(yamlfile)
-            device_type = data['device_type']
-
-        if device_type == "robot":
-            print("Loading robot parameters!")
-            rospack = rospkg.RosPack()
-            packagePath=rospack.get_path('antobot_description')
-            path = packagePath + "/config/platform_config.yaml"
-        elif device_type == "tower":
-            print("Loading sensor tower parameters!")
-            rospack = rospkg.RosPack()
-            packagePath=rospack.get_path('antobot_description')
-            path = packagePath + "/config/platform_config.yaml"
+        packagePath=rospack.get_path('antobot_description')
+        path = packagePath + "/config/platform_config.yaml"
 
         with open(path, 'r') as yamlfile:
             data = yaml.safe_load(yamlfile)
             gps_data = data['gps']
-            # rtk_type = ???    # should launch all gps-related scripts from gpsManager instead
 
-        return gps_data, device_type
+        return gps_data
 
     def get_node_name(self, k, v):
 
