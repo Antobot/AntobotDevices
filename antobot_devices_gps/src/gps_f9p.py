@@ -90,11 +90,11 @@ class F9P_GPS:
             self.create_gps_msg()
             self.get_gps_freq()   
 
-            if self.hAcc < 1:
-                self.gps_pub.publish(self.gpsfix)
+            # if self.hAcc < 1:
+            #     self.gps_pub.publish(self.gpsfix)
             
-                if self.mqtt_publish:
-                    print("Publishing GPS data to MQTT")    # TODO: Add this functionality
+            #     if self.mqtt_publish:
+            #         print("Publishing GPS data to MQTT")    # TODO: Add this functionality
     
 
     def correct_gps_format(self, streamed_data):
