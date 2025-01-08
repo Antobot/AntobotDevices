@@ -34,9 +34,9 @@ import Jetson.GPIO as GPIO
 class gpsManager():
     def __init__(self):
 
-        launch_nodes = False
-        launch_corrections = False
-        use_class = True
+        self.launch_nodes = False
+        self.launch_corrections = False
+        self.use_class = True
 
         self.gps_nodes = []
         self.dual_gps = 'false'
@@ -46,6 +46,8 @@ class gpsManager():
         # Create serial interface placeholder
         self.f9p_usb_port = None
         self.f9p_urcu_serial_port = None
+        self.baud = 460800
+
 
         # Read gps config
         gps_data = self.read_gps_config()
@@ -56,17 +58,17 @@ class gpsManager():
 
         # Launch GPS nodes
         for k, v in gps_data.items():
-            if launch_nodes:
+            if self.launch_nodes:
                 # Launch the appropriate GPS script
                 exec_name, node_name = self.get_node_name(k, v)
                 self.createLauncher(exec_name, node_name)
                 print("launching executable {}".format(exec_name))
-            elif use_class:
+            elif self.use_class:
                 gps_cls_tmp = self.get_gps_class(k, v)
                 self.gps_nodes.append(gps_cls_tmp)
 
         # Launch corrections node - should it be launched directly from SW manager?
-        if launch_corrections:
+        if self.launch_corrections:
             self.node_c = Node(name_arg="gpsCorrections", package_arg="antobot_devices_gps", executable_arg="gps_corrections.py", err_code_id="SW234", node_type="sensor")
             self.node_c.define_node()
             self.node_c.launch(self._launch)
@@ -124,6 +126,8 @@ class gpsManager():
     
     def get_gps_class(self, k, v):
 
+        baud=460800
+
         if k == "urcu":
             # Define serial port for the F9P inside of the uRCU (for movingbase or otherwise)
             if self.f9p_urcu_serial_port == None:
@@ -141,7 +145,6 @@ class gpsManager():
             # Define the class object
             gps_cls = MovingBase_Ros(self.f9p_urcu_serial_port, self.f9p_usb_port, None)
         if k == "f9p_usb" or k == "f9p_usb2":
-            baud = 460800
             if self.f9p_usb_port == None:
                 self.f9p_usb_port = serial.Serial(v['device_port'], baud)
             gps_cls = F9P_GPS("usb", serial_port=self.f9p_usb_port, pub_name="antobot_" + k)
@@ -177,6 +180,8 @@ class gpsManager():
         # If no longer running, re-launch
 
         gps_node.get_gps()
+        if gps_node.hAcc < 1:
+            gps_node.gps_pub.publish(gps_node.gpsfix)
 
         # Publish any changes to fixed status, frequency, etc.
 

@@ -41,13 +41,18 @@ class F9P_config:
         packet[8] = 0x00 # reserved
         packet[9] = 0x00 # reserved
 
+        return packet
+
     def set_length(self, packet, length):
-        if length==20:
+        print(length)
+        if length==18:
             packet[4] = 0x0a
-        elif length==19:
+        elif length==17:
             packet[4] = 0x09
         else:
             length_i = length - 8
+            print("length_i: {}".format(length_i))
+            print(length_i.to_bytes(1,'big'))
             packet[4] = length_i.to_bytes(1,'big')
         packet[5] = 0x00 # length 1
 
@@ -362,7 +367,7 @@ class F9P_config:
         
         received_bytes = self.receive_ubx_bytes_from_spi()
         self.check_ubx_uart(received_bytes)            
-        print("Configured the measurement rate as " + self.meas_rate + " Hz") 
+        print("Configured the measurement rate as " + str(self.meas_rate) + " Hz") 
 
         self.set_gx_messages()
 

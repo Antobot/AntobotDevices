@@ -102,6 +102,7 @@ class F9P_GPS:
                         
         if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
             self.geo = pynmea2.parse(streamed_data)
+            print(self.geo)
             return True
 
         return False
