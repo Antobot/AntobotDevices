@@ -154,6 +154,7 @@ class F9P_GPS:
         current_time = rospy.Time.now()
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
         self.gpsfix.header.stamp = current_time
+        self.gpsfix.header.stamp = self.geo.timestamp
 
         return
 
@@ -182,10 +183,28 @@ class F9P_GPS:
 
     def get_gps_quality(self, streamed_data):
 
-        if isinstance(streamed_data,str) and streamed_data.startswith("$GNGST"):
-            gst_parse = pynmea2.parse(streamed_data)
-            self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
+        if isinstance(streamed_data,str):
+            if streamed_data.startswith("$GNGST"):
+                gst_parse = pynmea2.parse(streamed_data)
+                self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
+            if streamed_data.startswith("$GNGGA"):
+                gga_parse = pynmea2.parse(streamed_data)
+                self.gga_gps_qual = int(gga_parse.gps_qual)
+                self.num_sats = int(gga_parse.num_sats)         # Number of satellites
+                self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
+                self.geo_sep = float(gga_parse.geo_sep)         # Geoid separation
+            if streamed_data.startswith("$GNGSA"):      # Full satellite information
+                gsa_parse = pynmea2.parse(streamed_data)
+                # Add parser here (?)
+            if streamed_data.startswith("$GNVTG"):      # Full satellite information
+                vtg_parse = pynmea2.parse(streamed_data)
+                self.cogt = vtg_parse.cogt          # Course over ground (true)
+                self.cogm = vtg_parse.cogm          # Course over ground (magnetic)
+                self.sogn = vtg_parse.sogn          # Speed over ground (knots)
+                self.sogk = vtg_parse.sogk          # Speed over ground (km/h)
 
+                # Calculate ENU velocity from cogt or cogm and 
+            
         return
 
 
