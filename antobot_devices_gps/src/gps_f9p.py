@@ -90,8 +90,8 @@ class F9P_GPS:
             self.create_gps_msg()
             self.get_gps_freq()   
 
-            # if self.hAcc < 1:
-            #     self.gps_pub.publish(self.gpsfix)
+            if self.hAcc < 1:
+                self.gps_pub.publish(self.gpsfix)
             
             #     if self.mqtt_publish:
             #         print("Publishing GPS data to MQTT")    # TODO: Add this functionality
@@ -108,19 +108,19 @@ class F9P_GPS:
         return False
 
     def get_fix_status(self):
-
+        print(self.geo.gps_qual)
         if self.geo.gps_qual == 4 and self.gps_status != 'Good':
             rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
             self.gps_status = 'Good'
             self.fix_status = 3
         elif self.geo.gps_qual == 2 or 5:
             if self.hAcc < self.h_acc_thresh:
-                self.gpsfix.status.status = 3
+                self.fix_status = 3
                 if self.gps_status != 'Good':
                     rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
                     self.gps_status = 'Good'
             else:   
-                self.gpsfix.status.status = 1
+                self.fix_status = 1
                 if self.gps_status != 'Warning':
                     rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
                     self.gps_status = 'Warning'
@@ -185,7 +185,7 @@ class F9P_GPS:
         if isinstance(streamed_data,str) and streamed_data.startswith("$GNGST"):
             gst_parse = pynmea2.parse(streamed_data)
             self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
-
+            print(gst_parse)
         return
 
 
