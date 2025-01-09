@@ -324,6 +324,8 @@ class F9P_config:
                 key_id = 0xb4
             elif msg == 'GLL':
                 key_id = 0xcd
+            elif msg == 'GST':
+                key_id = 0xd7
 
             enable = msg in self.desired_messages
 
