@@ -47,6 +47,7 @@ class gpsManager():
         self.f9p_usb_port = None
         self.f9p_urcu_serial_port = None
         self.baud = 460800
+        self.method = "poll"  #"stream"
 
 
         # Read gps config
@@ -134,7 +135,7 @@ class gpsManager():
                 self.f9p_urcu_serial_port = serial.Serial(v['device_port'], baud)
 
             # Define the class object
-            gps_cls = F9P_GPS("urcu")
+            gps_cls = F9P_GPS("urcu",self.method)
             self.urcu_gps_node = gps_cls
 
         if k == "movingbase":
