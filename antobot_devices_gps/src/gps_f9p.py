@@ -43,7 +43,7 @@ class F9P_GPS:
 
         self.gpsfix = NavSatFix()
         self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
-        
+        self.message = "GGA" #or"GNS"
         self.dev_type = dev_type
         self.method = method
         if self.dev_type == "urcu":
@@ -107,11 +107,17 @@ class F9P_GPS:
 
     def correct_gps_format(self, streamed_data):
         # Function to check whether the streamed data matches the desired 
-                        
-        if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
-            self.geo = pynmea2.parse(streamed_data)
-            print(self.geo)
-            return True
+        if self.message == "GGA":
+            if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
+                self.geo = pynmea2.parse(streamed_data)
+                print(self.geo)
+                return True
+        if self.message == "GNS":
+            if isinstance(streamed_data,str) and streamed_data.startswith("$GNGNS"):
+                self.geo = pynmea2.parse(streamed_data)
+                self.fix_status = 4
+                print(self.geo)
+                return True
 
         return False
 
@@ -176,9 +182,12 @@ class F9P_GPS:
         self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
 
         self.gpsfix.altitude = 0
-
-        self.gpsfix.latitude = self.geo.latitude if self.geo.lat_dir == 'N' else - self.geo.latitude
-        self.gpsfix.longitude = self.geo.longitude if self.geo.lon_dir == 'E' else - self.geo.longitude
+        if self.message == "GGA":
+            self.gpsfix.latitude = self.geo.latitude if self.geo.lat_dir == 'N' else - self.geo.latitude
+            self.gpsfix.longitude = self.geo.longitude if self.geo.lon_dir == 'E' else - self.geo.longitude
+        if self.message == "GNS":
+            self.gpsfix.latitude = self.geo.lat if self.geo.lat_dir == 'N' else - self.geo.lat
+            self.gpsfix.longitude = self.geo.lon if self.geo.lon_dir == 'E' else - self.geo.lon
         self.gpsfix.altitude = self.geo.altitude
         
         # Get GPS fix status

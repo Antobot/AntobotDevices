@@ -311,7 +311,7 @@ class F9P_config:
         return packet 
 
     def set_gx_messages(self):
-        all_messages = ['GSV', 'RMC', 'GSA', 'VTG', 'GLL', 'GST']
+        all_messages = ['GSV', 'RMC', 'GSA', 'VTG', 'GLL', 'GST','GNS']
 
         for msg in all_messages:
             if msg == 'GSV':
@@ -326,6 +326,8 @@ class F9P_config:
                 key_id = 0xcd
             elif msg == 'GST':
                 key_id = 0xd7
+            elif msg == 'GNS':
+                key_id = 0xb9
 
             enable = msg in self.desired_messages
 
@@ -389,7 +391,7 @@ class F9P_config:
 if __name__ == '__main__':
     
     moving_base = False
-    desired_messages = ['GST', 'VTG', 'RMC']
+    desired_messages = ['GST', 'VTG', 'RMC','GNS']
     meas_rate = 8
     if moving_base:
         meas_rate = 5
