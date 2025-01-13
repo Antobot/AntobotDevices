@@ -35,7 +35,7 @@ from antobot_devices_gps.ublox_gps import UbloxGps
 class F9P_GPS:
 
 
-    def __init__(self, dev_type, serial_port=None, pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
+    def __init__(self, dev_type, serial_port=None, method="stream", pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
 
         # # # GPS class initialisation
         #     Inputs: dev_type - the device type of the F9P chip. 
@@ -70,7 +70,7 @@ class F9P_GPS:
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
 
         self.gps_pub = rospy.Publisher(pub_name, NavSatFix, queue_size=10)
-        self.gps_qual_pub = rospy.Publisher(pub_name_qual, queue_size=10)
+        self.gps_qual_pub = rospy.Publisher(pub_name_qual, gpsQual, queue_size=10)
 
         return
 
@@ -84,28 +84,28 @@ class F9P_GPS:
         
     def get_gps(self):
         # Get the data from the F9P
-        if self.method == "poll"
+        if self.method == "poll":
             self.geo = self.gps_dev.geo_coords() #poll method
             self.hAcc=self.geo.hAcc
             if  self.geo.lat is not None and self.geo.lat != 0:
                 self.create_gps_msg_poll()
                 self.get_gps_freq()
-                if self.hAcc < 1:
+                if self.hAcc < 500:
                     self.gps_pub.publish(self.gpsfix)
-        if self.method == "stream"
+        if self.method == "stream":
             streamed_data = self.gps_dev.stream_nmea() #stream method
             self.get_gps_quality(streamed_data)
 
+            # print(streamed_data)
+
             # Check the new data is viable and update message
             if self.correct_gps_format(streamed_data):                
-            
+                self.create_gps_msg()
+                self.get_gps_freq()
+                # self.create_quality_msg()   
 
-            self.create_gps_msg()
-            self.get_gps_freq()
-            self.create_quality_msg()   
-
-            if self.hAcc < 1:
-                self.gps_pub.publish(self.gpsfix)
+                if self.hAcc < 1:
+                    self.gps_pub.publish(self.gpsfix)
 
     
 
@@ -114,19 +114,19 @@ class F9P_GPS:
         if self.message == "GGA":
             if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
                 self.geo = pynmea2.parse(streamed_data)
-                print(self.geo)
+                #print(self.geo)
                 return True
         if self.message == "GNS":
             if isinstance(streamed_data,str) and streamed_data.startswith("$GNGNS"):
                 self.geo = pynmea2.parse(streamed_data)
                 self.fix_status = 4
-                print(self.geo)
+                #print(self.geo)
                 return True
 
         return False
 
     def get_fix_status(self):
-        print(self.geo.gps_qual)
+        # print(self.geo.gps_qual)
         if self.geo.gps_qual == 4 and self.gps_status != 'Good':
             rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
             self.gps_status = 'Good'
@@ -206,7 +206,7 @@ class F9P_GPS:
         current_time = rospy.Time.now()
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
         self.gpsfix.header.stamp = current_time
-        self.gpsfix.header.stamp = self.geo.timestamp
+        # self.gpsfix.header.stamp = self.geo.timestamp
 
         return
 
@@ -278,10 +278,10 @@ class F9P_GPS:
                 # Add parser here (?)
             if streamed_data.startswith("$GNVTG"):      # Velocity
                 vtg_parse = pynmea2.parse(streamed_data)
-                self.cogt = vtg_parse.cogt          # Course over ground (true)
-                self.cogm = vtg_parse.cogm          # Course over ground (magnetic)
-                self.sogn = vtg_parse.sogn          # Speed over ground (knots)
-                self.sogk = vtg_parse.sogk          # Speed over ground (km/h)
+                # self.cogt = vtg_parse.cogt          # Course over ground (true)
+                # self.cogm = vtg_parse.cogm          # Course over ground (magnetic)
+                # self.sogn = vtg_parse.sogn          # Speed over ground (knots)
+                # self.sogk = vtg_parse.sogk          # Speed over ground (km/h)
 
                 # TODO: Calculate ENU velocity
             

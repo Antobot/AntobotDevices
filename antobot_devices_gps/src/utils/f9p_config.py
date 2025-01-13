@@ -391,7 +391,7 @@ class F9P_config:
 if __name__ == '__main__':
     
     moving_base = False
-    desired_messages = ['GST', 'VTG', 'RMC','GNS']
+    desired_messages = ['GST', 'VTG', 'GNS']
     meas_rate = 8
     if moving_base:
         meas_rate = 5
