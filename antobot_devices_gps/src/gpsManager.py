@@ -180,8 +180,6 @@ class gpsManager():
         # If no longer running, re-launch
 
         gps_node.get_gps()
-        if gps_node.hAcc < 1:
-            gps_node.gps_pub.publish(gps_node.gpsfix)
 
         # Publish any changes to fixed status, frequency, etc.
 
