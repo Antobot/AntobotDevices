@@ -29,11 +29,14 @@ import serial
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8, Float32
+from antobot_devices_msgs.msg import gpsQual
 from antobot_devices_gps.ublox_gps import UbloxGps
 
 class F9P_GPS:
 
-    def __init__(self, dev_type,method, serial_port=None, pub_name="antobot_gps"):
+
+    def __init__(self, dev_type, serial_port=None, pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
+
         # # # GPS class initialisation
         #     Inputs: dev_type - the device type of the F9P chip. 
         #           "urcu" - if using the F9P inside of the URCU
@@ -67,6 +70,7 @@ class F9P_GPS:
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
 
         self.gps_pub = rospy.Publisher(pub_name, NavSatFix, queue_size=10)
+        self.gps_qual_pub = rospy.Publisher(pub_name_qual, queue_size=10)
 
         return
 
@@ -95,14 +99,14 @@ class F9P_GPS:
             # Check the new data is viable and update message
             if self.correct_gps_format(streamed_data):                
             
-                self.create_gps_msg()
-                self.get_gps_freq()   
 
-                if self.hAcc < 1:
-                    self.gps_pub.publish(self.gpsfix)
-            
-                #     if self.mqtt_publish:
-                #         print("Publishing GPS data to MQTT")    # TODO: Add this functionality
+            self.create_gps_msg()
+            self.get_gps_freq()
+            self.create_quality_msg()   
+
+            if self.hAcc < 1:
+                self.gps_pub.publish(self.gpsfix)
+
     
 
     def correct_gps_format(self, streamed_data):
@@ -202,6 +206,7 @@ class F9P_GPS:
         current_time = rospy.Time.now()
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
         self.gpsfix.header.stamp = current_time
+        self.gpsfix.header.stamp = self.geo.timestamp
 
         return
 
@@ -257,11 +262,44 @@ class F9P_GPS:
 
     def get_gps_quality(self, streamed_data):
 
-        if isinstance(streamed_data,str) and streamed_data.startswith("$GNGST"):
-            gst_parse = pynmea2.parse(streamed_data)
-            self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
-            print(gst_parse)
+
+        if isinstance(streamed_data,str):
+            if streamed_data.startswith("$GNGST"):
+                gst_parse = pynmea2.parse(streamed_data)
+                self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
+            if streamed_data.startswith("$GNGGA"):
+                gga_parse = pynmea2.parse(streamed_data)
+                self.gga_gps_qual = int(gga_parse.gps_qual)
+                self.num_sats = int(gga_parse.num_sats)         # Number of satellites
+                self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
+                self.geo_sep = float(gga_parse.geo_sep)         # Geoid separation
+            if streamed_data.startswith("$GNGSA"):      # Full satellite information
+                gsa_parse = pynmea2.parse(streamed_data)
+                # Add parser here (?)
+            if streamed_data.startswith("$GNVTG"):      # Velocity
+                vtg_parse = pynmea2.parse(streamed_data)
+                self.cogt = vtg_parse.cogt          # Course over ground (true)
+                self.cogm = vtg_parse.cogm          # Course over ground (magnetic)
+                self.sogn = vtg_parse.sogn          # Speed over ground (knots)
+                self.sogk = vtg_parse.sogk          # Speed over ground (km/h)
+
+                # TODO: Calculate ENU velocity
+            
+
         return
+
+    def create_quality_msg(self):
+        gpsQualMsg = gpsQual()
+        gpsQualMsg.hAcc = self.hAcc
+        gpsQualMsg.gpsQualVal = self.gga_gps_qual
+        gpsQualMsg.numSats = self.num_sats
+        gpsQualMsg.horDil = self.hor_dil
+        gpsQualMsg.geoSep = self.geo_sep
+        # gpsQualMsg.satInfo = ???
+        gpsQualMsg.vCOG = self.cogt
+        gpsQualMsg.vSOG = self.sogk
+
+        self.gps_qual_pub.publish(gpsQualMsg)
 
 
 
