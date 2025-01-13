@@ -196,7 +196,7 @@ class F9P_GPS:
             if streamed_data.startswith("$GNGSA"):      # Full satellite information
                 gsa_parse = pynmea2.parse(streamed_data)
                 # Add parser here (?)
-            if streamed_data.startswith("$GNVTG"):      # Full satellite information
+            if streamed_data.startswith("$GNVTG"):      # Velocity
                 vtg_parse = pynmea2.parse(streamed_data)
                 self.cogt = vtg_parse.cogt          # Course over ground (true)
                 self.cogm = vtg_parse.cogm          # Course over ground (magnetic)
