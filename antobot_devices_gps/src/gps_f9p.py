@@ -29,11 +29,12 @@ import serial
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8, Float32
+from antobot_devices_msgs.msg import gpsQual
 from antobot_devices_gps.ublox_gps import UbloxGps
 
 class F9P_GPS:
 
-    def __init__(self, dev_type, serial_port=None, pub_name="antobot_gps"):
+    def __init__(self, dev_type, serial_port=None, pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
         # # # GPS class initialisation
         #     Inputs: dev_type - the device type of the F9P chip. 
         #           "urcu" - if using the F9P inside of the URCU
@@ -66,6 +67,7 @@ class F9P_GPS:
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
 
         self.gps_pub = rospy.Publisher(pub_name, NavSatFix, queue_size=10)
+        self.gps_qual_pub = rospy.Publisher(pub_name_qual, queue_size=10)
 
         return
 
@@ -88,7 +90,8 @@ class F9P_GPS:
         if self.correct_gps_format(streamed_data):                
             
             self.create_gps_msg()
-            self.get_gps_freq()   
+            self.get_gps_freq()
+            self.create_quality_msg()   
 
             if self.hAcc < 1:
                 self.gps_pub.publish(self.gpsfix)
@@ -200,9 +203,22 @@ class F9P_GPS:
                 self.sogn = vtg_parse.sogn          # Speed over ground (knots)
                 self.sogk = vtg_parse.sogk          # Speed over ground (km/h)
 
-                # Calculate ENU velocity from cogt or cogm and 
+                # TODO: Calculate ENU velocity
             
         return
+
+    def create_quality_msg(self):
+        gpsQualMsg = gpsQual()
+        gpsQualMsg.hAcc = self.hAcc
+        gpsQualMsg.gpsQualVal = self.gga_gps_qual
+        gpsQualMsg.numSats = self.num_sats
+        gpsQualMsg.horDil = self.hor_dil
+        gpsQualMsg.geoSep = self.geo_sep
+        # gpsQualMsg.satInfo = ???
+        gpsQualMsg.vCOG = self.cogt
+        gpsQualMsg.vSOG = self.sogk
+
+        self.gps_qual_pub.publish(gpsQualMsg)
 
 
 ## Example function
