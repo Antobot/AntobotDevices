@@ -34,7 +34,9 @@ from antobot_devices_gps.ublox_gps import UbloxGps
 
 class F9P_GPS:
 
-    def __init__(self, dev_type, serial_port=None, pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
+
+    def __init__(self, dev_type, serial_port=None, method="stream", pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
+
         # # # GPS class initialisation
         #     Inputs: dev_type - the device type of the F9P chip. 
         #           "urcu" - if using the F9P inside of the URCU
@@ -44,8 +46,9 @@ class F9P_GPS:
 
         self.gpsfix = NavSatFix()
         self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
-        
+        self.message = "GGA" #or"GNS"
         self.dev_type = dev_type
+        self.method = method
         if self.dev_type == "urcu":
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
@@ -67,7 +70,7 @@ class F9P_GPS:
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
 
         self.gps_pub = rospy.Publisher(pub_name, NavSatFix, queue_size=10)
-        self.gps_qual_pub = rospy.Publisher(pub_name_qual, queue_size=10)
+        self.gps_qual_pub = rospy.Publisher(pub_name_qual, gpsQual, queue_size=10)
 
         return
 
@@ -81,46 +84,61 @@ class F9P_GPS:
         
     def get_gps(self):
         # Get the data from the F9P
-        #self.geo = self.gps_dev.geo_coords() #poll method
-        streamed_data = self.gps_dev.stream_nmea() #stream method
+        if self.method == "poll":
+            self.geo = self.gps_dev.geo_coords() #poll method
+            self.hAcc=self.geo.hAcc
+            if  self.geo.lat is not None and self.geo.lat != 0:
+                self.create_gps_msg_poll()
+                self.get_gps_freq()
+                if self.hAcc < 500:
+                    self.gps_pub.publish(self.gpsfix)
+        if self.method == "stream":
+            streamed_data = self.gps_dev.stream_nmea() #stream method
+            self.get_gps_quality(streamed_data)
 
-        self.get_gps_quality(streamed_data)
+            # print(streamed_data)
 
-        # Check the new data is viable and update message
-        if self.correct_gps_format(streamed_data):                
-            
-            self.create_gps_msg()
-            self.get_gps_freq()
-            self.create_quality_msg()   
+            # Check the new data is viable and update message
+            if self.correct_gps_format(streamed_data):                
+                self.create_gps_msg()
+                self.get_gps_freq()
+                # self.create_quality_msg()   
 
-            if self.hAcc < 1:
-                self.gps_pub.publish(self.gpsfix)
+                if self.hAcc < 1:
+                    self.gps_pub.publish(self.gpsfix)
+
     
 
     def correct_gps_format(self, streamed_data):
         # Function to check whether the streamed data matches the desired 
-                        
-        if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
-            self.geo = pynmea2.parse(streamed_data)
-            print(self.geo)
-            return True
+        if self.message == "GGA":
+            if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
+                self.geo = pynmea2.parse(streamed_data)
+                #print(self.geo)
+                return True
+        if self.message == "GNS":
+            if isinstance(streamed_data,str) and streamed_data.startswith("$GNGNS"):
+                self.geo = pynmea2.parse(streamed_data)
+                self.fix_status = 4
+                #print(self.geo)
+                return True
 
         return False
 
     def get_fix_status(self):
-
+        # print(self.geo.gps_qual)
         if self.geo.gps_qual == 4 and self.gps_status != 'Good':
             rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
             self.gps_status = 'Good'
             self.fix_status = 3
         elif self.geo.gps_qual == 2 or 5:
             if self.hAcc < self.h_acc_thresh:
-                self.gpsfix.status.status = 3
+                self.fix_status = 3
                 if self.gps_status != 'Good':
                     rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
                     self.gps_status = 'Good'
             else:   
-                self.gpsfix.status.status = 1
+                self.fix_status = 1
                 if self.gps_status != 'Warning':
                     rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
                     self.gps_status = 'Warning'
@@ -132,14 +150,48 @@ class F9P_GPS:
         
         return self.fix_status
 
+    def get_fix_status_poll(self):
+        h_acc = 75
+
+        if self.geo.flags.carrSoln == 2:  #fix mode =2 ; float mode = 1
+            self.fix_status = self.geo.fixType #3: 3Dfix, 2:2Dfix
+
+            if self.fix_status == 3 and self.gps_status != 'Good':
+                rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                self.gps_status = 'Good'
+
+        elif self.geo.flags.carrSoln == 1: #float conditions
+            #PPP-IP can show float even if the horizontal accuracy is good, so adding another loop to check the fix mode
+            if self.hAcc < self.h_acc_thresh:
+                self.fix_status = 3
+                if self.gps_status != 'Good':
+                    rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                    self.gps_status = 'Good'
+            elif self.geo.hAcc > h_acc :
+                self.fix_status = 1
+                if self.gps_status != 'Warning':
+                    rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
+                    self.gps_status = 'Warning'
+
+        else:
+            self.fix_status = 0 #no fix
+            if self.gps_status != 'Critical':
+                rospy.logerr("SN4010: GPS Fix Status: Critical")
+                self.gps_status = 'Critical'
+
+        return self.fix_status
+
     def create_gps_msg(self):
 
         self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
 
         self.gpsfix.altitude = 0
-
-        self.gpsfix.latitude = self.geo.latitude if self.geo.lat_dir == 'N' else - self.geo.latitude
-        self.gpsfix.longitude = self.geo.longitude if self.geo.lon_dir == 'E' else - self.geo.longitude
+        if self.message == "GGA":
+            self.gpsfix.latitude = self.geo.latitude if self.geo.lat_dir == 'N' else - self.geo.latitude
+            self.gpsfix.longitude = self.geo.longitude if self.geo.lon_dir == 'E' else - self.geo.longitude
+        if self.message == "GNS":
+            self.gpsfix.latitude = self.geo.lat if self.geo.lat_dir == 'N' else - self.geo.lat
+            self.gpsfix.longitude = self.geo.lon if self.geo.lon_dir == 'E' else - self.geo.lon
         self.gpsfix.altitude = self.geo.altitude
         
         # Get GPS fix status
@@ -154,9 +206,36 @@ class F9P_GPS:
         current_time = rospy.Time.now()
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
         self.gpsfix.header.stamp = current_time
-        self.gpsfix.header.stamp = self.geo.timestamp
+        # self.gpsfix.header.stamp = self.geo.timestamp
 
         return
+
+    def create_gps_msg_poll(self):
+
+        self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
+
+        self.gpsfix.altitude = 0
+
+        self.gpsfix.latitude = self.geo.lat
+        self.gpsfix.longitude = self.geo.lon
+        self.gpsfix.altitude = self.geo.height
+        
+        # Get GPS fix status
+        self.gpsfix.status.status = self.get_fix_status_poll()
+
+        # Assumptions made on covariance  ###hAcc unit might be different, tbd
+        self.gpsfix.position_covariance[0] = (self.hAcc*0.001)**2 
+        self.gpsfix.position_covariance[4] = (self.hAcc*0.001)**2 
+        self.gpsfix.position_covariance[8] = (4*self.hAcc*0.001)**2 
+
+        # Update the navsatfix messsage
+        current_time = rospy.Time.now()
+        self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
+        self.gpsfix.header.stamp = current_time
+
+        return
+
+
 
     def get_gps_freq(self):
         # # # Gets the frequency of the published GPS message and sends a message if there has been a significant change
@@ -183,6 +262,7 @@ class F9P_GPS:
 
     def get_gps_quality(self, streamed_data):
 
+
         if isinstance(streamed_data,str):
             if streamed_data.startswith("$GNGST"):
                 gst_parse = pynmea2.parse(streamed_data)
@@ -204,13 +284,14 @@ class F9P_GPS:
                 # Add parser here (?)
             if streamed_data.startswith("$GNVTG"):      # Velocity
                 vtg_parse = pynmea2.parse(streamed_data)
-                self.cogt = vtg_parse.cogt          # Course over ground (true)
-                self.cogm = vtg_parse.cogm          # Course over ground (magnetic)
-                self.sogn = vtg_parse.sogn          # Speed over ground (knots)
-                self.sogk = vtg_parse.sogk          # Speed over ground (km/h)
+                # self.cogt = vtg_parse.cogt          # Course over ground (true)
+                # self.cogm = vtg_parse.cogm          # Course over ground (magnetic)
+                # self.sogn = vtg_parse.sogn          # Speed over ground (knots)
+                # self.sogk = vtg_parse.sogk          # Speed over ground (km/h)
 
                 # TODO: Calculate ENU velocity
             
+
         return
 
     def create_quality_msg(self):
@@ -227,6 +308,8 @@ class F9P_GPS:
         self.gps_qual_pub.publish(gpsQualMsg)
 
 
+
+
 ## Example function
 
 def main(args):
@@ -234,8 +317,12 @@ def main(args):
 
     # init node
     rospy.init_node('rtk', anonymous=True)
-    rate = rospy.Rate(50)  # 8hz
+    
     gps_f9p = F9P_GPS("urcu")
+    if gps_f9p.method == "poll":
+        rate = rospy.Rate(8)  # 8hz
+    if gps_f9p.method == "stream":
+        rate = rospy.Rate(50)  # 8hz
 
     baudrate_rtk = 38400            # Need to resolve baudrate
     gps_f9p.uart2_config(baudrate_rtk)
