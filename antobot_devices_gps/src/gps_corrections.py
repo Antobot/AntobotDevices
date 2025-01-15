@@ -137,7 +137,7 @@ def main():
     gps_corr.client.loop_start()
     while(True):
         time.sleep(1)
-        print("Running")
+        #print("Running")
 
 
 if __name__ == '__main__':
