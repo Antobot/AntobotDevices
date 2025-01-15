@@ -271,8 +271,8 @@ class F9P_GPS:
                 gga_parse = pynmea2.parse(streamed_data)
                 self.gga_gps_qual = int(gga_parse.gps_qual)
                 self.num_sats = int(gga_parse.num_sats)         # Number of satellites
-                self.hor_dil = gga_parse.horizontal_dil  # Horizontal dilution of precision (HDOP)
-                self.geo_sep = gga_parse.geo_sep         # Geoid separation
+                self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
+                self.geo_sep = float(gga_parse.geo_sep)         # Geoid separation
             if streamed_data.startswith("$GNGSA"):      # Full satellite information
                 gsa_parse = pynmea2.parse(streamed_data)
                 # Add parser here (?)
