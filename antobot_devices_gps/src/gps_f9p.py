@@ -103,7 +103,7 @@ class F9P_GPS:
             if self.correct_gps_format(streamed_data):                
                 self.create_gps_msg()
                 self.get_gps_freq()
-                # self.create_quality_msg()   
+                self.create_quality_msg()   
 
                 if self.hAcc < 1:
                     self.gps_pub.publish(self.gpsfix)
@@ -206,21 +206,12 @@ class F9P_GPS:
         # Update the navsatfix messsage
         current_time = rospy.Time.now()
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
-        self.gpsfix.header.stamp = current_time
-        # self.gpsfix.header.stamp = self.geo.timestamp
-        today_date = datetime.today()
-        year=today_date.year
-        month=today_date.month
-        day=today_date.day
-        hour_i = self.geo.timestamp.hour
-        minute_i = self.geo.timestamp.minute
-        second_i = self.geo.timestamp.second
-        mic_sec_i = self.geo.timestamp.microsecond
-        dt0 = datetime(year, month, day, hour=hour_i, minute=minute_i, second=second_i, microsecond=mic_sec_i)
-        # dt0 = datetime.datetime.strptime(self.geo.timestamp, '%Y-%m-%d-H:%M:%S.%f').replace(tzinfo=datetime.timezone.utc)
-        print("current time (ROS): {}".format(current_time.to_sec()))
-        print("datetime timestamp: {}".format(dt0.timestamp()))
-        # print(rospy.Time.from_sec(self.geo.timestamp.timestamp()))
+        dt0 = self.get_gps_timestamp_utc()
+        self.gpsfix.header.stamp = dt0.timestamp()
+        # self.gpsfix.header.stamp = current_time
+        
+        # print("current time (ROS): {}".format(current_time.to_sec()))
+        # print("datetime timestamp: {}".format(dt0.timestamp()))
 
         return
 
@@ -245,9 +236,25 @@ class F9P_GPS:
         # Update the navsatfix messsage
         current_time = rospy.Time.now()
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
-        self.gpsfix.header.stamp = current_time
+        dt0 = self.get_gps_timestamp_utc()
+        self.gpsfix.header.stamp = dt0.timestamp()  # Assigning time received from F9P
+        # self.gpsfix.header.stamp = current_time   # Assigning system time
 
         return
+
+    def get_gps_timestamp_utc(self):
+
+        today_date = datetime.today()
+        year=today_date.year
+        month=today_date.month
+        day=today_date.day
+        hour_i = self.geo.timestamp.hour
+        minute_i = self.geo.timestamp.minute
+        second_i = self.geo.timestamp.second
+        mic_sec_i = self.geo.timestamp.microsecond
+        dt0 = datetime(year, month, day, hour=hour_i, minute=minute_i, second=second_i, microsecond=mic_sec_i)
+
+        return dt0
 
 
 
@@ -286,22 +293,28 @@ class F9P_GPS:
                 self.gga_gps_qual = int(gga_parse.gps_qual)
                 self.num_sats = int(gga_parse.num_sats)         # Number of satellites
                 self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
-                self.geo_sep = float(gga_parse.geo_sep)         # Geoid separation
+                try:
+                    self.geo_sep = float(gga_parse.geo_sep)         # Geoid separation
+                except:
+                    print("Geoid separation value invalid")
             if streamed_data.startswith("$GNGNS"):
                 gns_parse = pynmea2.parse(streamed_data)
-                self.pos_mode = int(gns_parse.posMode)
-                self.num_sats = int(gns_parse.numSV)         # Number of satellites
-                self.hor_dil = float(gns_parse.HDOP)  # Horizontal dilution of precision (HDOP)
-                self.geo_sep = float(gns_parse.sep)             # Geoid separation
+                self.pos_mode = int(gns_parse.mode_indicator)
+                self.num_sats = int(gns_parse.num_sats)             # Number of satellites
+                self.hor_dil = float(gns_parse.hdop)                # Horizontal dilution of precision (HDOP)
+                try:
+                    self.geo_sep = float(gns_parse.geo_sep)         # Geoid separation
+                except:
+                    print("Geoid separation value invalid")
             if streamed_data.startswith("$GNGSA"):      # Full satellite information
                 gsa_parse = pynmea2.parse(streamed_data)
                 # Add parser here (?)
             if streamed_data.startswith("$GNVTG"):      # Velocity
                 vtg_parse = pynmea2.parse(streamed_data)
-                # self.cogt = vtg_parse.cogt          # Course over ground (true)
-                # self.cogm = vtg_parse.cogm          # Course over ground (magnetic)
-                # self.sogn = vtg_parse.sogn          # Speed over ground (knots)
-                # self.sogk = vtg_parse.sogk          # Speed over ground (km/h)
+                self.cogt = vtg_parse.true_track                  # Course over ground (true)
+                # self.cogm = vtg_parse.mag_track                 # Course over ground (magnetic)
+                # self.sogn = vtg_parse.spd_over_grnd_kts         # Speed over ground (knots)
+                self.sogk = vtg_parse.spd_over_grnd_kmph          # Speed over ground (km/h)
 
                 # TODO: Calculate ENU velocity
             
