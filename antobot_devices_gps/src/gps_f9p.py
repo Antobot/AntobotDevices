@@ -22,6 +22,7 @@ import rospkg
 import spidev
 import sys
 import time
+from datetime import datetime
 import pynmea2
 
 import serial
@@ -207,6 +208,19 @@ class F9P_GPS:
         self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
         self.gpsfix.header.stamp = current_time
         # self.gpsfix.header.stamp = self.geo.timestamp
+        today_date = datetime.today()
+        year=today_date.year
+        month=today_date.month
+        day=today_date.day
+        hour_i = self.geo.timestamp.hour
+        minute_i = self.geo.timestamp.minute
+        second_i = self.geo.timestamp.second
+        mic_sec_i = self.geo.timestamp.microsecond
+        dt0 = datetime(year, month, day, hour=hour_i, minute=minute_i, second=second_i, microsecond=mic_sec_i)
+        # dt0 = datetime.datetime.strptime(self.geo.timestamp, '%Y-%m-%d-H:%M:%S.%f').replace(tzinfo=datetime.timezone.utc)
+        print("current time (ROS): {}".format(current_time.to_sec()))
+        print("datetime timestamp: {}".format(dt0.timestamp()))
+        # print(rospy.Time.from_sec(self.geo.timestamp.timestamp()))
 
         return
 
