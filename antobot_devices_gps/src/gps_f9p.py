@@ -203,16 +203,9 @@ class F9P_GPS:
         self.gpsfix.position_covariance[4] = (self.hAcc)**2 
         self.gpsfix.position_covariance[8] = (4*self.hAcc)**2 
 
-        # Update the navsatfix messsage
-        current_time = rospy.Time.now()
-        self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
-        dt0 = self.get_gps_timestamp_utc()
-        self.gpsfix.header.stamp = dt0.timestamp()
-        # self.gpsfix.header.stamp = current_time
+        # Set the time of the GPS message
+        self.set_gps_msg_time()
         
-        # print("current time (ROS): {}".format(current_time.to_sec()))
-        # print("datetime timestamp: {}".format(dt0.timestamp()))
-
         return
 
     def create_gps_msg_poll(self):
@@ -233,15 +226,29 @@ class F9P_GPS:
         self.gpsfix.position_covariance[4] = (self.hAcc*0.001)**2 
         self.gpsfix.position_covariance[8] = (4*self.hAcc*0.001)**2 
 
-        # Update the navsatfix messsage
-        current_time = rospy.Time.now()
-        self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
-        dt0 = self.get_gps_timestamp_utc()
-        self.gpsfix.header.stamp = dt0.timestamp()  # Assigning time received from F9P
-        # self.gpsfix.header.stamp = current_time   # Assigning system time
+        # Set the time of the GPS message
+        self.set_gps_msg_time()
 
         return
 
+    def set_gps_msg_time(self):
+
+        # Getting time
+        current_time = rospy.Time.now()
+        dt0 = self.get_gps_timestamp_utc()
+        # print("current time (ROS): {}".format(current_time.to_sec()))
+        # print("datetime timestamp: {}".format(dt0.timestamp()))
+
+        self.gps_time_i=(dt0.timestamp()-self.gpsfix.header)
+        self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
+
+        # # Assigning timestamp part of NavSatFix message
+        self.gpsfix.header.stamp = dt0.timestamp()              # Assigning time received from F9P
+        # self.gpsfix.header.stamp = current_time.to_sec()       # Assigning current time (ROS) - DEPRECATED
+
+        if self.gps_time_offset > 1:
+            rospy.logerr("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
+        
     def get_gps_timestamp_utc(self):
 
         today_date = datetime.today()
@@ -255,8 +262,6 @@ class F9P_GPS:
         dt0 = datetime(year, month, day, hour=hour_i, minute=minute_i, second=second_i, microsecond=mic_sec_i)
 
         return dt0
-
-
 
     def get_gps_freq(self):
         # # # Gets the frequency of the published GPS message and sends a message if there has been a significant change
@@ -299,7 +304,7 @@ class F9P_GPS:
                     print("Geoid separation value invalid")
             if streamed_data.startswith("$GNGNS"):
                 gns_parse = pynmea2.parse(streamed_data)
-                self.pos_mode = int(gns_parse.mode_indicator)
+                # self.pos_mode = int(gns_parse.mode_indicator)
                 self.num_sats = int(gns_parse.num_sats)             # Number of satellites
                 self.hor_dil = float(gns_parse.hdop)                # Horizontal dilution of precision (HDOP)
                 try:
