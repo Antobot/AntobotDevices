@@ -66,9 +66,16 @@ class F9P_GPS:
         self.gps_time_buf = []
         self.hAcc = 500
         self.h_acc_thresh = 75  # 
-
+       
         current_time = rospy.Time.now()
-        self.gps_time_i=(current_time.to_sec()-self.gpsfix.header.stamp.to_sec())
+        self.gps_time_i=0.1
+        self.gpsfix.header.stamp = current_time
+
+        # Initial parameters for quality
+        self.geo_sep = 0
+        self.cogt = 0
+        self.sogk = 0
+
 
         self.gps_pub = rospy.Publisher(pub_name, NavSatFix, queue_size=10)
         self.gps_qual_pub = rospy.Publisher(pub_name_qual, gpsQual, queue_size=10)
@@ -239,11 +246,11 @@ class F9P_GPS:
         # print("current time (ROS): {}".format(current_time.to_sec()))
         # print("datetime timestamp: {}".format(dt0.timestamp()))
 
-        self.gps_time_i=(dt0.timestamp()-self.gpsfix.header)
+        self.gps_time_i=(dt0.timestamp()-self.gpsfix.header.stamp.to_sec())
         self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
 
         # # Assigning timestamp part of NavSatFix message
-        self.gpsfix.header.stamp = dt0.timestamp()              # Assigning time received from F9P
+        self.gpsfix.header.stamp = rospy.Time.from_sec(dt0.timestamp())              # Assigning time received from F9P
         # self.gpsfix.header.stamp = current_time.to_sec()       # Assigning current time (ROS) - DEPRECATED
 
         if self.gps_time_offset > 1:
@@ -288,7 +295,6 @@ class F9P_GPS:
 
     def get_gps_quality(self, streamed_data):
 
-
         if isinstance(streamed_data,str):
             if streamed_data.startswith("$GNGST"):
                 gst_parse = pynmea2.parse(streamed_data)
@@ -316,11 +322,13 @@ class F9P_GPS:
                 # Add parser here (?)
             if streamed_data.startswith("$GNVTG"):      # Velocity
                 vtg_parse = pynmea2.parse(streamed_data)
-                self.cogt = vtg_parse.true_track                  # Course over ground (true)
-                # self.cogm = vtg_parse.mag_track                 # Course over ground (magnetic)
-                # self.sogn = vtg_parse.spd_over_grnd_kts         # Speed over ground (knots)
-                self.sogk = vtg_parse.spd_over_grnd_kmph          # Speed over ground (km/h)
-
+                try:
+                    self.cogt = float(vtg_parse.true_track)                  # Course over ground (true)
+                    # self.cogm = vtg_parse.mag_track                 # Course over ground (magnetic)
+                    # self.sogn = vtg_parse.spd_over_grnd_kts         # Speed over ground (knots)
+                    self.sogk = float(vtg_parse.spd_over_grnd_kmph)          # Speed over ground (km/h)
+                except TypeError:
+                    print("VTG information invalid")
                 # TODO: Calculate ENU velocity
             
 
