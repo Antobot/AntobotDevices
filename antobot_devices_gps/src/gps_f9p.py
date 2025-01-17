@@ -195,11 +195,9 @@ class F9P_GPS:
 
         self.gpsfix.altitude = 0
         if self.message == "GGA":
-            self.gpsfix.latitude = self.geo.latitude if self.geo.lat_dir == 'N' else - self.geo.latitude
-            self.gpsfix.longitude = self.geo.longitude if self.geo.lon_dir == 'E' else - self.geo.longitude
-        if self.message == "GNS":
-            self.gpsfix.latitude = self.geo.lat if self.geo.lat_dir == 'N' else - self.geo.lat
-            self.gpsfix.longitude = self.geo.lon if self.geo.lon_dir == 'E' else - self.geo.lon
+            self.gpsfix.latitude = self.geo.latitude
+            self.gpsfix.longitude = self.geo.longitude
+
         self.gpsfix.altitude = self.geo.altitude
         
         # Get GPS fix status
