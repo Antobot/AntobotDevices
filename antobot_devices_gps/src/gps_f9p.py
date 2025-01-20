@@ -55,7 +55,7 @@ class F9P_GPS:
         elif self.dev_type == "usb":
             if serial_port == None:
                 self.baud = 460800  # 38400?? Need to resolve baudrate difference with baudrate_rtk below
-                self.port = serial.Serial("/dev/USB_0", self.baud)
+                self.port = serial.Serial("/dev/ttyUSB0", self.baud)
             else:
                 self.port = serial_port
         self.gps_dev = UbloxGps(self.port)
@@ -70,6 +70,7 @@ class F9P_GPS:
         current_time = rospy.Time.now()
         self.gps_time_i=0.1
         self.gpsfix.header.stamp = current_time
+        self.gps_timestamp = current_time
 
         # Initial parameters for quality
         self.geo_sep = 0
@@ -122,13 +123,11 @@ class F9P_GPS:
         if self.message == "GGA":
             if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
                 self.geo = pynmea2.parse(streamed_data)
-                #print(self.geo)
                 return True
         if self.message == "GNS":
             if isinstance(streamed_data,str) and streamed_data.startswith("$GNGNS"):
                 self.geo = pynmea2.parse(streamed_data)
                 self.fix_status = 4
-                #print(self.geo)
                 return True
 
         return False
@@ -248,7 +247,8 @@ class F9P_GPS:
         self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
 
         # # Assigning timestamp part of NavSatFix message
-        self.gpsfix.header.stamp = rospy.Time.from_sec(dt0.timestamp())              # Assigning time received from F9P
+        self.gps_timestamp = rospy.Time.from_sec(dt0.timestamp())
+        self.gpsfix.header.stamp = self.gps_timestamp            # Assigning time received from F9P
         # self.gpsfix.header.stamp = current_time.to_sec()       # Assigning current time (ROS) - DEPRECATED
 
         if self.gps_time_offset > 1:
@@ -334,6 +334,8 @@ class F9P_GPS:
 
     def create_quality_msg(self):
         gpsQualMsg = gpsQual()
+        gpsQualMsg.stamp = self.gps_timestamp
+        gpsQualMsg.t_offset = self.gps_time_offset
         gpsQualMsg.hAcc = self.hAcc
         gpsQualMsg.gpsQualVal = self.gga_gps_qual
         gpsQualMsg.numSats = self.num_sats
@@ -345,10 +347,6 @@ class F9P_GPS:
 
         self.gps_qual_pub.publish(gpsQualMsg)
 
-
-
-
-## Example function
 
 def main(args):
     mqtt_publish = False
@@ -370,7 +368,6 @@ def main(args):
         gps_f9p.get_gps()
 
         rate.sleep()
-
 
 
 if __name__ == '__main__':   
