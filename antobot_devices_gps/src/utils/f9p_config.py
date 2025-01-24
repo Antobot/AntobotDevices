@@ -426,13 +426,13 @@ class F9P_config:
         # configure the measurement rate of the chip
         
         ubx_rate_meas = self.cfg_rate_meas()
-        #print(self.port)
-        if self.port.port == '/dev/ttyTHS0':
-            self.port.writebytes(ubx_rate_meas)
-            received_bytes = self.receive_ubx_bytes_from_spi()
-        elif self.port.port == '/dev/ttyUSB0':
+        print(self.port)
+        if self.port.port == "/dev/ttyUSB0":
             self.port.write(ubx_rate_meas)
             received_bytes = self.receive_ubx_bytes_from_uart()
+        else:
+            self.port.writebytes(ubx_rate_meas)
+            received_bytes = self.receive_ubx_bytes_from_spi()
         self.check_ubx_uart(received_bytes)            
         print("Configured the measurement rate as " + str(self.meas_rate) + " Hz") 
 
@@ -454,13 +454,14 @@ class F9P_config:
 if __name__ == '__main__':
     
     moving_base = False
-    scout_box = True
+    scout_box = False
     desired_messages = ['GST', 'VTG']
     #desired_messages = []
     meas_rate = 8
     if moving_base:
         meas_rate = 5
-    
+    spi = spidev.SpiDev()
+
     if scout_box:
         uart = serial.Serial(port='/dev/ttyUSB0', baudrate=460800,timeout=1)
         f9p_cfg = F9P_config(uart, desired_messages, meas_rate)

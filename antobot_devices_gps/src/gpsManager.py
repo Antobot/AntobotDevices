@@ -59,6 +59,8 @@ class gpsManager():
 
         # Launch GPS nodes
         for k, v in gps_data.items():
+            #if k == "urcu" or "movingbase":
+                #GPIO = importlib.import_module("Jetson.GPIO")
             if self.launch_nodes:
                 # Launch the appropriate GPS script
                 exec_name, node_name = self.get_node_name(k, v)
@@ -130,7 +132,7 @@ class gpsManager():
         baud=460800
 
         if k == "urcu":
-            GPIO = importlib.import_module("Jetson.GPIO")
+
             # Define serial port for the F9P inside of the uRCU (for movingbase or otherwise)
             if self.f9p_urcu_serial_port == None:
                 self.f9p_urcu_serial_port = serial.Serial(v['device_port'], baud)
@@ -141,7 +143,7 @@ class gpsManager():
 
         if k == "movingbase":
             # Define serial port for the movingbase F9P (connected via USB)
-            GPIO = importlib.import_module("Jetson.GPIO")
+
             if self.f9p_usb_port == None:
                 self.f9p_usb_port = serial.Serial(v['device_port'], baud)
 
@@ -203,6 +205,7 @@ def main():
         try:
             loop.run_until_complete(gpsMgr.check_gps_async)
         except Exception as e:     
+            GPIO = importlib.import_module("Jetson.GPIO")
             GPIO.cleanup()
             loop.close()
     else:       # Most other situations

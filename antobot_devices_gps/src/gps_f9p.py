@@ -102,7 +102,10 @@ class F9P_GPS:
                 if self.hAcc < 500:
                     self.gps_pub.publish(self.gpsfix)
         if self.method == "stream":
-            streamed_data = self.gps_dev.stream_nmea().decode('utf-8') #stream method
+            if self.dev_type =="urcu":
+                streamed_data = self.gps_dev.stream_nmea() #.decode('utf-8') #stream method
+            if self.dev_type == "usb":
+                streamed_data = self.gps_dev.stream_nmea() .decode('utf-8')
             self.get_gps_quality(streamed_data)
 
 
@@ -299,6 +302,7 @@ class F9P_GPS:
             if streamed_data.startswith("$GNGST"):
                 gst_parse = pynmea2.parse(streamed_data)
                 self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
+                print(self.hAcc)
             if streamed_data.startswith("$GNGGA"):
                 gga_parse = pynmea2.parse(streamed_data)
                 self.gga_gps_qual = int(gga_parse.gps_qual)
