@@ -16,16 +16,21 @@
 import spidev
 import serial
 import time
+import yaml
+import rospy, rospkg
 
 class F9P_config:
     """GPS parsing module.	Can parse simple NMEA data sentences from SPI
 	GPS modules to read latitude, longitude, and more.
     """
-    def __init__(self,port, desired_messages, meas_rate):
+    def __init__(self,port, desired_messages, meas_rate,device):
         # Initialize null starting values for GPS attributes.
         self.port = port
         self.desired_messages = desired_messages
         self.meas_rate = meas_rate
+        self.device=device
+
+
         
 
     def prepare_cfg_packet(self, length):
@@ -363,39 +368,39 @@ class F9P_config:
 
     def get_key_id(self,msg):
         if msg == 'GSV':
-            if self.port.port == '/dev/ttyUSB0': #UART1
+            if self.device == "uart": #UART1
                 key_id = 0xc5
-            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+            elif self.device == "spi": #SPI for urcu build in F9P
                 key_id = 0xc8
         elif msg == 'RMC':
-            if self.port.port == '/dev/ttyUSB0': #UART1
+            if self.device == "uart": #UART1
                 key_id = 0xac
-            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+            elif self.device == "spi": #SPI for urcu build in F9P
                 key_id = 0xaf
         elif msg == 'GSA':
-            if self.port.port == '/dev/ttyUSB0': #UART1
+            if self.device == "uart": #UART1
                 key_id = 0xc0
-            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+            elif self.device == "spi": #SPI for urcu build in F9P
                 key_id = 0xc3
         elif msg == 'VTG':
-            if self.port.port == '/dev/ttyUSB0': #UART1
+            if self.device == "uart": #UART1
                 key_id = 0xb1
-            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+            elif self.device == "spi": #SPI for urcu build in F9P
                 key_id = 0xb4
         elif msg == 'GLL':
-            if self.port.port == '/dev/ttyUSB0': #UART1
+            if self.device == "uart": #UART1
                 key_id = 0xca
-            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+            elif self.device == "spi": #SPI for urcu build in F9P
                 key_id = 0xcd
         elif msg == 'GST':
-            if self.port.port == '/dev/ttyUSB0': #UART1
+            if self.device == "uart": #UART1
                 key_id = 0xd4
-            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+            elif self.device == "spi": #SPI for urcu build in F9P
                 key_id = 0xd7
         elif msg == 'GNS':
-            if self.port.port == '/dev/ttyUSB0': #UART1
+            if self.device == "uart": #UART1
                 key_id = 0xb6
-            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+            elif self.device == "spi": #SPI for urcu build in F9P
                 key_id = 0xb9
 
         return key_id
@@ -427,7 +432,7 @@ class F9P_config:
         
         ubx_rate_meas = self.cfg_rate_meas()
         print(self.port)
-        if self.port.port == "/dev/ttyUSB0":
+        if self.device=="uart":
             self.port.write(ubx_rate_meas)
             received_bytes = self.receive_ubx_bytes_from_uart()
         else:
@@ -455,16 +460,29 @@ if __name__ == '__main__':
     
     moving_base = False
     scout_box = False
+    rospack = rospkg.RosPack()
+    packagePath=rospack.get_path('antobot_description')
+    path = packagePath + "/config/platform_config.yaml"
+
+    with open(path, 'r') as yamlfile:
+        data = yaml.safe_load(yamlfile)
+        dev_type = data['gps'].keys()
+    # Importing device-specific packages
+    if "urcu" in dev_type :
+        device = "spi"
+    elif "f9p_usb" in dev_type:
+        device = "uart"
+
     desired_messages = ['GST', 'VTG']
     #desired_messages = []
     meas_rate = 8
     if moving_base:
         meas_rate = 5
-    spi = spidev.SpiDev()
 
-    if scout_box:
+
+    if device=="uart":
         uart = serial.Serial(port='/dev/ttyUSB0', baudrate=460800,timeout=1)
-        f9p_cfg = F9P_config(uart, desired_messages, meas_rate)
+        f9p_cfg = F9P_config(uart, desired_messages, meas_rate,device)
         packet = f9p_cfg.get_ver()
         f9p_cfg.uartwrite(packet)
         received_bytes = f9p_cfg.receive_ubx_bytes_from_uart()
@@ -483,7 +501,7 @@ if __name__ == '__main__':
         spi.mode = 0
         spi.no_cs
 
-        f9p_cfg = F9P_config(spi, desired_messages, meas_rate)         
+        f9p_cfg = F9P_config(spi, desired_messages, meas_rate,device)         
 
         #function to get the f9p firmware version
         packet = f9p_cfg.get_ver()
