@@ -38,8 +38,8 @@ from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8
 from std_msgs.msg import Float64
-
-import Jetson.GPIO as GPIO
+import importlib
+#import Jetson.GPIO as GPIO
 
 from antobot_devices_gps.movingbase import MovingBase
 
@@ -47,7 +47,7 @@ class MovingBase_Ros:
     def __init__(self, base_port_uart, rover_port, base_port_spi, mode):
         
         self.node_type = "movingbase"
-        
+        GPIO = importlib.import_module("Jetson.GPIO")
         self.base_port_uart = base_port_uart
         self.rover_port = rover_port
         self.base_port_spi = base_port_spi

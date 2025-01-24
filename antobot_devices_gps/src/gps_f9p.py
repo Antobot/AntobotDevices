@@ -36,7 +36,7 @@ from antobot_devices_gps.ublox_gps import UbloxGps
 class F9P_GPS:
 
 
-    def __init__(self, dev_type, serial_port=None, method, pub_name, pub_name_qual="antobot_gps/quality"):
+    def __init__(self, dev_type, serial_port=None, method="stream", pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
 
         # # # GPS class initialisation
         #     Inputs: dev_type - the device type of the F9P chip. 
@@ -105,11 +105,9 @@ class F9P_GPS:
             streamed_data = self.gps_dev.stream_nmea().decode('utf-8') #stream method
             self.get_gps_quality(streamed_data)
 
-<<<<<<< HEAD
+
             print(streamed_data)
-=======
-            # print(streamed_data)
->>>>>>> 1e4b8236d4db23b08c975a7ff3112a12202e0c43
+
 
             # Check the new data is viable and update message
             if self.correct_gps_format(streamed_data):                
