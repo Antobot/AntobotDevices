@@ -356,9 +356,13 @@ class F9P_config:
             enable = msg in self.desired_messages
 
             packet = self.config_gx_message(key_id, enable)
-            self.port.write(packet)
+            if self.device=="uart":
+                self.port.write(packet)
             
-            received_bytes = self.receive_ubx_bytes_from_uart()
+                received_bytes = self.receive_ubx_bytes_from_uart()
+            else:
+                self.port.writebytes(packet)
+                received_bytes = self.receive_ubx_bytes_from_spi()
             self.check_ubx_uart(received_bytes)
 
             enable_text = "Disabled"
@@ -431,7 +435,7 @@ class F9P_config:
         # configure the measurement rate of the chip
         
         ubx_rate_meas = self.cfg_rate_meas()
-        print(self.port)
+        #print(self.port)
         if self.device=="uart":
             self.port.write(ubx_rate_meas)
             received_bytes = self.receive_ubx_bytes_from_uart()
