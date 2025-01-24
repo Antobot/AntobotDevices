@@ -27,7 +27,7 @@ from antobot_manager_software.launchManager import Node, RoslaunchWrapperObject
 from gps_f9p import F9P_GPS
 from gps_movingbase import MovingBase_Ros
 from gps_corrections import gpsCorrections
-
+import importlib
 #import Jetson.GPIO as GPIO
 
 
@@ -130,6 +130,7 @@ class gpsManager():
         baud=460800
 
         if k == "urcu":
+            GPIO = importlib.import_module("Jetson.GPIO")
             # Define serial port for the F9P inside of the uRCU (for movingbase or otherwise)
             if self.f9p_urcu_serial_port == None:
                 self.f9p_urcu_serial_port = serial.Serial(v['device_port'], baud)
@@ -140,6 +141,7 @@ class gpsManager():
 
         if k == "movingbase":
             # Define serial port for the movingbase F9P (connected via USB)
+            GPIO = importlib.import_module("Jetson.GPIO")
             if self.f9p_usb_port == None:
                 self.f9p_usb_port = serial.Serial(v['device_port'], baud)
 
