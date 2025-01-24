@@ -36,7 +36,7 @@ from antobot_devices_gps.ublox_gps import UbloxGps
 class F9P_GPS:
 
 
-    def __init__(self, dev_type, serial_port=None, method="stream", pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
+    def __init__(self, dev_type, serial_port=None, method, pub_name, pub_name_qual="antobot_gps/quality"):
 
         # # # GPS class initialisation
         #     Inputs: dev_type - the device type of the F9P chip. 
@@ -60,7 +60,7 @@ class F9P_GPS:
                 self.port = serial_port
         self.gps_dev = UbloxGps(self.port)
         self.geo = None
-        self.fix_status = 0
+        self.fix_status = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
         self.gps_status = "Critical"
         self.gps_freq_status = "Critical"
         self.gps_time_buf = []
@@ -102,17 +102,21 @@ class F9P_GPS:
                 if self.hAcc < 500:
                     self.gps_pub.publish(self.gpsfix)
         if self.method == "stream":
-            streamed_data = self.gps_dev.stream_nmea() #stream method
+            streamed_data = self.gps_dev.stream_nmea().decode('utf-8') #stream method
             self.get_gps_quality(streamed_data)
 
+<<<<<<< HEAD
+            print(streamed_data)
+=======
             # print(streamed_data)
+>>>>>>> 1e4b8236d4db23b08c975a7ff3112a12202e0c43
 
             # Check the new data is viable and update message
             if self.correct_gps_format(streamed_data):                
                 self.create_gps_msg()
                 self.get_gps_freq()
-                self.create_quality_msg()   
 
+                self.create_quality_msg()   
                 if self.hAcc < 1:
                     self.gps_pub.publish(self.gpsfix)
 
@@ -360,10 +364,10 @@ def main(args):
     if gps_f9p.method == "stream":
         rate = rospy.Rate(50)  # 8hz
 
-    baudrate_rtk = 38400            # Need to resolve baudrate
+    baudrate_rtk = 460800#38400            # Need to resolve baudrate
     gps_f9p.uart2_config(baudrate_rtk)
 
-    mode = 1 # 1: RTK base station; 2: PPP-IP; 3: LBand
+    mode = 2 # 1: RTK base station; 2: PPP-IP; 3: LBand
     while not rospy.is_shutdown():
         gps_f9p.get_gps()
 

@@ -72,12 +72,13 @@ class UbloxGps(object):
 
     def __init__(self, hard_port = None):
         if hard_port is None:
-            self.hard_port = serial.Serial("/dev/serial0/", 38400, timeout=1)
+            self.hard_port = serial.Serial("/dev/ttyUSB0/", 460800, timeout=1)
         elif type(hard_port) == spidev.SpiDev:
             sfeSpi = sfeSpiWrapper(hard_port)
             self.hard_port = sfeSpi
         else:
             self.hard_port = hard_port
+        #print("self.hard_port in ublox_gps.py is:",self.hard_port)
 
         # Class message values
         self.ack_ms= {

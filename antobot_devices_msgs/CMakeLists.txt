@@ -16,8 +16,8 @@ add_message_files(
 
 add_service_files(
   FILES
-  camManager.srv
-  antoRec.srv
+  #camManager.srv
+  #antoRec.srv
   costmapToggleObservation.srv
   lidarManager.srv
   progressUpdate.srv

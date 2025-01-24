@@ -19,21 +19,17 @@ import time
 import yaml
 import paho.mqtt.client as mqtt
 import rospy, rospkg
+import importlib
 
 
 class gpsCorrections():
-    def __init__(self, dev_type, corr_type, serial_port=None):
+    def __init__(self, dev_type, corr_type="ppp", serial_port):
         # # # Initialisation of GPS corrections class
         #     Inputs: dev_type - the type of device that this script is running on
         #           "urcu" - the URCU; Jetson-based packages should be used
         #           "rasPi" - antoScout or another rasPi-based system; rasPi-compatible packages should be used
 
-        # Importing device-specific packages
-        if dev_type == "urcu":
-            import serial
-            import Jetson.GPIO as GPIO
-        elif dev_type == "rasPi":
-            print("importing rasPi specific packages!")
+
         
         self.corr_type = corr_type
 
@@ -56,14 +52,28 @@ class gpsCorrections():
             mqtt_username = "antobot_device"
             mqtt_password = "SvHCWJFNP98h"
 
+        packagePath=rospack.get_path('antobot_description')
+        path = packagePath + "/config/platform_config.yaml"
+
+        with open(path, 'r') as yamlfile:
+            data = yaml.safe_load(yamlfile)
+            dev_type= data['gps'].keys
+            print(dev_type)
+        # Importing device-specific packages
+        if dev_type == "urcu":
+            GPIO = importlib.import_module("Jetson.GPIO") 
+        elif dev_type == "f9p_usb":
+            importlib.import_module("serial")
+            print("importing rasPi specific packages!")
+
         # Setting up hardware ports
-        if serial_port == None:
+        if dev_type == "urcu":
             dev_port = "/dev/ttyTHS0"
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
             # May need a different option for antoScout
-        else:
-            self.serial_port = serial_port
+        elif dev_type == "f9p_usb":
+            self.serial_port = serial.Serial(port="/dev/ttyUSB0", baudrate=460800)
 
         # Configuring method-specific parameters (MQTT)
         if self.corr_type == "ppp":
@@ -132,12 +142,12 @@ class gpsCorrections():
 
 
 def main():
-    gps_corr = gpsCorrections("urcu", "ppp")
+    gps_corr = gpsCorrections()
     
     gps_corr.client.loop_start()
     while(True):
         time.sleep(1)
-        #print("Running")
+        print("Running")
 
 
 if __name__ == '__main__':

@@ -28,7 +28,7 @@ from gps_f9p import F9P_GPS
 from gps_movingbase import MovingBase_Ros
 from gps_corrections import gpsCorrections
 
-import Jetson.GPIO as GPIO
+#import Jetson.GPIO as GPIO
 
 
 class gpsManager():
@@ -148,7 +148,7 @@ class gpsManager():
         if k == "f9p_usb" or k == "f9p_usb2":
             if self.f9p_usb_port == None:
                 self.f9p_usb_port = serial.Serial(v['device_port'], baud)
-            gps_cls = F9P_GPS("usb", serial_port=self.f9p_usb_port, pub_name="antobot_" + k)
+            gps_cls = F9P_GPS("usb", serial_port=self.f9p_usb_port, method=self.method,pub_name="antobot_" + k)
 
         return gps_cls
     

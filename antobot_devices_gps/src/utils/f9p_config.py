@@ -14,14 +14,16 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import spidev
+import serial
+import time
 
 class F9P_config:
     """GPS parsing module.	Can parse simple NMEA data sentences from SPI
 	GPS modules to read latitude, longitude, and more.
     """
-    def __init__(self,spiport, desired_messages, meas_rate):
+    def __init__(self,port, desired_messages, meas_rate):
         # Initialize null starting values for GPS attributes.
-        self.spiport = spiport
+        self.port = port
         self.desired_messages = desired_messages
         self.meas_rate = meas_rate
         
@@ -215,13 +217,21 @@ class F9P_config:
         packet[4] = 0
         packet[5] = 0
         packet = self.calculate_checksum(packet, length)
+        print(packet)
 
         return packet
 
     def write(self,payload):
        """function to write the poll request to the ublox f9p chip"""
        #print("Payload length:",type(payload))
-       self.spiport.writebytes(payload)
+       self.port.writebytes(payload)
+       return 1
+    
+    def uartwrite(self,payload):
+       """function to write the poll request to the ublox f9p chip"""
+       print("Payload length:",len(payload))
+       print(payload)
+       self.port.write(payload)
        return 1
     
     def check_ubx_uart(self, received_bytes):
@@ -253,7 +263,7 @@ class F9P_config:
         i = 0 # iteration
         j = 0 #
         while (j < 2048):  # max. number of iterations
-            byte = self.spiport.readbytes(1)[0] # read one byte from spi
+            byte = self.port.readbytes(1)[0] # read one byte from spi
             if (byte == 0xb5): # if synchronization character is found
                 start = True
             if (start == True): # if the packet start is found
@@ -263,6 +273,29 @@ class F9P_config:
                 break # if buffer is full, exit loop
             j = j + 1
         return received_bytes  
+        
+    def receive_ubx_bytes_from_uart(self):
+        """function to read the message from ublox f9p"""
+        print("Inside the receive ubx bytes function")
+        """
+        buffer_size = 2048
+        received_bytes = bytearray(buffer_size)
+        start = False  # flag showing that synchronization character is found
+        i = 0 # iteration
+        j = 0 #
+        while (j < 2048):  # max. number of iterations
+            byte = self.port.read(1)# read one byte from spi
+            if (byte == 0xb5): # if synchronization character is found
+                start = True
+            if (start == True): # if the packet start is found
+                received_bytes[i] = byte # put byte to the buffer
+                i = i + 1
+            if (start == True and i == buffer_size):
+                break # if buffer is full, exit loop
+            j = j + 1
+        """
+        received_bytes=self.port.read(2048)
+        return received_bytes
 
     def set_rtcm_messages(self):
         all_messages = ['1074','1084','1094','1124','1230','4072']
@@ -284,7 +317,7 @@ class F9P_config:
             enable = True
 
             packet = self.config_uart2_rtcm_msg(key_id, enable)
-            self.spiport.writebytes(packet)
+            self.port.writebytes(packet)
 
             enable_text = "Disabled"
             if enable:
@@ -314,33 +347,59 @@ class F9P_config:
         all_messages = ['GSV', 'RMC', 'GSA', 'VTG', 'GLL', 'GST','GNS']
 
         for msg in all_messages:
-            if msg == 'GSV':
-                key_id = 0xc8
-            elif msg == 'RMC':
-                key_id = 0xaf
-            elif msg == 'GSA':
-                key_id = 0xc3
-            elif msg == 'VTG':
-                key_id = 0xb4
-            elif msg == 'GLL':
-                key_id = 0xcd
-            elif msg == 'GST':
-                key_id = 0xd7
-            elif msg == 'GNS':
-                key_id = 0xb9
-
+            key_id = self.get_key_id(msg)
             enable = msg in self.desired_messages
 
             packet = self.config_gx_message(key_id, enable)
-            self.spiport.writebytes(packet)
-        
-            received_bytes = self.receive_ubx_bytes_from_spi()
+            self.port.write(packet)
+            
+            received_bytes = self.receive_ubx_bytes_from_uart()
             self.check_ubx_uart(received_bytes)
 
             enable_text = "Disabled"
             if enable:
                 enable_text = "Enabled"
             print("GPS Config: " + msg + " Message " + enable_text + "\n")
+
+    def get_key_id(self,msg):
+        if msg == 'GSV':
+            if self.port.port == '/dev/ttyUSB0': #UART1
+                key_id = 0xc5
+            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+                key_id = 0xc8
+        elif msg == 'RMC':
+            if self.port.port == '/dev/ttyUSB0': #UART1
+                key_id = 0xac
+            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+                key_id = 0xaf
+        elif msg == 'GSA':
+            if self.port.port == '/dev/ttyUSB0': #UART1
+                key_id = 0xc0
+            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+                key_id = 0xc3
+        elif msg == 'VTG':
+            if self.port.port == '/dev/ttyUSB0': #UART1
+                key_id = 0xb1
+            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+                key_id = 0xb4
+        elif msg == 'GLL':
+            if self.port.port == '/dev/ttyUSB0': #UART1
+                key_id = 0xca
+            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+                key_id = 0xcd
+        elif msg == 'GST':
+            if self.port.port == '/dev/ttyUSB0': #UART1
+                key_id = 0xd4
+            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+                key_id = 0xd7
+        elif msg == 'GNS':
+            if self.port.port == '/dev/ttyUSB0': #UART1
+                key_id = 0xb6
+            elif self.port.port == '/dev/ttyTHS0': #SPI for urcu build in F9P
+                key_id = 0xb9
+
+        return key_id
+    
 
     def config_gx_message(self, key_id, enable):
         # prepare packet
@@ -367,9 +426,13 @@ class F9P_config:
         # configure the measurement rate of the chip
         
         ubx_rate_meas = self.cfg_rate_meas()
-        self.spiport.writebytes(ubx_rate_meas)
-        
-        received_bytes = self.receive_ubx_bytes_from_spi()
+        #print(self.port)
+        if self.port.port == '/dev/ttyTHS0':
+            self.port.writebytes(ubx_rate_meas)
+            received_bytes = self.receive_ubx_bytes_from_spi()
+        elif self.port.port == '/dev/ttyUSB0':
+            self.port.write(ubx_rate_meas)
+            received_bytes = self.receive_ubx_bytes_from_uart()
         self.check_ubx_uart(received_bytes)            
         print("Configured the measurement rate as " + str(self.meas_rate) + " Hz") 
 
@@ -383,7 +446,7 @@ class F9P_config:
 
         # set uart_2 baud 460800
         packet = self.cfg_valget_uart2_baudrate()
-        self.spiport.writebytes(packet)
+        self.port.writebytes(packet)
         print('set uart2 baud 460800')
         
 
@@ -391,39 +454,54 @@ class F9P_config:
 if __name__ == '__main__':
     
     moving_base = False
+    scout_box = True
     desired_messages = ['GST', 'VTG']
     #desired_messages = []
     meas_rate = 8
     if moving_base:
         meas_rate = 5
-
-    spiport = spidev.SpiDev()
-    spiport.open(2, 0)  # (2,0) for spi1, (0,0) for spi0
-    spiport.max_speed_hz =  7800000 # 1000000, 15600000,62400000....
-    spiport.mode = 0
-    spiport.no_cs
-
-    f9p_cfg = F9P_config(spiport, desired_messages, meas_rate)         
-
-    #function to get the f9p firmware version
-    packet = f9p_cfg.get_ver()
-    f9p_cfg.write(packet)
-    received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()
-    #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
-
-    # revert to the default mode
-    if moving_base:
-        packet = f9p_cfg.revert_to_default_mode()
-        f9p_cfg.write(packet)
-
-    #configure the f9p to block unwanted messages
-    f9p_cfg.config_f9p()
     
-    if moving_base:
-        # configure the uart2's output (for movingbase)
-        f9p_cfg.config_uart2_rtcm()
+    if scout_box:
+        uart = serial.Serial(port='/dev/ttyUSB0', baudrate=460800,timeout=1)
+        f9p_cfg = F9P_config(uart, desired_messages, meas_rate)
+        packet = f9p_cfg.get_ver()
+        f9p_cfg.uartwrite(packet)
+        received_bytes = f9p_cfg.receive_ubx_bytes_from_uart()
+        #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
+        f9p_cfg.config_f9p()
+    
 
-    #receive GPS messages
-    packet = f9p_cfg.receive_gps()
-    f9p_cfg.write(packet)
-    received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()     
+        #receive GPS messages
+        packet = f9p_cfg.receive_gps()
+        f9p_cfg.uartwrite(packet)
+        received_bytes = f9p_cfg.receive_ubx_bytes_from_uart() 
+    else:
+        spi = spidev.SpiDev()
+        spi.open(2, 0)  # (2,0) for spi1, (0,0) for spi0
+        spi.max_speed_hz =  7800000 # 1000000, 15600000,62400000....
+        spi.mode = 0
+        spi.no_cs
+
+        f9p_cfg = F9P_config(spi, desired_messages, meas_rate)         
+
+        #function to get the f9p firmware version
+        packet = f9p_cfg.get_ver()
+        f9p_cfg.write(packet)
+        received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()
+        #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
+
+        # revert to the default mode
+        if moving_base:
+            packet = f9p_cfg.revert_to_default_mode()
+            f9p_cfg.write(packet)
+
+        #configure the f9p to block unwanted messages
+        f9p_cfg.config_f9p()
+    
+        if moving_base:
+            # configure the uart2's output (for movingbase)
+            f9p_cfg.config_uart2_rtcm()
+        #receive GPS messages
+        packet = f9p_cfg.receive_gps()
+        f9p_cfg.write(packet)
+        received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()     
