@@ -43,7 +43,9 @@ class gpsCorrections():
             data = yaml.safe_load(yamlfile)
             dev_type = data['gps'].keys()
         # Importing device-specific packages
+        print(dev_type)
         if "urcu" in dev_type :
+            print("in urcu type")
             GPIO = importlib.import_module("Jetson.GPIO") 
             dev_port = "/dev/ttyTHS0"
             baud = 460800
@@ -80,7 +82,7 @@ class gpsCorrections():
             self.connect = False
 
         # If the uRCU is being used, the appropriate GPIO pin must be set to "high" to enable corrections from Xavier 
-        if dev_type == "urcu":
+        if "urcu" in dev_type:
             # Set the GPIO pin of the URCU high
             self.gpio01 = 29
             self.GPIO = GPIO
