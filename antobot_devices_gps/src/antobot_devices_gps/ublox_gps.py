@@ -373,7 +373,7 @@ class UbloxGps(object):
         """
         #return self.hard_port.read()
         if type(self.hard_port) == spidev.SpiDev:
-            sentence=self.hard_port.readbuffer()
+            sentence=self.hard_port.readbuffer(buff)
         else:
             #sentence=self.hard_port.readline().decode('utf-8')
             sentence=self.readbuffer(buff)
@@ -916,7 +916,7 @@ class sfeSpiWrapper(object):
         return byte_data
         #return data
         
-    def readbuffer(self, read_data = 2048):
+    def readbuffer(self, buff):
         """
         Reads a byte or bytes of data from the SPI port. The bytes are
         converted to a bytes object before being returned.
@@ -924,9 +924,11 @@ class sfeSpiWrapper(object):
         :return: The requested bytes
         :rtype: bytes
         """
+        
         buffer = bytearray()
         start_pattern=b"$"
         end_pattern = b"\r\n"
+        """
         while True:
           data = self.spi_port.readbytes(read_data)
           buffer.extend(data)
@@ -940,7 +942,29 @@ class sfeSpiWrapper(object):
               buffer = buffer[end_idx + len(end_pattern):]
               
               return sentence.decode('utf-8')  # Decode the bytes into a string
-              
+        """
+        print("time before while",datetime.datetime.now())
+        while (count<buff):
+            data = self.hard_port.readbytes(1)
+            buffer.extend(data)  
+            if (data == b"\n"):
+                count =count+1
+                #print(buffer)
+        print("time after while",datetime.datetime.now())
+        print("print buffer:")
+        print(buffer) 
+        print("end print")       
+        start_idx = buffer.rfind(start_pattern)
+        #print("start_idx:",start_idx)
+        if start_idx != -1:  # Start pattern found
+            end_idx = buffer.find(end_pattern, start_idx)
+            if end_idx != -1:  # End pattern found
+                sentence = buffer[start_idx:end_idx + len(end_pattern)]
+                buffer = buffer[end_idx + len(end_pattern):]
+                print( "sentence:", sentence)
+                print("time sentence",datetime.datetime.now())
+                #print("buffer:",buffer)
+                return sentence.decode('utf-8')  # Decode the bytes into a string      
 
 
     def write(self, data):

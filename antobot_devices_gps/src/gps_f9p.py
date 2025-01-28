@@ -119,8 +119,8 @@ class F9P_GPS:
                 self.get_gps_freq()
 
                 self.create_quality_msg()   
-                if self.hAcc < 1:
-                    self.gps_pub.publish(self.gpsfix)
+                #if self.hAcc < 1:
+                self.gps_pub.publish(self.gpsfix)
 
     
 
