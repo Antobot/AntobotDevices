@@ -50,12 +50,13 @@ class F9P_GPS:
         self.message = "GGA" #or"GNS"
         self.dev_type = dev_type
         self.method = method
+        self.poll_buff = 1
         if self.dev_type == "urcu":
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
             if serial_port == None:
                 self.baud = 460800  # 38400?? Need to resolve baudrate difference with baudrate_rtk below
-                self.port = serial.Serial("/dev/ttyUSB0", self.baud)
+                self.port = serial.Serial("/dev/ttyUSB0", self.baud,timeout=2)
             else:
                 self.port = serial_port
         self.gps_dev = UbloxGps(self.port)
@@ -105,11 +106,11 @@ class F9P_GPS:
             if self.dev_type =="urcu":
                 streamed_data = self.gps_dev.stream_nmea() #.decode('utf-8') #stream method
             if self.dev_type == "usb":
-                streamed_data = self.gps_dev.stream_nmea() .decode('utf-8')
+                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8')  self.poll_buff
             self.get_gps_quality(streamed_data)
 
 
-            print(streamed_data)
+            #print(streamed_data)
 
 
             # Check the new data is viable and update message
@@ -250,14 +251,18 @@ class F9P_GPS:
 
         self.gps_time_i=(dt0.timestamp()-self.gpsfix.header.stamp.to_sec())
         self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
-
+        
         # # Assigning timestamp part of NavSatFix message
         self.gps_timestamp = rospy.Time.from_sec(dt0.timestamp())
         self.gpsfix.header.stamp = self.gps_timestamp            # Assigning time received from F9P
         # self.gpsfix.header.stamp = current_time.to_sec()       # Assigning current time (ROS) - DEPRECATED
 
-        if self.gps_time_offset > 1:
+        if self.gps_time_offset > 0.5:
             rospy.logerr("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
+            self.poll_buff =(self.gps_time_offset//0.125)+1
+        else:
+            self.poll_buff=1
+            
         
     def get_gps_timestamp_utc(self):
 
@@ -302,7 +307,7 @@ class F9P_GPS:
             if streamed_data.startswith("$GNGST"):
                 gst_parse = pynmea2.parse(streamed_data)
                 self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
-                print(self.hAcc)
+                #print(self.hAcc)
             if streamed_data.startswith("$GNGGA"):
                 gga_parse = pynmea2.parse(streamed_data)
                 self.gga_gps_qual = int(gga_parse.gps_qual)
