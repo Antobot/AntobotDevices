@@ -104,7 +104,7 @@ class F9P_GPS:
                     self.gps_pub.publish(self.gpsfix)
         if self.method == "stream":
             if self.dev_type =="urcu":
-                streamed_data = self.gps_dev.stream_nmea() #.decode('utf-8') #stream method
+                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') #stream method
             if self.dev_type == "usb":
                 streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8')  self.poll_buff
             self.get_gps_quality(streamed_data)
@@ -119,8 +119,8 @@ class F9P_GPS:
                 self.get_gps_freq()
 
                 self.create_quality_msg()   
-                #if self.hAcc < 1:
-                self.gps_pub.publish(self.gpsfix)
+                if self.hAcc < 5000:
+                    self.gps_pub.publish(self.gpsfix)
 
     
 
@@ -262,7 +262,7 @@ class F9P_GPS:
             self.poll_buff =(self.gps_time_offset//0.125)+1
         else:
             self.poll_buff=1
-            
+        print("pulled sentence:",self.poll_buff)            
         
     def get_gps_timestamp_utc(self):
 
@@ -310,9 +310,15 @@ class F9P_GPS:
                 #print(self.hAcc)
             if streamed_data.startswith("$GNGGA"):
                 gga_parse = pynmea2.parse(streamed_data)
-                self.gga_gps_qual = int(gga_parse.gps_qual)
+                try:
+                    self.gga_gps_qual = int(gga_parse.gps_qual)
+                except:
+                    print("GPS_quality value invalid")
                 self.num_sats = int(gga_parse.num_sats)         # Number of satellites
-                self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
+                try:
+                    self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
+                except:
+                    print("hor_dil value invalid") 
                 try:
                     self.geo_sep = float(gga_parse.geo_sep)         # Geoid separation
                 except:
