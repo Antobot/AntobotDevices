@@ -199,11 +199,14 @@ class F9P_GPS:
         self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
 
         self.gpsfix.altitude = 0
+        self.gpsfix.latitude = 0
+        self.gpsfix.longitude = 0
         if self.message == "GGA":
-            self.gpsfix.latitude = self.geo.latitude
-            self.gpsfix.longitude = self.geo.longitude
+             if  self.geo.latitude is not None and self.geo.latitude != 0:
+                self.gpsfix.latitude = self.geo.latitude
+                self.gpsfix.longitude = self.geo.longitude
 
-        self.gpsfix.altitude = self.geo.altitude
+                self.gpsfix.altitude = self.geo.altitude
         
         # Get GPS fix status
         self.gpsfix.status.status = self.get_fix_status()
@@ -261,7 +264,7 @@ class F9P_GPS:
             rospy.logerr("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
             self.poll_buff =(self.gps_time_offset//0.125)+1
         else:
-            self.poll_buff=1
+            self.poll_buff = 1
         print("pulled sentence:",self.poll_buff)            
         
     def get_gps_timestamp_utc(self):
@@ -270,10 +273,13 @@ class F9P_GPS:
         year=today_date.year
         month=today_date.month
         day=today_date.day
-        hour_i = self.geo.timestamp.hour
-        minute_i = self.geo.timestamp.minute
-        second_i = self.geo.timestamp.second
-        mic_sec_i = self.geo.timestamp.microsecond
+        try:
+            hour_i = self.geo.timestamp.hour
+            minute_i = self.geo.timestamp.minute
+            second_i = self.geo.timestamp.second
+            mic_sec_i = self.geo.timestamp.microsecond
+        except:
+            print("GPS timestamp invalid")
         dt0 = datetime(year, month, day, hour=hour_i, minute=minute_i, second=second_i, microsecond=mic_sec_i)
 
         return dt0
@@ -306,15 +312,19 @@ class F9P_GPS:
         if isinstance(streamed_data,str):
             if streamed_data.startswith("$GNGST"):
                 gst_parse = pynmea2.parse(streamed_data)
-                self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
+                try:
+                    self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
+                except:
+                    print("hAcc is invalid")
                 #print(self.hAcc)
             if streamed_data.startswith("$GNGGA"):
                 gga_parse = pynmea2.parse(streamed_data)
                 try:
                     self.gga_gps_qual = int(gga_parse.gps_qual)
+                    self.num_sats = int(gga_parse.num_sats)         # Number of satellites
                 except:
                     print("GPS_quality value invalid")
-                self.num_sats = int(gga_parse.num_sats)         # Number of satellites
+                
                 try:
                     self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
                 except:
@@ -326,12 +336,13 @@ class F9P_GPS:
             if streamed_data.startswith("$GNGNS"):
                 gns_parse = pynmea2.parse(streamed_data)
                 # self.pos_mode = int(gns_parse.mode_indicator)
-                self.num_sats = int(gns_parse.num_sats)             # Number of satellites
-                self.hor_dil = float(gns_parse.hdop)                # Horizontal dilution of precision (HDOP)
+
                 try:
+                    self.num_sats = int(gns_parse.num_sats)             # Number of satellites
+                    self.hor_dil = float(gns_parse.hdop)                # Horizontal dilution of precision (HDOP)
                     self.geo_sep = float(gns_parse.geo_sep)         # Geoid separation
                 except:
-                    print("Geoid separation value invalid")
+                    print("GNS information invalid")
             if streamed_data.startswith("$GNGSA"):      # Full satellite information
                 gsa_parse = pynmea2.parse(streamed_data)
                 # Add parser here (?)

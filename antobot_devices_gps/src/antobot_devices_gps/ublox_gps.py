@@ -946,14 +946,18 @@ class sfeSpiWrapper(object):
         print("time before while",datetime.datetime.now())
         while (count<buff):
             data = self.hard_port.readbytes(1)
-            buffer.extend(data)  
-            if (data == b"\n"):
-                count =count+1
+            if (data == b"\xff" ):
+                return
+            else:
+                buffer.extend(data) 
+                if (data == b"\n"):
+                    count =count+1
+
+            
                 #print(buffer)
         print("time after while",datetime.datetime.now())
-        print("print buffer:")
-        print(buffer) 
-        print("end print")       
+        print("print buffer:",buffer)
+    
         start_idx = buffer.rfind(start_pattern)
         #print("start_idx:",start_idx)
         if start_idx != -1:  # Start pattern found
