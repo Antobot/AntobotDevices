@@ -302,7 +302,7 @@ class F9P_GPS:
             if streamed_data.startswith("$GNGST"):
                 gst_parse = pynmea2.parse(streamed_data)
                 self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
-                print(self.hAcc)
+                #print(self.hAcc)
             if streamed_data.startswith("$GNGGA"):
                 gga_parse = pynmea2.parse(streamed_data)
                 self.gga_gps_qual = int(gga_parse.gps_qual)
@@ -332,7 +332,8 @@ class F9P_GPS:
                     # self.sogn = vtg_parse.spd_over_grnd_kts         # Speed over ground (knots)
                     self.sogk = float(vtg_parse.spd_over_grnd_kmph)          # Speed over ground (km/h)
                 except TypeError:
-                    print("VTG information invalid")
+                    pass
+                    #print("VTG information invalid")
                 # TODO: Calculate ENU velocity
             
 
