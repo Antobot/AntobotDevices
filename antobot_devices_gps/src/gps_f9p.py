@@ -72,7 +72,7 @@ class F9P_GPS:
         self.gps_time_i=0.1
         self.gpsfix.header.stamp = current_time
         self.gps_timestamp = current_time
-
+        self.gps_time_offset=2
         # Initial parameters for quality
         self.geo_sep = 0
         self.cogt = 0
@@ -251,20 +251,23 @@ class F9P_GPS:
         dt0 = self.get_gps_timestamp_utc()
         # print("current time (ROS): {}".format(current_time.to_sec()))
         # print("datetime timestamp: {}".format(dt0.timestamp()))
-
-        self.gps_time_i=(dt0.timestamp()-self.gpsfix.header.stamp.to_sec())
-        self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
+        if (dt0!=None):
+            self.gps_time_i=(dt0.timestamp()-self.gpsfix.header.stamp.to_sec())
+            self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
         
-        # # Assigning timestamp part of NavSatFix message
-        self.gps_timestamp = rospy.Time.from_sec(dt0.timestamp())
-        self.gpsfix.header.stamp = self.gps_timestamp            # Assigning time received from F9P
+            # # Assigning timestamp part of NavSatFix message
+            self.gps_timestamp = rospy.Time.from_sec(dt0.timestamp())
+            self.gpsfix.header.stamp = self.gps_timestamp            # Assigning time received from F9P
         # self.gpsfix.header.stamp = current_time.to_sec()       # Assigning current time (ROS) - DEPRECATED
-
-        if self.gps_time_offset > 0.5:
-            rospy.logerr("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
-            self.poll_buff =(self.gps_time_offset//0.125)+1
         else:
+            self.gps_time_offset == 99
+        if self.gps_time_offset > 0.5 and self.gps_time_offset != 99:
+            rospy.logerr("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
+            self.poll_buff =(self.gps_time_offset//0.125)*3+1
+        elif self.gps_time_offset!=99:
             self.poll_buff = 1
+        else:
+            self.pull_buff = 16
         print("pulled sentence:",self.poll_buff)            
         
     def get_gps_timestamp_utc(self):
@@ -278,11 +281,13 @@ class F9P_GPS:
             minute_i = self.geo.timestamp.minute
             second_i = self.geo.timestamp.second
             mic_sec_i = self.geo.timestamp.microsecond
+            dt0 = datetime(year, month, day, hour=hour_i, minute=minute_i, second=second_i, microsecond=mic_sec_i)
+            return dt0 
         except:
             print("GPS timestamp invalid")
-        dt0 = datetime(year, month, day, hour=hour_i, minute=minute_i, second=second_i, microsecond=mic_sec_i)
+        
 
-        return dt0
+        
 
     def get_gps_freq(self):
         # # # Gets the frequency of the published GPS message and sends a message if there has been a significant change

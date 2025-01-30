@@ -372,7 +372,8 @@ class UbloxGps(object):
         :rtype: string
         """
         #return self.hard_port.read()
-        if type(self.hard_port) == spidev.SpiDev:
+        print("type of hard port:",self.hard_port)
+        if isinstance(self.hard_port, sfeSpiWrapper):
             sentence=self.hard_port.readbuffer(buff)
         else:
             #sentence=self.hard_port.readline().decode('utf-8')
@@ -393,6 +394,7 @@ class UbloxGps(object):
         start_pattern=b"$"
         end_pattern = b"\r\n"
         count=0
+        print("in serial readbuffer function")
         print("time before while",datetime.datetime.now())
         while (count<buff):
             data = self.hard_port.read(1)
@@ -924,7 +926,8 @@ class sfeSpiWrapper(object):
         :return: The requested bytes
         :rtype: bytes
         """
-        
+        count=0
+        no_gps_count=0
         buffer = bytearray()
         start_pattern=b"$"
         end_pattern = b"\r\n"
@@ -942,21 +945,31 @@ class sfeSpiWrapper(object):
               buffer = buffer[end_idx + len(end_pattern):]
               
               return sentence.decode('utf-8')  # Decode the bytes into a string
-        """
-        print("time before while",datetime.datetime.now())
+             """
+        #print("SPI read buffer function")
+        #print("time before while",datetime.datetime.now())
         while (count<buff):
-            data = self.hard_port.readbytes(1)
-            if (data == b"\xff" ):
-                return
+            data = self.spi_port.readbytes(1)
+            #print("1 byte read from buffer:", data)
+            if (data == [255] ):
+                
+                if count>0:
+                    print("has poll all the data in buffer")
+                    break
+                else:
+                    no_gps_count=no_gps_count+1
+                    if no_gps_count>2:
+                        print("no gps data from buffer")
+                        return
             else:
                 buffer.extend(data) 
-                if (data == b"\n"):
+                if (data == [10]):
                     count =count+1
 
             
-                #print(buffer)
-        print("time after while",datetime.datetime.now())
-        print("print buffer:",buffer)
+                #print("buffer in while loop:",buffer)
+        #print("time after while",datetime.datetime.now())
+        #print("print buffer:",buffer)
     
         start_idx = buffer.rfind(start_pattern)
         #print("start_idx:",start_idx)
@@ -966,7 +979,7 @@ class sfeSpiWrapper(object):
                 sentence = buffer[start_idx:end_idx + len(end_pattern)]
                 buffer = buffer[end_idx + len(end_pattern):]
                 print( "sentence:", sentence)
-                print("time sentence",datetime.datetime.now())
+                #print("time sentence",datetime.datetime.now())
                 #print("buffer:",buffer)
                 return sentence.decode('utf-8')  # Decode the bytes into a string      
 
