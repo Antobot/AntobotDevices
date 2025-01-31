@@ -372,7 +372,7 @@ class UbloxGps(object):
         :rtype: string
         """
         #return self.hard_port.read()
-        print("type of hard port:",self.hard_port)
+        #print("type of hard port:",self.hard_port)
         if isinstance(self.hard_port, sfeSpiWrapper):
             sentence=self.hard_port.readbuffer(buff)
         else:
@@ -930,6 +930,7 @@ class sfeSpiWrapper(object):
         no_gps_count=0
         buffer = bytearray()
         start_pattern=b"$"
+        GGA_pattern = b"$GNGGA"
         end_pattern = b"\r\n"
         """
         while True:
@@ -950,7 +951,8 @@ class sfeSpiWrapper(object):
         #print("time before while",datetime.datetime.now())
         while (count<buff):
             data = self.spi_port.readbytes(1)
-            #print("1 byte read from buffer:", data)
+            #print("1 byte read from buffer:", data)       
+            #print("While loop")
             if (data == [255] ):
                 
                 if count>0:
@@ -958,7 +960,7 @@ class sfeSpiWrapper(object):
                     break
                 else:
                     no_gps_count=no_gps_count+1
-                    if no_gps_count>2:
+                    if no_gps_count>8:
                         print("no gps data from buffer")
                         return
             else:
@@ -967,12 +969,14 @@ class sfeSpiWrapper(object):
                     count =count+1
 
             
-                #print("buffer in while loop:",buffer)
+                    print("count in while loop:",count)
         #print("time after while",datetime.datetime.now())
         #print("print buffer:",buffer)
-    
-        start_idx = buffer.rfind(start_pattern)
-        #print("start_idx:",start_idx)
+        if buff>1:
+            start_idx = buffer.rfind(GGA_pattern)
+        else:
+            start_idx = buffer.rfind(start_pattern)
+        print("start_idx:",start_idx)
         if start_idx != -1:  # Start pattern found
             end_idx = buffer.find(end_pattern, start_idx)
             if end_idx != -1:  # End pattern found

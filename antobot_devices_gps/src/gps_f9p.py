@@ -51,6 +51,7 @@ class F9P_GPS:
         self.dev_type = dev_type
         self.method = method
         self.poll_buff = 1
+        self.poll_buff_pre =1
         if self.dev_type == "urcu":
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
@@ -263,11 +264,16 @@ class F9P_GPS:
             self.gps_time_offset == 99
         if self.gps_time_offset > 0.5 and self.gps_time_offset != 99:
             rospy.logerr("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
-            self.poll_buff =(self.gps_time_offset//0.125)*3+1
+            self.poll_buff =(self.gps_time_offset//0.125)*3
+            if self.poll_buff_pre !=1 and  self.poll_buff_pre!= 24 and self.poll_buff_pre!= 3:
+                self.poll_buff = 3
+            
         elif self.gps_time_offset!=99:
             self.poll_buff = 1
         else:
-            self.pull_buff = 16
+            self.pull_buff = 24
+        self.poll_buff_pre=self.poll_buff
+        
         print("pulled sentence:",self.poll_buff)            
         
     def get_gps_timestamp_utc(self):
