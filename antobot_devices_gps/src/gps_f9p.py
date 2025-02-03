@@ -50,12 +50,14 @@ class F9P_GPS:
         self.message = "GGA" #or"GNS"
         self.dev_type = dev_type
         self.method = method
+        self.poll_buff = 1
+        self.poll_buff_pre =1
         if self.dev_type == "urcu":
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
             if serial_port == None:
                 self.baud = 460800  # 38400?? Need to resolve baudrate difference with baudrate_rtk below
-                self.port = serial.Serial("/dev/ttyUSB0", self.baud)
+                self.port = serial.Serial("/dev/ttyUSB0", self.baud,timeout=2)
             else:
                 self.port = serial_port
         self.gps_dev = UbloxGps(self.port)
@@ -71,7 +73,7 @@ class F9P_GPS:
         self.gps_time_i=0.1
         self.gpsfix.header.stamp = current_time
         self.gps_timestamp = current_time
-
+        self.gps_time_offset=2
         # Initial parameters for quality
         self.geo_sep = 0
         self.cogt = 0
@@ -103,9 +105,9 @@ class F9P_GPS:
                     self.gps_pub.publish(self.gpsfix)
         if self.method == "stream":
             if self.dev_type =="urcu":
-                streamed_data = self.gps_dev.stream_nmea() #.decode('utf-8') #stream method
+                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') #stream method
             if self.dev_type == "usb":
-                streamed_data = self.gps_dev.stream_nmea() .decode('utf-8')
+                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8')  self.poll_buff
             self.get_gps_quality(streamed_data)
 
 
@@ -118,7 +120,7 @@ class F9P_GPS:
                 self.get_gps_freq()
 
                 self.create_quality_msg()   
-                if self.hAcc < 1:
+                if self.hAcc < 5000:
                     self.gps_pub.publish(self.gpsfix)
 
     
@@ -198,11 +200,14 @@ class F9P_GPS:
         self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
 
         self.gpsfix.altitude = 0
+        self.gpsfix.latitude = 0
+        self.gpsfix.longitude = 0
         if self.message == "GGA":
-            self.gpsfix.latitude = self.geo.latitude
-            self.gpsfix.longitude = self.geo.longitude
+             if  self.geo.latitude is not None and self.geo.latitude != 0:
+                self.gpsfix.latitude = self.geo.latitude
+                self.gpsfix.longitude = self.geo.longitude
 
-        self.gpsfix.altitude = self.geo.altitude
+                self.gpsfix.altitude = self.geo.altitude
         
         # Get GPS fix status
         self.gpsfix.status.status = self.get_fix_status()
@@ -247,17 +252,29 @@ class F9P_GPS:
         dt0 = self.get_gps_timestamp_utc()
         # print("current time (ROS): {}".format(current_time.to_sec()))
         # print("datetime timestamp: {}".format(dt0.timestamp()))
-
-        self.gps_time_i=(dt0.timestamp()-self.gpsfix.header.stamp.to_sec())
-        self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
-
-        # # Assigning timestamp part of NavSatFix message
-        self.gps_timestamp = rospy.Time.from_sec(dt0.timestamp())
-        self.gpsfix.header.stamp = self.gps_timestamp            # Assigning time received from F9P
+        if (dt0!=None):
+            self.gps_time_i=(dt0.timestamp()-self.gpsfix.header.stamp.to_sec())
+            self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
+        
+            # # Assigning timestamp part of NavSatFix message
+            self.gps_timestamp = rospy.Time.from_sec(dt0.timestamp())
+            self.gpsfix.header.stamp = self.gps_timestamp            # Assigning time received from F9P
         # self.gpsfix.header.stamp = current_time.to_sec()       # Assigning current time (ROS) - DEPRECATED
-
-        if self.gps_time_offset > 1:
+        else:
+            self.gps_time_offset == 99
+        if self.gps_time_offset > 0.5 and self.gps_time_offset != 99:
             rospy.logerr("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
+            self.poll_buff =(self.gps_time_offset//0.125)*3
+            if self.poll_buff_pre !=1 and  self.poll_buff_pre!= 24 and self.poll_buff_pre!= 3:
+                self.poll_buff = 3
+            
+        elif self.gps_time_offset!=99:
+            self.poll_buff = 1
+        else:
+            self.pull_buff = 24
+        self.poll_buff_pre=self.poll_buff
+        
+        print("pulled sentence:",self.poll_buff)            
         
     def get_gps_timestamp_utc(self):
 
@@ -265,13 +282,18 @@ class F9P_GPS:
         year=today_date.year
         month=today_date.month
         day=today_date.day
-        hour_i = self.geo.timestamp.hour
-        minute_i = self.geo.timestamp.minute
-        second_i = self.geo.timestamp.second
-        mic_sec_i = self.geo.timestamp.microsecond
-        dt0 = datetime(year, month, day, hour=hour_i, minute=minute_i, second=second_i, microsecond=mic_sec_i)
+        try:
+            hour_i = self.geo.timestamp.hour
+            minute_i = self.geo.timestamp.minute
+            second_i = self.geo.timestamp.second
+            mic_sec_i = self.geo.timestamp.microsecond
+            dt0 = datetime(year, month, day, hour=hour_i, minute=minute_i, second=second_i, microsecond=mic_sec_i)
+            return dt0 
+        except:
+            print("GPS timestamp invalid")
+        
 
-        return dt0
+        
 
     def get_gps_freq(self):
         # # # Gets the frequency of the published GPS message and sends a message if there has been a significant change
@@ -301,13 +323,25 @@ class F9P_GPS:
         if isinstance(streamed_data,str):
             if streamed_data.startswith("$GNGST"):
                 gst_parse = pynmea2.parse(streamed_data)
-                self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
+
+                try:
+                    self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
+                except:
+                    print("hAcc is invalid")
+
                 #print(self.hAcc)
             if streamed_data.startswith("$GNGGA"):
                 gga_parse = pynmea2.parse(streamed_data)
-                self.gga_gps_qual = int(gga_parse.gps_qual)
-                self.num_sats = int(gga_parse.num_sats)         # Number of satellites
-                self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
+                try:
+                    self.gga_gps_qual = int(gga_parse.gps_qual)
+                    self.num_sats = int(gga_parse.num_sats)         # Number of satellites
+                except:
+                    print("GPS_quality value invalid")
+                
+                try:
+                    self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
+                except:
+                    print("hor_dil value invalid") 
                 try:
                     self.geo_sep = float(gga_parse.geo_sep)         # Geoid separation
                 except:
@@ -315,12 +349,13 @@ class F9P_GPS:
             if streamed_data.startswith("$GNGNS"):
                 gns_parse = pynmea2.parse(streamed_data)
                 # self.pos_mode = int(gns_parse.mode_indicator)
-                self.num_sats = int(gns_parse.num_sats)             # Number of satellites
-                self.hor_dil = float(gns_parse.hdop)                # Horizontal dilution of precision (HDOP)
+
                 try:
+                    self.num_sats = int(gns_parse.num_sats)             # Number of satellites
+                    self.hor_dil = float(gns_parse.hdop)                # Horizontal dilution of precision (HDOP)
                     self.geo_sep = float(gns_parse.geo_sep)         # Geoid separation
                 except:
-                    print("Geoid separation value invalid")
+                    print("GNS information invalid")
             if streamed_data.startswith("$GNGSA"):      # Full satellite information
                 gsa_parse = pynmea2.parse(streamed_data)
                 # Add parser here (?)
