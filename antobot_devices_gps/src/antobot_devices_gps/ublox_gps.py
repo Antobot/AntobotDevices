@@ -394,8 +394,8 @@ class UbloxGps(object):
         start_pattern=b"$"
         end_pattern = b"\r\n"
         count=0
-        print("in serial readbuffer function")
-        print("time before while",datetime.datetime.now())
+        #print("in serial readbuffer function")
+        #print("time before while",datetime.datetime.now())
         while (count<buff):
             data = self.hard_port.read(1)
             
@@ -405,10 +405,10 @@ class UbloxGps(object):
             if (data == b"\n"):
                 count =count+1
                 #print(buffer)
-        print("time after while",datetime.datetime.now())
-        print("print buffer:")
-        print(buffer) 
-        print("end print")       
+        #print("time after while",datetime.datetime.now())
+        #print("print buffer:")
+        #print(buffer) 
+        #print("end print")       
         start_idx = buffer.rfind(start_pattern)
         #print("start_idx:",start_idx)
         if start_idx != -1:  # Start pattern found
@@ -416,8 +416,8 @@ class UbloxGps(object):
             if end_idx != -1:  # End pattern found
                 sentence = buffer[start_idx:end_idx + len(end_pattern)]
                 buffer = buffer[end_idx + len(end_pattern):]
-                print( "sentence:", sentence)
-                print("time sentence",datetime.datetime.now())
+                #print( "sentence:", sentence)
+                #print("time sentence",datetime.datetime.now())
                 #print("buffer:",buffer)
                 
                 return sentence.decode('utf-8')  # Decode the bytes into a string
@@ -956,12 +956,12 @@ class sfeSpiWrapper(object):
             if (data == [255] ):
                 
                 if count>0:
-                    print("has poll all the data in buffer")
+                    #print("has poll all the data in buffer")
                     break
                 else:
                     no_gps_count=no_gps_count+1
                     if no_gps_count>8:
-                        print("no gps data from buffer")
+                        #print("no gps data from buffer")
                         return
             else:
                 buffer.extend(data) 
@@ -969,20 +969,20 @@ class sfeSpiWrapper(object):
                     count =count+1
 
             
-                    print("count in while loop:",count)
+                    #print("count in while loop:",count)
         #print("time after while",datetime.datetime.now())
         #print("print buffer:",buffer)
         if buff>1:
             start_idx = buffer.rfind(GGA_pattern)
         else:
             start_idx = buffer.rfind(start_pattern)
-        print("start_idx:",start_idx)
+        #print("start_idx:",start_idx)
         if start_idx != -1:  # Start pattern found
             end_idx = buffer.find(end_pattern, start_idx)
             if end_idx != -1:  # End pattern found
                 sentence = buffer[start_idx:end_idx + len(end_pattern)]
                 buffer = buffer[end_idx + len(end_pattern):]
-                print( "sentence:", sentence)
+                #print( "sentence:", sentence)
                 #print("time sentence",datetime.datetime.now())
                 #print("buffer:",buffer)
                 return sentence.decode('utf-8')  # Decode the bytes into a string      
