@@ -25,8 +25,8 @@ from datetime import datetime
 from std_msgs.msg import Bool, String
 
 
-from antobot_devices_msgs.srv import camManager, camManagerResponse
-from antobot_devices_msgs.srv import antoRec, antoRecResponse
+from antobot_manager_msgs.srv import camManager, camManagerResponse
+from antobot_manager_msgs.srv import antoRec, antoRecResponse
 # from antobot_manager_jobs.updateProgressClient import progressUpdateClient
 from antoRecClient import antoRecClient
 
@@ -169,17 +169,6 @@ class cameraManager:
 
         return return_msg
 
-
-    # def updateJobManagerState(self):
-    #     """ Update the camera state in jobManager """
-# 
-    #     serviceState=self.updateClient.checkForService()
-    #     if serviceState: # If the service is available
-    #         managerResponse = self.updateClient.sendProgressUpdate()
-    #     else:
-    #         print('UV Manager: Unable to make request')
-    #         print('UV Manager: ROS service ' + self.updateClient.serviceName + ' is not available')
-    #         # TODO - Add an exception
 
 
 class Camera:
