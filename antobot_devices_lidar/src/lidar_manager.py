@@ -30,7 +30,7 @@ from antobot_manager_software.launchManager import ProcessListener, RoslaunchWra
 
 from sensor_msgs.msg import Temperature, CameraInfo
 from antobot_devices_msgs.srv import lidarManager, lidarManagerResponse
-from antobot_devices_msgs.srv import antoRec
+from antobot_devices_msgs.srv import antoRec, antoRecResponse
 from sensor_msgs.msg import LaserScan
 from antobot_devices_msgs.srv import costmapToggleObservation, costmapToggleObservationRequest
 from std_srvs.srv import Empty, EmptyRequest, EmptyResponse
