@@ -28,17 +28,22 @@ class imuManager():
 
         for device, settings in imu_config.items():
             switch = settings.get("switch", False)
-            mode = settings.get("switch", False)
+            mode = settings.get("mode")
             if switch == True:
                 if device=="urcu":
                     device_bno=True
                     if mode == "navigation":
                         nav_imu = device
+                    else:
+                        nav_imu = "xsens"
+
                 if device == "xsens":
                     device_xsens = True
                     if mode == "navigation":
                         nav_imu = device
-                    
+                    else:
+                        nav_imu = "urcu"
+        print(nav_imu)
         self.createLauncher(device_bno, device_xsens,nav_imu)
 
 
