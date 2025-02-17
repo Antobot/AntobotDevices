@@ -28,13 +28,18 @@ class imuManager():
 
         for device, settings in imu_config.items():
             switch = settings.get("switch", False)
+            mode = settings.get("switch", False)
             if switch == True:
                 if device=="urcu":
                     device_bno=True
+                    if mode = "navigation":
+                        nav_imu = device
                 if device == "xsens":
                     device_xsens = True
+                    if mode = "navigation":
+                        nav_imu = device
                     
-        self.createLauncher(device_bno, device_xsens)
+        self.createLauncher(device_bno, device_xsens,nav_imu)
 
 
 
@@ -50,7 +55,7 @@ class imuManager():
 
 
 
-    def createLauncher(self, device_bno, device_xsens):
+    def createLauncher(self, device_bno, device_xsens,nav_imu):
 
  
         launch = roslaunch.scriptapi.ROSLaunch()
@@ -66,7 +71,7 @@ class imuManager():
             rospy.loginfo("Launching Xsens IMU")
             node_xsens = roslaunch.core.Node(package="xsens_mti_driver",
                                            node_type="xsens_mti_node",
-                                           name="imu_xsens",namespace="xsens_mti_node",output="screen")    
+                                           name="imu_xsens",namespace="/",output="screen")    
             uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
             roslaunch.configure_logging(uuid)
             launch = roslaunch.parent.ROSLaunchParent(uuid, ["/root/catkin_ws/src/towerScan/AntoExternal/xsens_ros_mti_driver/launch/xsens_mti_node.launch"])
@@ -75,16 +80,23 @@ class imuManager():
         elif device_bno  and  device_xsens:
             # When both device are enabled, bno's IMU to remain on the default topic ("imu/data")
             # and rename the xsens’s topic accordingly.
-                
-            rospy.loginfo("Launching BNO's node (bno/imu/data) and XSENS's node  /xsens/imu/data")
-            node_bno = roslaunch.core.Node(package="am_bno055_imu",
-                                           node_type="am_bno055_imu_node",
-                                           name="imu",namespace="bno/imu")
-            launch.launch(node_bno)
-                
             uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
             roslaunch.configure_logging(uuid)
-            cli_args=['xsens_mti_driver','xsens_mti_node.launch','name_space:=xsens']
+            if nav_imu == "urcu":
+                rospy.loginfo("Launching BNO's node (/imu/data) and XSENS's node  /xsens/imu/data")
+                node_bno = roslaunch.core.Node(package="am_bno055_imu",
+                                           node_type="am_bno055_imu_node",
+                                           name="imu",namespace="bno/imu")  
+                cli_args=['xsens_mti_driver','xsens_mti_node.launch','name_space:=xsens']
+            else:
+                rospy.loginfo("Launching BNO's node (/bno/imu/data) and XSENS's node /imu/data")
+                node_bno = roslaunch.core.Node(package="am_bno055_imu",
+                                           node_type="am_bno055_imu_node",
+                                           name="imu",namespace="bno/imu")  
+                cli_args=['xsens_mti_driver','xsens_mti_node.launch','name_space:=/']
+
+
+            launch.launch(node_bno)
             roslaunch_xsens = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
             roslaunch_xsens_args = cli_args[2:]
             launch_files=[(roslaunch_xsens,roslaunch_xsens_args)]
