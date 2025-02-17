@@ -32,11 +32,11 @@ class imuManager():
             if switch == True:
                 if device=="urcu":
                     device_bno=True
-                    if mode = "navigation":
+                    if mode == "navigation":
                         nav_imu = device
                 if device == "xsens":
                     device_xsens = True
-                    if mode = "navigation":
+                    if mode == "navigation":
                         nav_imu = device
                     
         self.createLauncher(device_bno, device_xsens,nav_imu)
@@ -69,13 +69,19 @@ class imuManager():
 
         elif not device_bno  and  device_xsens :
             rospy.loginfo("Launching Xsens IMU")
-            node_xsens = roslaunch.core.Node(package="xsens_mti_driver",
-                                           node_type="xsens_mti_node",
-                                           name="imu_xsens",namespace="/",output="screen")    
+            # node_xsens = roslaunch.core.Node(package="xsens_mti_driver",
+            #                                node_type="xsens_mti_node",
+            #                                name="imu_xsens",namespace="/",output="screen")    
             uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
             roslaunch.configure_logging(uuid)
-            launch = roslaunch.parent.ROSLaunchParent(uuid, ["/root/catkin_ws/src/towerScan/AntoExternal/xsens_ros_mti_driver/launch/xsens_mti_node.launch"])
-            launch.start()
+            cli_args=['xsens_mti_driver','xsens_mti_node.launch']
+            #launch = roslaunch.parent.ROSLaunchParent(uuid, ["/root/catkin_ws/src/towerScan/AntoExternal/xsens_ros_mti_driver/launch/xsens_mti_node.launch"])
+            #launch.start()
+            roslaunch_xsens = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
+            roslaunch_xsens_args = cli_args[2:]
+            launch_files=[(roslaunch_xsens,roslaunch_xsens_args)]
+            parent=roslaunch.parent.ROSLaunchParent(uuid,launch_files)     
+            parent.start()
 
         elif device_bno  and  device_xsens:
             # When both device are enabled, bno's IMU to remain on the default topic ("imu/data")
@@ -86,14 +92,14 @@ class imuManager():
                 rospy.loginfo("Launching BNO's node (/imu/data) and XSENS's node  /xsens/imu/data")
                 node_bno = roslaunch.core.Node(package="am_bno055_imu",
                                            node_type="am_bno055_imu_node",
-                                           name="imu",namespace="bno/imu")  
+                                           name="imu",namespace="imu")  
                 cli_args=['xsens_mti_driver','xsens_mti_node.launch','name_space:=xsens']
             else:
                 rospy.loginfo("Launching BNO's node (/bno/imu/data) and XSENS's node /imu/data")
                 node_bno = roslaunch.core.Node(package="am_bno055_imu",
                                            node_type="am_bno055_imu_node",
                                            name="imu",namespace="bno/imu")  
-                cli_args=['xsens_mti_driver','xsens_mti_node.launch','name_space:=/']
+                cli_args=['xsens_mti_driver','xsens_mti_node.launch']
 
 
             launch.launch(node_bno)
