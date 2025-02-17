@@ -16,7 +16,7 @@ class imuManager():
     def __init__(self):
         device_bno=False
         device_xsens = False
-
+        nav_imu = "urcu"
         rospack = rospkg.RosPack()
         configPath=rospack.get_path('antobot_description')
         config_file = configPath+ "/config/platform_config.yaml"
