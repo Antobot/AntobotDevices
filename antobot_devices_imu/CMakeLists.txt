@@ -1,6 +1,7 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.8)
 project(antobot_devices_imu)
 
+<<<<<<< Updated upstream
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
@@ -12,14 +13,28 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   rospy
 )
+=======
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+>>>>>>> Stashed changes
 
-catkin_package(
-   CATKIN_DEPENDS roscpp sensor_msgs geometry_msgs tf geonav_transform tf2 tf2_ros std_msgs
-)
+# find dependencies
+find_package(ament_cmake REQUIRED)
+# uncomment the following section in order to fill in
+# further dependencies manually.
+# find_package(<dependency> REQUIRED)
 
-include_directories(
-  ${catkin_INCLUDE_DIRS}
-)
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()
 
-add_executable(imu_euler_cpp src/imu_euler_cpp.cpp)
-target_link_libraries(imu_euler_cpp ${catkin_LIBRARIES})
+ament_package()

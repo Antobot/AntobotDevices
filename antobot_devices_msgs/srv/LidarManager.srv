@@ -1,0 +1,5 @@
+string lidar_name		    # front, rear
+int8 command			# 0 - turn off, 1 - turn on, 2 - disable in costmap, 3 - enable in costmap
+---
+int8 response_code		# True - success, False - failure
+string response_string   # Additional info
