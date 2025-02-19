@@ -256,7 +256,6 @@ class lidarManagerClass:
 
         try:
             device_type = rospy.get_param("/device_type",'robot') #Add default value - used when not launching with softwareManager
-            # path = rospack.get_path('antobot_platform_' + device_type)
             path = rospack.get_path('antobot_description')
             with open(path+'/config/platform_config.yaml','r') as file:
                 params = yaml.safe_load(file)
