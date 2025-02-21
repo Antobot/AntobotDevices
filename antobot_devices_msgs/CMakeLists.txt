@@ -1,31 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project(antobot_devices_msgs)
 
-<<<<<<< Updated upstream
-add_compile_options(-std=c++11)
 
-find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  std_msgs
-  message_generation
-)
-
-add_message_files(
-  FILES
-  gpsQual.msg
-)
-
-add_service_files(
-  FILES
-  costmapToggleObservation.srv
-  lidarManager.srv
-  progressUpdate.srv
-)
-
-generate_messages(
-    DEPENDENCIES
-    std_msgs
-=======
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -45,7 +21,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/LidarManager.srv"
   "srv/ProgressUpdate.srv"
   DEPENDENCIES std_msgs builtin_interfaces
->>>>>>> Stashed changes
 )
 
 if(BUILD_TESTING)
