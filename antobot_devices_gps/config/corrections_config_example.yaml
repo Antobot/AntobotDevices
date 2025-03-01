@@ -1,23 +1,19 @@
 ### YAML file for the MQTT configuration
 
 ant_mqtt:
-  device_ID: '00'
-  base_ID: '00'
+  robot_ID: 'xxx'
+  baseStation_ID: 'xxx' #
 
-  mqtt_Broker: '117.184.79.186'  
+  mqtt_Broker: '117.186.197.2'  
   mqtt_Port: 18383
   mqtt_keepalive: 60 
-  mqtt_UserName: 'antobot'
-  mqtt_PassWord: '1qaz@WSX'
+  mqtt_UserName: 'xxx'
+  mqtt_PassWord: 'xxx'
 
 ppp:
   # device_ID: '3ae678bd-b829-4dbb-acc4-2d041c3afda1' # purple
   device_ID: '58bab427-cbcd-4954-ab76-b49d68d8893d' # silver
   #device_ID = '46dcca18-f2e3-4eaf-b366-fad4997ca869' #ONLY FOR BLUE
-
-
-
-
 
 
 
