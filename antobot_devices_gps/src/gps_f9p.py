@@ -93,7 +93,7 @@ class F9P_GPS:
         self.gps_dev.ubx_set_val(0x10530005,0x01) #cfg-uart2-enable
 
         
-    def get_gps(self):
+    def get_gps(self,event=None):
         # Get the data from the F9P
         if self.method == "poll":
             self.geo = self.gps_dev.geo_coords() #poll method
@@ -397,19 +397,20 @@ def main(args):
     rospy.init_node('rtk', anonymous=True)
     
     gps_f9p = F9P_GPS("urcu")
-    if gps_f9p.method == "poll":
-        rate = rospy.Rate(8)  # 8hz
-    if gps_f9p.method == "stream":
-        rate = rospy.Rate(50)  # 8hz
-
     baudrate_rtk = 460800#38400            # Need to resolve baudrate
     gps_f9p.uart2_config(baudrate_rtk)
-
     mode = 2 # 1: RTK base station; 2: PPP-IP; 3: LBand
-    while not rospy.is_shutdown():
-        gps_f9p.get_gps()
+    
 
-        rate.sleep()
+    if gps_f9p.method == "poll":
+        gpsRate=8  # 8hz
+    if gps_f9p.method == "stream":
+        gpsRate=50  # 50hz
+
+    rospy.Timer(rospy.Duration(1/gpsRate), gps_f9p.get_gps)  # Runs periodically without blocking
+    rospy.spin() 
+
+
 
 
 if __name__ == '__main__':   
