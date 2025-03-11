@@ -156,19 +156,24 @@ class gpsManager():
 
         return gps_cls
     
-    def check_gps(self):
+    def check_gps(self,event=None):
         # Checks whether there have been any changes to the robot's network
 
-        for gps_node in self.gps_nodes:
-            if gps_node.node_type == "gps_f9p":
-                self.check_gps_node(gps_node)
+        if not self.launch_nodes:
+            for gps_node in self.gps_nodes:
+                if gps_node.node_type == "gps_f9p":
+                    self.check_gps_node(gps_node)
 
         return
     
+
+
+
+
     async def check_gps_async(self):
 
         MB = await self.create_MovingBase()
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown(): # this isn't rate limited, so shouldn't have wasted time
             try:
 
                 self.check_gps_node(self.urcu_gps_node)
@@ -196,8 +201,6 @@ def main():
     rospy.init_node ('gpsManager') 
     gpsMgr = gpsManager()
 
-    rate = rospy.Rate(50)  # check at 50hz
-    # rate = rospy.Rate(1) # check at 1hz
 
     # If movingbase is being used with dual-GPS
     if gpsMgr.movingbase:
@@ -209,12 +212,9 @@ def main():
             GPIO.cleanup()
             loop.close()
     else:       # Most other situations
-        while not rospy.is_shutdown():
-            if not gpsMgr.launch_nodes:
-                gpsMgr.check_gps()
-            rate.sleep()
-
-
+        rospy.Timer(rospy.Duration(0.02), gpsMgr.check_gps)  # Runs periodically without blocking
+        rospy.spin() 
+        
 
 if __name__ == '__main__':
     main()
