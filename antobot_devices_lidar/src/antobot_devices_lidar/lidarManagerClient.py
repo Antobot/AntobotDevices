@@ -13,10 +13,12 @@ class lidarManagerClient():
         self.lidarManagerClient = rospy.ServiceProxy(self.serviceName, lidarManager)
 
         # Message contents
-        self.lidarName='front'  # front, rear
-        self.command=0			# 0 - turn off, 1 - turn on, 2 - disable in costmap, 3 - enable in costmap
+        self.frontPowerOn=False			  # Turn on/off 
+        self.frontCostmapEnable=False     # Enable/disable in costmap
+        self.rearPowerOn=False			  # Turn on/off 
+        self.rearCostmapEnable=False      # Enable/disable in costmap
 
-
+       
     def checkForService(self):
         service_list = rosservice.get_service_list()
         if self.serviceName in service_list:
@@ -26,10 +28,10 @@ class lidarManagerClient():
 
     def updateLidar(self):
         
-        moveToDropoffResponse = self.lidarManagerClient(self.lidarName,self.command)
+        lmResponse = self.lidarManagerClient(self.frontPowerOn,self.frontCostmapEnable,self.rearPowerOn,self.rearCostmapEnable)
 
-        print('Lodar Manager Client: '+ moveToDropoffResponse.responseString)
-        return moveToDropoffResponse
+        print('Lidar Manager Client: '+ lmResponse.responseString)
+        return lmResponse
 
 
 
