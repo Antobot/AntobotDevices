@@ -391,10 +391,7 @@ def main(args):
         costmapMgr = costmapManager()
         print('Costmap Manager started')
 
-    rate = rospy.Rate(10) # 10hz
-
-    while not rospy.is_shutdown():
-        rate.sleep()
+    rospy.spin()
 
 if __name__ == '__main__':
     main(sys.argv)

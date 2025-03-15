@@ -127,9 +127,7 @@ def main():
         try:
             rospy.init_node('imuManager')
             imuMgr = imuManager()
-            rate = rospy.Rate(50) 
-            while not rospy.is_shutdown():
-                rate.sleep()
+            rospy.spin()
         except KeyboardInterrupt:
             rospy.loginfo("Shutting down launcher...")
         finally:
