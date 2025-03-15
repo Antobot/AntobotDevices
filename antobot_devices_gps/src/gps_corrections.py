@@ -19,26 +19,41 @@ import time
 import yaml
 import paho.mqtt.client as mqtt
 import rospy, rospkg
+import importlib
+import serial
 
 
 class gpsCorrections():
-    def __init__(self, dev_type, corr_type, serial_port=None):
+    def __init__(self, dev_type=None, corr_type="ppp", serial_port=None):
         # # # Initialisation of GPS corrections class
         #     Inputs: dev_type - the type of device that this script is running on
         #           "urcu" - the URCU; Jetson-based packages should be used
         #           "rasPi" - antoScout or another rasPi-based system; rasPi-compatible packages should be used
 
-        # Importing device-specific packages
-        if dev_type == "urcu":
-            import serial
-            import Jetson.GPIO as GPIO
-        elif dev_type == "rasPi":
-            print("importing rasPi specific packages!")
+
         
         self.corr_type = corr_type
 
         # Reading configuration file
         rospack = rospkg.RosPack()
+        packagePath=rospack.get_path('antobot_description')
+        path = packagePath + "/config/platform_config.yaml"
+
+        with open(path, 'r') as yamlfile:
+            data = yaml.safe_load(yamlfile)
+            dev_type = data['gps'].keys()
+        # Importing device-specific packages
+        print(dev_type)
+        if "urcu" in dev_type :
+            print("in urcu type")
+            GPIO = importlib.import_module("Jetson.GPIO") 
+            dev_port = "/dev/ttyTHS0"
+            baud = 460800
+            self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
+        elif "f9p_usb" in dev_type:
+            self.serial_port = serial.Serial(port="/dev/ttyUSB0", baudrate=460800)
+
+            
         packagePath=rospack.get_path('antobot_devices_gps')
         print("packagePath: {}".format(packagePath))
         yaml_file_path = packagePath + "/config/corrections_config.yaml"
@@ -46,7 +61,7 @@ class gpsCorrections():
             config = yaml.safe_load(file)
             self.ppp_client_id = config['ppp']['device_ID']
             self.ppp_server = 'pp.services.u-blox.com'
-
+            
             self.ant_client_id = "anto_rtk_" + config['ant_mqtt']['robot_ID']
             self.ant_mqtt_topic_sub = "AntoCom/02/" + config['ant_mqtt']['base_ID'] + "/00"
             self.ant_broker = config['ant_mqtt']['mqtt_Broker']
@@ -55,14 +70,7 @@ class gpsCorrections():
             mqtt_username = config['mqtt_UserName']
             mqtt_password = config['mqtt_PassWord']
 
-        # Setting up hardware ports
-        if serial_port == None:
-            dev_port = "/dev/ttyTHS0"
-            baud = 460800
-            self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
-            # May need a different option for antoScout
-        else:
-            self.serial_port = serial_port
+
 
         # Configuring method-specific parameters (MQTT)
         if self.corr_type == "ppp":
@@ -73,7 +81,7 @@ class gpsCorrections():
             self.connect = False
 
         # If the uRCU is being used, the appropriate GPIO pin must be set to "high" to enable corrections from Xavier 
-        if dev_type == "urcu":
+        if "urcu" in dev_type:
             # Set the GPIO pin of the URCU high
             self.gpio01 = 29
             self.GPIO = GPIO
@@ -131,9 +139,8 @@ class gpsCorrections():
 
 
 def main():
+    gps_corr = gpsCorrections() # corr_type="ppp" or "anto_mqtt"
     
-    gps_corr = gpsCorrections("urcu", "ppp") # "ppp" or "anto_mqtt"
-
     gps_corr.client.loop_start()
     while(True):
         time.sleep(1)
