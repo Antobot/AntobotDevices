@@ -63,12 +63,12 @@ class gpsCorrections():
             self.ppp_server = 'pp.services.u-blox.com'
             
             self.ant_client_id = "anto_rtk_" + config['ant_mqtt']['robot_ID']
-            self.ant_mqtt_topic_sub = "AntoCom/02/" + config['ant_mqtt']['base_ID'] + "/00"
+            self.ant_mqtt_topic_sub = "AntoCom/02/" + config['ant_mqtt']['baseStation_ID'] + "/00"
             self.ant_broker = config['ant_mqtt']['mqtt_Broker']
             self.ant_mqtt_port = config['ant_mqtt']['mqtt_Port']
             self.mqtt_keepalive = config['ant_mqtt']['mqtt_keepalive']
-            mqtt_username = config['mqtt_UserName']
-            mqtt_password = config['mqtt_PassWord']
+            mqtt_username = config['ant_mqtt']['mqtt_UserName']
+            mqtt_password = config['ant_mqtt']['mqtt_PassWord']
 
 
 
@@ -112,7 +112,8 @@ class gpsCorrections():
                 self.client.connect(self.ppp_server, port=8883)
             elif self.corr_type == "ant_mqtt":
                 self.client.connect(self.ant_broker, self.ant_mqtt_port, self.mqtt_keepalive)
-        except:
+        except Exception as e:
+            print(e)
             print("Trying to connect ...")
 
         time.sleep(2)
@@ -139,7 +140,7 @@ class gpsCorrections():
 
 
 def main():
-    gps_corr = gpsCorrections() # corr_type="ppp" or "anto_mqtt"
+    gps_corr = gpsCorrections(corr_type="ant_mqtt") # corr_type="ppp" or "anto_mqtt"
     
     gps_corr.client.loop_start()
     while(True):
