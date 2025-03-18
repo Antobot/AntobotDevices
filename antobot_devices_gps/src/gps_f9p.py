@@ -274,7 +274,7 @@ class F9P_GPS:
             self.pull_buff = 24
         self.poll_buff_pre=self.poll_buff
         
-        print("pulled sentence:",self.poll_buff)            
+        #print("pulled sentence:",self.poll_buff)            
         
     def get_gps_timestamp_utc(self):
 
