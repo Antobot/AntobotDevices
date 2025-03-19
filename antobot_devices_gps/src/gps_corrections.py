@@ -112,9 +112,11 @@ class gpsCorrections():
                 self.client.connect(self.ppp_server, port=8883)
             elif self.corr_type == "ant_mqtt":
                 self.client.connect(self.ant_broker, self.ant_mqtt_port, self.mqtt_keepalive)
+            
+            # TODO change SN4010
+            # rospy.loginfo("SN4010: Connected to MQTT broker successfully.")
         except Exception as e:
-            print(e)
-            print("Trying to connect ...")
+            rospy.logerror("SN4010: Connected to MQTT broker failed. ({e})")
 
         time.sleep(2)
         
@@ -127,8 +129,9 @@ class gpsCorrections():
                 self.client.subscribe(userdata['topics'])
             elif self.corr_type == "ant_mqtt":
                 self.client.subscribe(self.ant_mqtt_topic_sub)
+            rospy.loginfo("SN4010: Connected to broker successfully")
         else: 
-            print("Connection failed!", rc)
+            rospy.logerror("SN4010: Connected to broker failed. (rc = {rc})")
 
     # The callback for when a PUBLISH message is received from the server.
     def on_message(self,client,userdata, msg):
@@ -140,13 +143,20 @@ class gpsCorrections():
 
 
 def main():
+
+    rospy.init_node('gpsCorrections') 
+
     gps_corr = gpsCorrections(corr_type="ant_mqtt") # corr_type="ppp" or "anto_mqtt"
     
     gps_corr.client.loop_start()
-    while(True):
-        time.sleep(1)
-        #print("Running")
 
+    rate = rospy.Rate(1) # 1hz
+
+    while not rospy.is_shutdown():
+        print("gpsCorrections is running") # for test
+        rate.sleep()
+
+    gps_corr.client.loop_stop()
 
 if __name__ == '__main__':
     main()
