@@ -116,7 +116,7 @@ class gpsCorrections():
             # TODO change SN4010
             # rospy.loginfo("SN4010: Connected to MQTT broker successfully.")
         except Exception as e:
-            rospy.logerror("SN4010: Connected to MQTT broker failed. ({e})")
+            rospy.logerr("SN4010: Connected to MQTT broker failed. ({e})")
 
         time.sleep(2)
         
@@ -131,15 +131,18 @@ class gpsCorrections():
                 self.client.subscribe(self.ant_mqtt_topic_sub)
             rospy.loginfo("SN4010: Connected to broker successfully")
         else: 
-            rospy.logerror("SN4010: Connected to broker failed. (rc = {rc})")
+            rospy.logerr("SN4010: Connected to broker failed. (rc = {rc})")
 
     # The callback for when a PUBLISH message is received from the server.
     def on_message(self,client,userdata, msg):
         # write the corrections via UART2
-        if self.corr_type == "ppp":
-            data = userdata['gnss'].write(msg.payload)
-        elif self.corr_type == "ant_mqtt":
-            data = self.serial_port.write(msg.payload)
+        try:
+            if self.corr_type == "ppp":
+                data = userdata['gnss'].write(msg.payload)
+            elif self.corr_type == "ant_mqtt":
+                data = self.serial_port.write(msg.payload)
+        except Exception as e:
+            rospy.logerr("SN4010: Write the corrections failed. (e)")
 
 
 def main():
