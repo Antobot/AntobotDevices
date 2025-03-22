@@ -142,7 +142,10 @@ class gpsCorrections():
             elif self.corr_type == "ant_mqtt":
                 data = self.serial_port.write(msg.payload)
         except Exception as e:
-            rospy.logerr("SN4010: Write the corrections failed. (e)")
+            rospy.logerr(f"SN4010: Write the corrections failed. ({e})")
+            dev_port = "/dev/ttyTHS0"
+            baud = 460800
+            self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
 
 
 def main():
@@ -156,7 +159,7 @@ def main():
     rate = rospy.Rate(1) # 1hz
 
     while not rospy.is_shutdown():
-        print("gpsCorrections is running") # for test
+        #print("gpsCorrections is running") # for test
         rate.sleep()
 
     gps_corr.client.loop_stop()
