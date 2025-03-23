@@ -62,13 +62,14 @@ class gpsCorrections():
             self.ppp_client_id = config['ppp']['device_ID']
             self.ppp_server = 'pp.services.u-blox.com'
             
-            self.ant_client_id = "anto_rtk_" + config['ant_mqtt']['robot_ID']
-            self.ant_mqtt_topic_sub = "AntoCom/02/" + config['ant_mqtt']['baseStation_ID'] + "/00"
-            self.ant_broker = config['ant_mqtt']['mqtt_Broker']
-            self.ant_mqtt_port = config['ant_mqtt']['mqtt_Port']
-            self.mqtt_keepalive = config['ant_mqtt']['mqtt_keepalive']
-            mqtt_username = config['ant_mqtt']['mqtt_UserName']
-            mqtt_password = config['ant_mqtt']['mqtt_PassWord']
+            if self.corr_type == "ant_mqtt":
+                self.ant_client_id = "anto_rtk_" + config['ant_mqtt']['robot_ID']
+                self.ant_mqtt_topic_sub = "AntoCom/02/" + config['ant_mqtt']['baseStation_ID'] + "/00"
+                self.ant_broker = config['ant_mqtt']['mqtt_Broker']
+                self.ant_mqtt_port = config['ant_mqtt']['mqtt_Port']
+                self.mqtt_keepalive = config['ant_mqtt']['mqtt_keepalive']
+                mqtt_username = config['ant_mqtt']['mqtt_UserName']
+                mqtt_password = config['ant_mqtt']['mqtt_PassWord']
 
 
 
