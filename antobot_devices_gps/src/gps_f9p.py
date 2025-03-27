@@ -67,7 +67,7 @@ class F9P_GPS:
         self.gps_freq_status = "Critical"
         self.gps_time_buf = []
         self.hAcc = 500
-        self.h_acc_thresh = 75  # 
+        self.h_acc_thresh = 0.1  # 
        
         current_time = rospy.Time.now()
         self.gps_time_i=0.1
