@@ -46,12 +46,6 @@ from antobot_devices_gps.movingbase import MovingBase
 
 class MovingBase_Ros:
     def __init__(self, base_port_uart, rover_port, base_port_spi, mode=1):
-        
-        # GPIO
-        GPIO = importlib.import_module("Jetson.GPIO")
-        gpioID = 29
-        GPIO.setmode(GPIO.BOARD)
-        GPIO.setup(gpioID, GPIO.OUT)
 
         self.node_type = "movingbase"
         self.base_port_uart = base_port_uart
@@ -194,6 +188,4 @@ if __name__ == '__main__':
     try:
         loop.run_until_complete(movebase.main())
     except Exception as e:
-        GPIO = importlib.import_module("Jetson.GPIO")    
-        GPIO.cleanup()
         loop.close()
