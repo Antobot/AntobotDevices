@@ -44,7 +44,7 @@ import importlib
 from antobot_devices_gps.movingbase import MovingBase
 
 class MovingBase_Ros:
-    def __init__(self, base_port_uart, rover_port, base_port_spi, mode):
+    def __init__(self, base_port_uart, rover_port, base_port_spi, mode=1):
         
         self.node_type = "movingbase"
         GPIO = importlib.import_module("Jetson.GPIO")
@@ -125,7 +125,7 @@ class MovingBase_Ros:
             rospy.loginfo(f"SN4022: Heading Frequency status: Good (>{self.freq_high} hz)")
             self.heading_freq_status = "Good"
     
-    def calculate_enu_angle(xA, yA, xB, yB):
+    def calculate_enu_angle(self, xA, yA, xB, yB):
         # Compute the differences in the ENU (East-North) coordinate system
         dx = xB - xA  # East-West difference (X axis)
         dy = yB - yA  # North-South difference (Y axis)
