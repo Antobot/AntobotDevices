@@ -201,7 +201,6 @@ def main():
     rospy.init_node ('gpsManager') 
     gpsMgr = gpsManager()
 
-
     # If movingbase is being used with dual-GPS
     if gpsMgr.movingbase:
         loop = asyncio.get_event_loop()

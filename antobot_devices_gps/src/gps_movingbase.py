@@ -37,6 +37,7 @@ import rospy,rostopic
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8
+from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float64
 import importlib
 #import Jetson.GPIO as GPIO
@@ -45,9 +46,8 @@ from antobot_devices_gps.movingbase import MovingBase
 
 class MovingBase_Ros:
     def __init__(self, base_port_uart, rover_port, base_port_spi, mode=1):
-        
+
         self.node_type = "movingbase"
-        GPIO = importlib.import_module("Jetson.GPIO")
         self.base_port_uart = base_port_uart
         self.rover_port = rover_port
         self.base_port_spi = base_port_spi
@@ -60,8 +60,9 @@ class MovingBase_Ros:
 
         self.time_buf_len = 10
 
-        self.pub_heading_urcu = rospy.Publisher('antobot_heading_urcu', Float64, queue_size=10)
-        self.pub_heading_robot = rospy.Publisher('antobot_heading_robot', Float64, queue_size=10)
+        self.pub_heading_urcu = rospy.Publisher('/antobot_gps/heading/urcu', Float64, queue_size=10)
+        self.pub_heading_robot = rospy.Publisher('/antobot_gps/heading/robot', Float64, queue_size=10)
+        self.pub_relposned = rospy.Publisher('/antobot_gps/relposned', Vector3, queue_size=10)
         self.heading_hz = 0
         self.heading_freq_status = None
         self.heading_time_buf = []
@@ -77,7 +78,7 @@ class MovingBase_Ros:
 
         self.robot_angle_correction = self.calculate_enu_angle(urcu_px, urcu_py, rover_px, rover_py)
 
-    def pub_head(self, frame):
+    def ros_pub_relposned(self, frame):
 
         if frame:
             self.heading_time_buf.append(time.time())
@@ -94,6 +95,14 @@ class MovingBase_Ros:
                 msgs = Float64()
                 msgs.data = ((enu_heading) - self.robot_angle_correction)%360.0 # Normalise the result to be within 0 to 360
                 self.pub_heading_robot.publish(msgs)
+
+                # Publish the relative position in north, east, down directions
+                relposned = Vector3()
+                relposned.x = frame.relPosN
+                relposned.y = frame.relPosE
+                relposned.z = frame.relPosD
+                self.pub_relposned(relposned)
+
                 
         elif len(self.heading_time_buf) > 0:
             self.heading_time_buf.pop(0)
@@ -160,7 +169,7 @@ class MovingBase_Ros:
         while True:
             try:
                 headFrame = await MB.get_RELPOSNEDframe()
-                self.pub_head(headFrame)
+                self.ros_pub_relposned(headFrame)
 
             except:
                 rospy.logerr(f"MovingBase: Close the MovingBase node")
@@ -169,27 +178,14 @@ class MovingBase_Ros:
 if __name__ == '__main__':
     
     rospy.init_node("nRTK", disable_signals=True)
-    
-   
-    # GPIO
-    gpioID = 29
-    GPIO.setmode(GPIO.BOARD)
-    GPIO.setup(gpioID, GPIO.OUT)
 
     base_port_uart = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
     rover_port = rospy.get_param("/gps/ublox_rover/device_port","/dev/AntoF9P")
     base_port_spi = None
-    
-    rtk_type = rospy.get_param("/gps/urcu/rtk_type","ppp") # or "base_station"
-    if rtk_type == "ppp":
-        mode = 2
-    else:
-        mode = 1 #1: RTK base station, 2: PPP-IP
 
-    movebase = MovingBase_Ros(base_port_uart, rover_port, base_port_spi, mode)
+    movebase = MovingBase_Ros(base_port_uart, rover_port, base_port_spi, mode=1)
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(movebase.main())
-    except Exception as e:     
-        GPIO.cleanup()
+    except Exception as e:
         loop.close()

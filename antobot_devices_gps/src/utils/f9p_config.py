@@ -56,6 +56,8 @@ class F9P_config:
             packet[4] = 0x0a
         elif length==17:
             packet[4] = 0x09
+        elif length==20:
+            packet[4] = 0x0c
         else:
             length_i = length - 8
             print("length_i: {}".format(length_i))
@@ -462,7 +464,7 @@ class F9P_config:
 
 if __name__ == '__main__':
     
-    moving_base = False
+    moving_base = True
     scout_box = False
     rospack = rospkg.RosPack()
     packagePath=rospack.get_path('antobot_description')

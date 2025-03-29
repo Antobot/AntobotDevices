@@ -204,6 +204,11 @@ class MovingBase:
             iTOW = struct.unpack('<i', relposnedMessage[10:14])[0]
             #print(f"iTOW: {iTOW/1000}s")
 
+            # North, East, and Down components of the 
+            relPosN = struct.unpack('<i', relposnedMessage[14:18])[0]
+            relPosE = struct.unpack('<i', relposnedMessage[18:22])[0]
+            relPosD = struct.unpack('<i', relposnedMessage[22:26])[0]
+
             relPosLength = struct.unpack('<i', relposnedMessage[26:30])[0]   # cm
             relPosHeading = struct.unpack('<i', relposnedMessage[30:34])[0]  # deg, 1e-5
             accLength = struct.unpack('<I', relposnedMessage[54:58])[0]      # mm, 0.1
@@ -219,7 +224,7 @@ class MovingBase:
             relPosHeadingValid = bool(flags & 0b100000000)
             relPosNormalized = bool(flags & 0b1000000000) 
 
-            relposnedFrame = MovingBase.RELPOSNEDFrame(iTOW, relPosLength, relPosHeading, accLength, accHeading, 
+            relposnedFrame = MovingBase.RELPOSNEDFrame(iTOW, relPosN, relPosE, relPosD, relPosLength, relPosHeading, accLength, accHeading, 
                                         flag_gnssFixOK, flag_diffSoln, flag_relPosValid, flag_carrSoln, 
                                         flag_isMoving, relPosHeadingValid, relPosNormalized)
 
@@ -315,6 +320,9 @@ class MovingBase:
     @dataclass
     class RELPOSNEDFrame:
         iTOW: int                 # GPS time of week of the navigation epoch. (ms)
+        relPosN: int              # North component of relative position vector
+        relPosE: int              # East component of relative position vector
+        relPosD: int              # Down component of relative position vector
         relPosLength: int         # Length of the relative position vector  (cm)
         relPosHeading: int        # Heading of the relative position vector (1e-5 deg)
         accLength: int            # Accuracy of length of the relative position vector (0.1 mm)
@@ -381,6 +389,9 @@ class MovingBase:
         return movebase
     
     async def get_RELPOSNEDframe(self):
+
+        # self._protocol_rover is an asyncio serial connection (defined in line 363)
+        # its frames are 
         try:
             result = await asyncio.wait_for(self._protocol_rover.frames.get(), timeout=self.time_limit)
             return result
