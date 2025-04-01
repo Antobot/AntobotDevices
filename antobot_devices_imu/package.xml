@@ -17,4 +17,8 @@
   <depend>geonav_transform</depend>
   <depend>antobot_manager_software</depend>
   <depend>std_msgs</depend>
+  <build_depend>rospy</build_depend>
+  <build_export_depend>rospy</build_export_depend>
+  <exec_depend>rospy</exec_depend>
+
 </package>

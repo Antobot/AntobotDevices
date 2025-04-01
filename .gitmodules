@@ -1,0 +1,3 @@
+[submodule "AntobotCamera"]
+	path = AntobotCamera
+	url = https://github.com/Antobot/AntobotCamera.git

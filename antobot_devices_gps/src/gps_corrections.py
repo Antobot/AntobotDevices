@@ -140,6 +140,7 @@ class gpsCorrections():
 
 
 def main():
+    rospy.init_node ('gpsCorrections') 
     gps_corr = gpsCorrections()
     
     gps_corr.client.loop_start()

@@ -17,4 +17,9 @@
   <depend>geonav_transform</depend>
   <depend>antobot_manager_software</depend>
   <depend>std_msgs</depend>
+
+  <build_depend>python3</build_depend>
+  <exec_depend>python3</exec_depend>
+
 </package>
+

@@ -1,5 +1,7 @@
-string lidarName		    # front, rear
-int8 command			# 0 - turn off, 1 - turn on, 2 - disable in costmap, 3 - enable in costmap
+bool frontPowerOn			# Turn on/off 
+bool frontCostmapEnable     # Enable/disable in costmap
+bool rearPowerOn			# Turn on/off 
+bool rearCostmapEnable      # Enable/disable in costmap
 ---
 int8 responseCode		# True - success, False - failure
 string responseString   # Additional info
