@@ -459,11 +459,8 @@ class F9P_config:
         packet = self.cfg_valget_uart2_baudrate()
         self.port.writebytes(packet)
         print('set uart2 baud 460800')
-        
 
-
-if __name__ == '__main__':
-    
+def configure_f9p():
     moving_base = True
     scout_box = False
     rospack = rospkg.RosPack()
@@ -530,3 +527,10 @@ if __name__ == '__main__':
         packet = f9p_cfg.receive_gps()
         f9p_cfg.write(packet)
         received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()     
+
+        
+
+
+if __name__ == '__main__':
+    configure_f9p()
+    
