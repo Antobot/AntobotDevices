@@ -512,9 +512,10 @@ def configure_f9p():
         received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()
         #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
 
+        packet = f9p_cfg.revert_to_default_mode()
+
         # revert to the default mode
         if moving_base:
-            packet = f9p_cfg.revert_to_default_mode()
             f9p_cfg.write(packet)
 
         #configure the f9p to block unwanted messages
