@@ -51,7 +51,7 @@ class gpsCorrections():
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
         elif "f9p_usb" in dev_type:
-            self.serial_port = serial.Serial(port="/dev/ttyUSB0", baudrate=460800)
+            self.serial_port = serial.Serial(port="/dev/ttyUSB0", baudrate=38400)  #460800
 
             
         packagePath=rospack.get_path('antobot_devices_gps')
@@ -75,7 +75,7 @@ class gpsCorrections():
 
         # Configuring method-specific parameters (MQTT)
         if self.corr_type == "ppp":
-            dev_port = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
+            dev_port = rospy.get_param("/gps/urcu/device_port","/dev/ttyUSB1")
             self.mqtt_topics = [(f"/pp/ip/eu", 0), ("/pp/ubx/mga", 0), ("/pp/ubx/0236/ip", 0)]
             self.userdata = { 'gnss': self.serial_port, 'topics': self.mqtt_topics } 
         elif self.corr_type == "ant_mqtt":

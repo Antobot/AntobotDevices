@@ -329,6 +329,32 @@ class F9P_config:
                 enable_text = "Enabled"
             print("GPS Config: UART2 RTCM" + msg + " Message " + enable_text + "\n")
 
+    def set_rtcm_messages_uart(self):
+        all_messages = ['1074','1084','1094','1124','1230','4072']
+
+        for msg in all_messages:
+            if msg == '1074':
+                key_id = 0x60
+            elif msg == '1084':
+                key_id = 0x65
+            elif msg == '1094':
+                key_id = 0x6a
+            elif msg == '1124':
+                key_id = 0x6f
+            elif msg == '1230':
+                key_id = 0x05
+            elif msg == '4072':
+                key_id = 0x00
+
+            enable = True
+
+            packet = self.config_uart2_rtcm_msg(key_id, enable)
+            self.port.write(packet)
+
+            enable_text = "Disabled"
+            if enable:
+                enable_text = "Enabled"
+            print("GPS Config: UART2 RTCM" + msg + " Message " + enable_text + "\n")
     def config_uart2_rtcm_msg(self, key_id, enable):
         # prepare packet
         length = 18
@@ -458,7 +484,17 @@ class F9P_config:
         self.port.writebytes(packet)
         print('set uart2 baud 460800')
         
+    def config_uart2_rtcm_uart(self):
+        ## Configure the F9P chip to be able to output RTCM messages for the dual-GPS setup (moving base)
 
+        ## HPG 1.32
+        self.set_rtcm_messages_uart()
+
+        # set uart_2 baud 460800
+        packet = self.cfg_valget_uart2_baudrate()
+        self.port.write(packet)
+        print('set uart2 baud 460800')
+        
 
 if __name__ == '__main__':
     
@@ -483,17 +519,17 @@ if __name__ == '__main__':
     if moving_base:
         meas_rate = 5
 
-
+    print(device)
     if device=="uart":
-        uart = serial.Serial(port='/dev/ttyUSB0', baudrate=460800,timeout=1)
+        uart = serial.Serial(port='/dev/ttyUSB0', baudrate=38400,timeout=1)
         f9p_cfg = F9P_config(uart, desired_messages, meas_rate,device)
         packet = f9p_cfg.get_ver()
         f9p_cfg.uartwrite(packet)
         received_bytes = f9p_cfg.receive_ubx_bytes_from_uart()
-        #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
+        print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
         f9p_cfg.config_f9p()
     
-
+        #f9p_cfg.config_uart2_rtcm_uart()
         #receive GPS messages
         packet = f9p_cfg.receive_gps()
         f9p_cfg.uartwrite(packet)

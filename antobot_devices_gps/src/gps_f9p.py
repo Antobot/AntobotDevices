@@ -56,7 +56,7 @@ class F9P_GPS:
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
             if serial_port == None:
-                self.baud = 460800  # 38400?? Need to resolve baudrate difference with baudrate_rtk below
+                self.baud = 38400  # 38400?? 460800?Need to resolve baudrate difference with baudrate_rtk below
                 self.port = serial.Serial("/dev/ttyUSB0", self.baud,timeout=2)
             else:
                 self.port = serial_port
@@ -111,7 +111,7 @@ class F9P_GPS:
             self.get_gps_quality(streamed_data)
 
 
-            #print(streamed_data)
+            print(streamed_data)
 
 
             # Check the new data is viable and update message
@@ -398,7 +398,7 @@ def main(args):
     
     gps_f9p = F9P_GPS("urcu")
     baudrate_rtk = 460800#38400            # Need to resolve baudrate
-    gps_f9p.uart2_config(baudrate_rtk)
+    #gps_f9p.uart2_config(baudrate_rtk)
     mode = 2 # 1: RTK base station; 2: PPP-IP; 3: LBand
     
 

@@ -129,7 +129,7 @@ class gpsManager():
     
     def get_gps_class(self, k, v):
 
-        baud=460800
+        baud=38400 #460800
 
         if k == "urcu":
 

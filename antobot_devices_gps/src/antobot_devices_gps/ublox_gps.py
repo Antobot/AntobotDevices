@@ -73,7 +73,7 @@ class UbloxGps(object):
 
     def __init__(self, hard_port = None):
         if hard_port is None:
-            self.hard_port = serial.Serial("/dev/ttyUSB0/", 460800, timeout=1)
+            self.hard_port = serial.Serial("/dev/ttyUSB0/", 38700, timeout=1)
         elif type(hard_port) == spidev.SpiDev:
             sfeSpi = sfeSpiWrapper(hard_port)
             self.hard_port = sfeSpi
@@ -389,7 +389,7 @@ class UbloxGps(object):
 
         :return: The requested bytes
         :rtype: bytes
-        """
+        
         buffer = bytearray()
         start_pattern=b"$"
         end_pattern = b"\r\n"
@@ -421,6 +421,60 @@ class UbloxGps(object):
                 #print("buffer:",buffer)
                 
                 return sentence.decode('utf-8')  # Decode the bytes into a string
+                
+        """
+        count=0
+        buff=1
+        no_gps_count=0
+        buffer = bytearray()
+        start_pattern=b"$"
+        GGA_pattern = b"$GNGGA"
+        end_pattern = b"\r\n"
+
+        #print("UART read buffer function")
+        #print("time before while",datetime.datetime.now())
+        while (count<1):
+            data = self.hard_port.read(1)
+            #print("1 byte read from buffer:", data)       
+            #print("While loop")
+            '''
+            if (data == b"\n" ):
+                
+                if count>0:
+                    print("has poll all the data in buffer")
+                    break
+                else:
+                    no_gps_count=no_gps_count+1
+                    if no_gps_count>8:
+                        print("no gps data from buffer")
+                        return
+            else:
+                buffer.extend(data) 
+                if (data == [10]):
+                    count =count+1
+'''
+            buffer.extend(data)
+            
+            if (data == b"\n"):
+                count =count+1
+                #print(buffer)
+                    #print("count in while loop:",count)
+        #print("time after while",datetime.datetime.now())
+        #print("print buffer:",buffer)
+        if buff>1:
+            start_idx = buffer.rfind(GGA_pattern)
+        else:
+            start_idx = buffer.rfind(start_pattern)
+        #print("start_idx:",start_idx)
+        if start_idx != -1:  # Start pattern found
+            end_idx = buffer.find(end_pattern, start_idx)
+            if end_idx != -1:  # End pattern found
+                sentence = buffer[start_idx:end_idx + len(end_pattern)]
+                buffer = buffer[end_idx + len(end_pattern):]
+                #print( "sentence:", sentence)
+                #print("time sentence",datetime.datetime.now())
+                #print("buffer:",buffer)
+                return sentence.decode('utf-8')  # Decode the bytes into a string   
         
     def imu_alignment(self):
         """
