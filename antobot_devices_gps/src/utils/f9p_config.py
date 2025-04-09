@@ -56,6 +56,8 @@ class F9P_config:
             packet[4] = 0x0a
         elif length==17:
             packet[4] = 0x09
+        elif length==20:
+            packet[4] = 0x0c
         else:
             length_i = length - 8
             print("length_i: {}".format(length_i))
@@ -457,13 +459,9 @@ class F9P_config:
         packet = self.cfg_valget_uart2_baudrate()
         self.port.writebytes(packet)
         print('set uart2 baud 460800')
-        
 
+def configure_f9p():
 
-if __name__ == '__main__':
-    
-    moving_base = False
-    scout_box = False
     rospack = rospkg.RosPack()
     packagePath=rospack.get_path('antobot_description')
     path = packagePath + "/config/platform_config.yaml"
@@ -471,18 +469,21 @@ if __name__ == '__main__':
     with open(path, 'r') as yamlfile:
         data = yaml.safe_load(yamlfile)
         dev_type = data['gps'].keys()
-    # Importing device-specific packages
+
+    # Base GPS configuration on platform configuration
     if "urcu" in dev_type :
         device = "spi"
     elif "f9p_usb" in dev_type:
         device = "uart"
+
+    moving_base = "movingbase" in dev_type      # Is dual-GPS being used?
+    scout_box = False
 
     desired_messages = ['GST', 'VTG']
     #desired_messages = []
     meas_rate = 8
     if moving_base:
         meas_rate = 5
-
 
     if device=="uart":
         uart = serial.Serial(port='/dev/ttyUSB0', baudrate=460800,timeout=1)
@@ -514,9 +515,8 @@ if __name__ == '__main__':
         #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
 
         # revert to the default mode
-        if moving_base:
-            packet = f9p_cfg.revert_to_default_mode()
-            f9p_cfg.write(packet)
+        packet = f9p_cfg.revert_to_default_mode()
+        f9p_cfg.write(packet)
 
         #configure the f9p to block unwanted messages
         f9p_cfg.config_f9p()
@@ -528,3 +528,8 @@ if __name__ == '__main__':
         packet = f9p_cfg.receive_gps()
         f9p_cfg.write(packet)
         received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()     
+
+
+if __name__ == '__main__':
+    configure_f9p()
+    
