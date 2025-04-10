@@ -137,7 +137,7 @@ class gpsCorrections():
             data = userdata['gnss'].write(msg.payload)
         elif self.corr_type == "ant_mqtt":
             data = self.serial_port.write(msg.payload)
-
+        #print(msg.payload)
 
 def main():
     rospy.init_node ('gpsCorrections') 
