@@ -27,6 +27,9 @@ from antobot_manager_software.launchManager import Node, RoslaunchWrapperObject
 from gps_f9p import F9P_GPS
 from gps_movingbase import MovingBase_Ros
 from gps_corrections import gpsCorrections
+
+from utils.f9p_config import configure_f9p
+
 import importlib
 #import Jetson.GPIO as GPIO
 
@@ -198,9 +201,11 @@ class gpsManager():
     
 
 def main():
-    rospy.init_node ('gpsManager') 
-    gpsMgr = gpsManager()
+    rospy.init_node ('gpsManager')
 
+    # configure_f9p()
+
+    gpsMgr = gpsManager()
 
     # If movingbase is being used with dual-GPS
     if gpsMgr.movingbase:
