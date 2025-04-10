@@ -203,7 +203,7 @@ class gpsManager():
 def main():
     rospy.init_node ('gpsManager')
 
-    configure_f9p()
+    # configure_f9p()
 
     gpsMgr = gpsManager()
 
