@@ -67,7 +67,7 @@ class F9P_GPS:
         self.gps_freq_status = "Critical"
         self.gps_time_buf = []
         self.hAcc = 500
-        self.h_acc_thresh = 75  # 
+        self.h_acc_thresh = 0.1  # 
        
         current_time = rospy.Time.now()
         self.gps_time_i=0.1
@@ -141,11 +141,12 @@ class F9P_GPS:
 
     def get_fix_status(self):
         # print(self.geo.gps_qual)
-        if self.geo.gps_qual == 4 and self.gps_status != 'Good':
-            rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
-            self.gps_status = 'Good'
-            self.fix_status = 3
-        elif self.geo.gps_qual == 2 or 5:
+        if self.geo.gps_qual == 4: 
+            if self.gps_status != 'Good':
+                rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                self.gps_status = 'Good'
+                self.fix_status = 3
+        elif self.geo.gps_qual == 2 or self.geo.gps_qual == 5:
             if self.hAcc < self.h_acc_thresh:
                 self.fix_status = 3
                 if self.gps_status != 'Good':
@@ -397,8 +398,10 @@ def main(args):
     rospy.init_node('rtk', anonymous=True)
     
     gps_f9p = F9P_GPS("urcu")
-    baudrate_rtk = 460800#38400            # Need to resolve baudrate
-    #gps_f9p.uart2_config(baudrate_rtk)
+
+    baudrate_rtk = 460800 #38400            # Need to resolve baudrate
+    gps_f9p.uart2_config(baudrate_rtk)
+
     mode = 2 # 1: RTK base station; 2: PPP-IP; 3: LBand
     
 

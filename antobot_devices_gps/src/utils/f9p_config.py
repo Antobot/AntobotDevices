@@ -56,6 +56,8 @@ class F9P_config:
             packet[4] = 0x0a
         elif length==17:
             packet[4] = 0x09
+        elif length==20:
+            packet[4] = 0x0c
         else:
             length_i = length - 8
             print("length_i: {}".format(length_i))
@@ -468,10 +470,15 @@ class F9P_config:
         else:
             self.port.writebytes(ubx_rate_meas)
             received_bytes = self.receive_ubx_bytes_from_spi()
+            print("config uart2")
+            packet = self.cfg_valget_uart2_baudrate()
+            self.port.writebytes(packet)
+            received_bytes = self.receive_ubx_bytes_from_spi()
         self.check_ubx_uart(received_bytes)            
         print("Configured the measurement rate as " + str(self.meas_rate) + " Hz") 
 
         self.set_gx_messages()
+        
 
     def config_uart2_rtcm(self):
         ## Configure the F9P chip to be able to output RTCM messages for the dual-GPS setup (moving base)
@@ -483,6 +490,7 @@ class F9P_config:
         packet = self.cfg_valget_uart2_baudrate()
         self.port.writebytes(packet)
         print('set uart2 baud 460800')
+
         
     def config_uart2_rtcm_uart(self):
         ## Configure the F9P chip to be able to output RTCM messages for the dual-GPS setup (moving base)
@@ -496,10 +504,10 @@ class F9P_config:
         print('set uart2 baud 460800')
         
 
-if __name__ == '__main__':
-    
-    moving_base = False
-    scout_box = False
+
+def configure_f9p():
+
+
     rospack = rospkg.RosPack()
     packagePath=rospack.get_path('antobot_description')
     path = packagePath + "/config/platform_config.yaml"
@@ -507,11 +515,15 @@ if __name__ == '__main__':
     with open(path, 'r') as yamlfile:
         data = yaml.safe_load(yamlfile)
         dev_type = data['gps'].keys()
-    # Importing device-specific packages
+
+    # Base GPS configuration on platform configuration
     if "urcu" in dev_type :
         device = "spi"
     elif "f9p_usb" in dev_type:
         device = "uart"
+
+    moving_base = "movingbase" in dev_type      # Is dual-GPS being used?
+    scout_box = False
 
     desired_messages = ['GST', 'VTG']
     #desired_messages = []
@@ -519,7 +531,7 @@ if __name__ == '__main__':
     if moving_base:
         meas_rate = 5
 
-    print(device)
+
     if device=="uart":
         uart = serial.Serial(port='/dev/ttyUSB0', baudrate=38400,timeout=1)
         f9p_cfg = F9P_config(uart, desired_messages, meas_rate,device)
@@ -547,16 +559,16 @@ if __name__ == '__main__':
         packet = f9p_cfg.get_ver()
         f9p_cfg.write(packet)
         received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()
-        #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
-
+        print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
+        packet = f9p_cfg.revert_to_default_mode()
+        f9p_cfg.write(packet)
         # revert to the default mode
-        if moving_base:
-            packet = f9p_cfg.revert_to_default_mode()
-            f9p_cfg.write(packet)
+        packet = f9p_cfg.revert_to_default_mode()
+        f9p_cfg.write(packet)
 
         #configure the f9p to block unwanted messages
         f9p_cfg.config_f9p()
-    
+
         if moving_base:
             # configure the uart2's output (for movingbase)
             f9p_cfg.config_uart2_rtcm()
@@ -564,3 +576,8 @@ if __name__ == '__main__':
         packet = f9p_cfg.receive_gps()
         f9p_cfg.write(packet)
         received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()     
+
+
+if __name__ == '__main__':
+    configure_f9p()
+    
