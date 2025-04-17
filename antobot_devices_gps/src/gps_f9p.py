@@ -399,7 +399,7 @@ def main(args):
     rospy.init_node('rtk', anonymous=True)
     
     gps_f9p = F9P_GPS("urcu")
-    baudrate_rtk = 460800#38400            # Need to resolve baudrate
+    baudrate_rtk = 460800 #38400            # Need to resolve baudrate
     gps_f9p.uart2_config(baudrate_rtk)
     mode = 2 # 1: RTK base station; 2: PPP-IP; 3: LBand
     

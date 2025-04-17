@@ -444,10 +444,15 @@ class F9P_config:
         else:
             self.port.writebytes(ubx_rate_meas)
             received_bytes = self.receive_ubx_bytes_from_spi()
+            print("config uart2")
+            packet = self.cfg_valget_uart2_baudrate()
+            self.port.writebytes(packet)
+            received_bytes = self.receive_ubx_bytes_from_spi()
         self.check_ubx_uart(received_bytes)            
         print("Configured the measurement rate as " + str(self.meas_rate) + " Hz") 
 
         self.set_gx_messages()
+        
 
     def config_uart2_rtcm(self):
         ## Configure the F9P chip to be able to output RTCM messages for the dual-GPS setup (moving base)
@@ -512,15 +517,16 @@ def configure_f9p():
         packet = f9p_cfg.get_ver()
         f9p_cfg.write(packet)
         received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()
-        #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
-
+        print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
+        packet = f9p_cfg.revert_to_default_mode()
+        f9p_cfg.write(packet)
         # revert to the default mode
         packet = f9p_cfg.revert_to_default_mode()
         f9p_cfg.write(packet)
 
         #configure the f9p to block unwanted messages
         f9p_cfg.config_f9p()
-    
+
         if moving_base:
             # configure the uart2's output (for movingbase)
             f9p_cfg.config_uart2_rtcm()
