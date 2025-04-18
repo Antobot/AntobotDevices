@@ -71,8 +71,8 @@ void gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg)
      {
         // count +=1;
 
-        std::cout<<"Buffer length satisfied"<<std::endl;
-        std::cout<<"Number of gps coordinates received"<<gps_lat.size()<<std::endl;
+        //std::cout<<"Buffer length satisfied"<<std::endl;
+        //std::cout<<"Number of gps coordinates received"<<gps_lat.size()<<std::endl;
         double sum_lat = 0.0;
         double sum_lon = 0.0;
     
@@ -191,8 +191,8 @@ int main(int argc, char** argv)
     timestamp >> timestamp_s;
 
     //const std::string path = "/root/catkin_ws/src/AntoMove/antobot_move_navigation/antobot_move_cartograph/src/XML data/" + timestamp_s + ".antonav.xml";
-    //const std::string path = "/home/antobot/catkin_ws/src/AntoSites/antobot_sites/xml_data/" + timestamp_s + ".antonav.xml";
-    const std::string path = "/home/antobot/catkin_ws/src/AntoSites/antobot_sites/xml_data/courtyardTest.antonav.xml";
+    const std::string path = "/home/antobot/catkin_ws/src/AntoSites/antobot_sites/xml_data/" + timestamp_s + ".antonav.xml";
+    //const std::string path = "/home/antobot/catkin_ws/src/AntoSites/antobot_sites/xml_data/courtyardTest.antonav.xml";
     gps_file.open(path);
     //gps_file.open("new_xml.txt");
     create_file_structure();
