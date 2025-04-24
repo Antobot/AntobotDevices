@@ -29,7 +29,7 @@ import serial
 
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
-from std_msgs.msg import UInt8, Float32
+from std_msgs.msg import UInt8, Float32, String
 from antobot_devices_msgs.msg import gpsQual
 from antobot_devices_gps.ublox_gps import UbloxGps
 
@@ -82,6 +82,7 @@ class F9P_GPS:
 
         self.gps_pub = rospy.Publisher(pub_name, NavSatFix, queue_size=10)
         self.gps_qual_pub = rospy.Publisher(pub_name_qual, gpsQual, queue_size=10)
+        self.gga_msg_pub=rospy.Publisher("/antobot_gps/gga", String, queue_size=10)
 
         return
 
@@ -331,6 +332,7 @@ class F9P_GPS:
 
                 #print(self.hAcc)
             if streamed_data.startswith("$GNGGA"):
+                self.gga_msg_pub.publish(streamed_data)
                 gga_parse = pynmea2.parse(streamed_data)
                 try:
                     self.gga_gps_qual = int(gga_parse.gps_qual)

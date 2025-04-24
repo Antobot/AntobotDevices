@@ -65,7 +65,7 @@ void gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg)
      gps_lat.push_back(msg->latitude);    
      gps_lon.push_back(msg->longitude);
 
-     std::cout << "Waiting to satisfy the buffer length" <<std::endl;
+     //std::cout << "Waiting to satisfy the buffer length" <<std::endl;
 
      if (gps_lon.size() >= buffer)
      {
