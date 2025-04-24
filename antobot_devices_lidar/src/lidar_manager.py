@@ -98,6 +98,9 @@ class costmapManager:
         self.costmapLaunchWrapper = RoslaunchWrapperObject(run_id = uuid, roslaunch_files = launch_files,process_listeners=[ProcessListener()])
         # start the launch file
         self.costmapLaunchWrapper.start_node_name("costmap")
+        
+        # Set the target State to True
+        self.costMapTargetState=True
     
 #################################################
 
@@ -514,7 +517,7 @@ class lidarManagerClass:
                 # If the costmap is still active
                 if self.costmapMgr.costMapTargetState:
 
-                    rospy.loginfo("SW2320: Lidar Manager: Lidar active:  Stopping costmap")
+                    rospy.loginfo("SW2320: Lidar Manager: No Lidar active:  Stopping costmap")
                     self.costmapMgr.stop_costmap()
 
             else: # If there are active lidars
@@ -524,7 +527,7 @@ class lidarManagerClass:
                 # If the costmap is not active
                 if not self.costmapMgr.costMapTargetState:
 
-                    rospy.loginfo("SW2320: Lidar Manager: Lidar inactive - starting costmap")
+                    rospy.loginfo("SW2320: Lidar Manager: Lidar active - starting costmap")
                     self.costmapMgr.launch_costmap()
 
 

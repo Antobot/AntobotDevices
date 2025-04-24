@@ -134,12 +134,14 @@ class gpsCorrections():
     def on_message(self,client,userdata, msg):
         # write the corrections via UART2
         if self.corr_type == "ppp":
+            # print("GNSS Userdata: {}".format(userdata['gnss']))
             data = userdata['gnss'].write(msg.payload)
         elif self.corr_type == "ant_mqtt":
             data = self.serial_port.write(msg.payload)
-
+        #print(msg.payload)
 
 def main():
+    rospy.init_node ('gpsCorrections') 
     gps_corr = gpsCorrections()
     
     gps_corr.client.loop_start()
