@@ -56,7 +56,7 @@ class F9P_GPS:
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
             if serial_port == None:
-                self.baud = 38400  # 38400?? 460800?Need to resolve baudrate difference with baudrate_rtk below
+                self.baud = 460800 # 38400?? 460800?Need to resolve baudrate difference with baudrate_rtk below
                 self.port = serial.Serial("/dev/ttyUSB0", self.baud,timeout=2)
             else:
                 self.port = serial_port

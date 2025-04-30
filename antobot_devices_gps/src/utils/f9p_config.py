@@ -533,7 +533,7 @@ def configure_f9p():
 
 
     if device=="uart":
-        uart = serial.Serial(port='/dev/ttyUSB0', baudrate=38400,timeout=1)
+        uart = serial.Serial(port='/dev/ttyUSB0', baudrate=38400,timeout=1)  #38400
         f9p_cfg = F9P_config(uart, desired_messages, meas_rate,device)
         packet = f9p_cfg.get_ver()
         f9p_cfg.uartwrite(packet)
