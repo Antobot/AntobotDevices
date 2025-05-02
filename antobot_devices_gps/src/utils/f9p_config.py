@@ -196,6 +196,23 @@ class F9P_config:
         packet = self.calculate_checksum(packet, length)
         
         return packet
+
+    def cfg_valset_NAVSPG_DYNMODEL(self):
+        print("set navspg dynmodel")
+        # prepare packet
+        length = 17
+        packet = self.prepare_cfg_packet(length)
+        #keyid
+        packet[10] = 0x21
+        packet[11] = 0x00
+        packet[12] = 0x11
+        packet[13] = 0x20
+        #value
+        packet[14] = 0x03
+
+        packet = self.calculate_checksum(packet, length)
+        
+        return packet
     
     def receive_gps(self):
         """Prepares UBX protocol sentence to get the HPPOSLLH"""
@@ -463,12 +480,17 @@ class F9P_config:
         # configure the measurement rate of the chip
         
         ubx_rate_meas = self.cfg_rate_meas()
+        ubx_navspg_dynmodel=self.cfg_valset_NAVSPG_DYNMODEL()
         #print(self.port)
         if self.device=="uart":
             self.port.write(ubx_rate_meas)
             received_bytes = self.receive_ubx_bytes_from_uart()
+            self.port.write(ubx_navspg_dynmodel)
+            received_bytes = self.receive_ubx_bytes_from_uart()
         else:
             self.port.writebytes(ubx_rate_meas)
+            received_bytes = self.receive_ubx_bytes_from_spi()
+            self.port.writebytes(ubx_navspg_dynmodel)
             received_bytes = self.receive_ubx_bytes_from_spi()
             print("config uart2")
             packet = self.cfg_valget_uart2_baudrate()
@@ -563,8 +585,6 @@ def configure_f9p():
         packet = f9p_cfg.revert_to_default_mode()
         f9p_cfg.write(packet)
         # revert to the default mode
-        packet = f9p_cfg.revert_to_default_mode()
-        f9p_cfg.write(packet)
 
         #configure the f9p to block unwanted messages
         f9p_cfg.config_f9p()

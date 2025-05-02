@@ -38,7 +38,7 @@ class gpsManager():
     def __init__(self):
 
         self.launch_nodes = False
-        self.launch_corrections = False
+        self.launch_corrections = "ntrip"
         self.use_class = True
 
         self.gps_nodes = []
@@ -74,11 +74,14 @@ class gpsManager():
                 self.gps_nodes.append(gps_cls_tmp)
 
         # Launch corrections node - should it be launched directly from SW manager?
-        if self.launch_corrections:
+        if self.launch_corrections == "mqtt":
             self.node_c = Node(name_arg="gpsCorrections", package_arg="antobot_devices_gps", executable_arg="gps_corrections.py", err_code_id="SW234", node_type="sensor")
             self.node_c.define_node()
             self.node_c.launch(self._launch)
-
+        elif self.launch_corrections == "ntrip":
+            self.node_c = Node(name_arg="gpsCorrections", package_arg="antobot_devices_gps", executable_arg="gps_corrections_ntrip.py", err_code_id="SW234",node_type="sensor", name_space="/", input_args= [] )
+            self.node_c.define_node()
+            self.node_c.launch(self._launch)
         return
 
     def read_gps_config(self):

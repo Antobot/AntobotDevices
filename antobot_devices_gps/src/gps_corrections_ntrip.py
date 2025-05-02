@@ -28,7 +28,7 @@ import threading
 
 
 class gpsCorrections():
-    def __init__(self, dev_type=None, corr_type="ppp", serial_port=None):
+    def __init__(self):
         # # # Initialisation of GPS corrections class
         #     Inputs: dev_type - the type of device that this script is running on
         #           "urcu" - the URCU; Jetson-based packages should be used
@@ -36,7 +36,7 @@ class gpsCorrections():
 
 
         self.sock = None
-        self.corr_type = corr_type
+        self.corr_type = "ppp"
         self.gga_interval=10
         self.latest_gga = None
         self.sub_gga = rospy.Subscriber("/antobot_gps/gga",String,self.gga_callback)
@@ -74,9 +74,10 @@ class gpsCorrections():
 
         # Configuring method-specific parameters (MQTT)
         if self.corr_type == "ppp":
-            dev_port = rospy.get_param("/gps/urcu/device_port","/dev/ttyUSB0")
-            self.mqtt_topics = [(f"/pp/ip/eu", 0), ("/pp/ubx/mga", 0), ("/pp/ubx/0236/ip", 0)]
-            self.userdata = { 'gnss': self.serial_port, 'topics': self.mqtt_topics } 
+            #dev_port = rospy.get_param("/gps/urcu/device_port","/dev/ttyUSB0")
+            #self.mqtt_topics = [(f"/pp/ip/eu", 0), ("/pp/ubx/mga", 0), ("/pp/ubx/0236/ip", 0)]
+            #self.userdata = { 'gnss': self.serial_port, 'topics': self.mqtt_topics } 
+            print("ntrip ppp correction")
         elif self.corr_type == "ant_mqtt":
             self.connect = False
         
@@ -150,8 +151,9 @@ def main():
     rate=rospy.Rate(0.1)
     try:
         gps_corr.connect_ntrip()
+        rospy.Timer(rospy.Duration(5), gps_corr.send_gga)
         rospy.Timer(rospy.Duration(0.1), gps_corr.stream_corrections)
-        rospy.Timer(rospy.Duration(10), gps_corr.send_gga)
+        
         rospy.spin() 
 
     except KeyboardInterrupt:
