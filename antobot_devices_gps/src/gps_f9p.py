@@ -112,7 +112,7 @@ class F9P_GPS:
             self.get_gps_quality(streamed_data)
 
 
-            print(streamed_data)
+            #print(streamed_data)
 
 
             # Check the new data is viable and update message
