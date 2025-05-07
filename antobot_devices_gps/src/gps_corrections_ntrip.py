@@ -40,7 +40,8 @@ class gpsCorrections():
         self.gga_interval=10
         self.latest_gga = None
         self.sub_gga = rospy.Subscriber("/antobot_gps/gga",String,self.gga_callback)
-        self.count=0
+        self.time_offset = rospy.Subscriber("/antobot_gps/quality",gpsQual, self.time_offset_callback)
+        self.count = 0
         self.running = True
         # Reading configuration file
         rospack = rospkg.RosPack()
@@ -122,19 +123,25 @@ class gpsCorrections():
         self.latest_gga=data.data
         return
 
+    def time_offset_callback(self,data):
+        self.time_offset = data.t_offset
+        return
+
     def send_gga(self,event=None):
         
         print("in send gga")
         """ Periodically send latest GGA to NTRIP server """ 
-        if self.latest_gga:
+        if self.latest_gga and self.time_offset<0.5:
             try:
-
                 self.sock.send(self.latest_gga.encode())
                 print(f"[INFO] Sent GGA: {self.latest_gga.strip()}")
+                sent_time = rospy.Time.now()
             except Exception as e:
                 print(f"[WARN] Failed to send GGA: {e}")
                 #self.running=False
                 self.connect_ntrip()
+        if rospy.Time.now()-sent_time > 35:
+            
 
     def close(self):
         self.running=False
