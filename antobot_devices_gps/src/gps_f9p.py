@@ -273,7 +273,7 @@ class F9P_GPS:
         elif self.gps_time_offset!=99:
             self.poll_buff = 1
         else:
-            self.pull_buff = 24
+            self.poll_buff = 24
         self.poll_buff_pre=self.poll_buff
         
         #print("pulled sentence:",self.poll_buff)            

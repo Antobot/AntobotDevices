@@ -19,11 +19,11 @@ import sys
 
 from antobot_devices_gps.ublox_gps import UbloxGps
 
-from gps_base_station import F9P_GPS
+from gps_f9p import F9P_GPS
 
 class gps_strength():
     def __init__(self):
-        self.gps = F9P_GPS()
+        self.gps = F9P_GPS("urcu")
         #baud = 38400
         #port = spidev.SpiDev()
         #gps = UbloxGps(port)
