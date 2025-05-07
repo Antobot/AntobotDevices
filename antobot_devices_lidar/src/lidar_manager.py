@@ -36,9 +36,9 @@ from std_srvs.srv import Empty, EmptyRequest, EmptyResponse
 ###################################################################################################################################################
 
 class costmapManager:
-    def __init__(self):
-        
-        
+    def __init__(self,imu_frame,lidar_count):
+        self.lidar_count = lidar_count
+        self.imu_frame = imu_frame
         self.costmapLaunchWrapper = None
         self.imuLaunchWrapper = None
 
@@ -108,8 +108,17 @@ class costmapManager:
         # Generate a unique id for the node
         uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
         roslaunch.configure_logging(uuid)
-
-        cli_args = ['antobot_devices_imu', 'imu_euler.launch']
+        
+        if self.imu_frame: # use imu roll angle to generate lidar frame (imu compensated frame)  
+            rospy.loginfo("SW2320: Lidar Manager: use IMU compensated lidar frames")
+            cli_args = ['antobot_devices_imu', 'imu_euler.launch']
+        else:
+            if self.lidar_count == 1:
+                rospy.loginfo("SW2320: Lidar Manager: Using static lidar frame for the front lidar")
+                cli_args = ['antobot_devices_imu', 'static_lidar_frame.launch']
+            else: # dual lidar
+                rospy.loginfo("SW2320: Lidar Manager: Using static lidar frames for both lidars")
+                cli_args = ['antobot_devices_imu', 'static_lidar_frame_two_lidars.launch']
 
         roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
         #print(roslaunch_file)
@@ -319,10 +328,8 @@ class lidarManagerClass:
 
         # launch costmap node if this lidar is being used for navigation
         if self.for_navigation:
-
             rospy.sleep(1.0) # Wait for the lidars to be ready
-
-            self.costmapMgr = costmapManager()
+            self.costmapMgr = costmapManager(self.imu_frame, len(self.lidars)) # imu_compensated frame flag, number of lidars 
             rospy.loginfo("SW2320: Lidar Manager: Costmap Manager started")
 
 
@@ -340,11 +347,11 @@ class lidarManagerClass:
                 params = yaml.safe_load(file)
 
             # Check if imu compensated frame is used - default true
-            if "imu_compensated_frame" in params["lidar"]:
-                self.imu_frame = params["lidar"]["imu_compensated_frame"]
+            if "imu_compensated_frame" in params:
+                self.imu_frame = params["imu_compensated_frame"]
             else:
                 self.imu_frame = True
-
+            print('test')
             self.lidars = {}
             
             for lidar_type in params["lidar"]:
@@ -355,6 +362,7 @@ class lidarManagerClass:
                 if params["lidar"][lidar_type]["mode"] == "navigation":
                     frame_id = "laser_link_" + params["lidar"][lidar_type]["location"]
                     self.for_navigation = True
+                    print('navigation')
                 else:
                     frame_id = "laser_link_" + params["lidar"][lidar_type]["location"] + "_static"
 
