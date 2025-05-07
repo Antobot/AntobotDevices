@@ -268,9 +268,8 @@ class F9P_GPS:
             rospy.logerr("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
             self.poll_buff =(self.gps_time_offset//0.125)*3
             if self.poll_buff_pre !=1 and  self.poll_buff_pre!= 24 and self.poll_buff_pre!= 3:
-                self.poll_buff = 3
-            
-        elif !=99:
+                self.poll_buff = 3            
+        elif self.gps_time_offset !=99:
             self.poll_buff = 1
         else:
             self.pull_buff = 24
