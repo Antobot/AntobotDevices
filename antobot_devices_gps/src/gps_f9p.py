@@ -270,7 +270,7 @@ class F9P_GPS:
             if self.poll_buff_pre !=1 and  self.poll_buff_pre!= 24 and self.poll_buff_pre!= 3:
                 self.poll_buff = 3
             
-        elif self.gps_time_offset!=99:
+        elif !=99:
             self.poll_buff = 1
         else:
             self.pull_buff = 24
@@ -333,7 +333,8 @@ class F9P_GPS:
 
                 #print(self.hAcc)
             if streamed_data.startswith("$GNGGA"):
-                self.gga_msg_pub.publish(streamed_data)
+                if self.gps_time_offset < 0.5:
+                    self.gga_msg_pub.publish(streamed_data)
                 gga_parse = pynmea2.parse(streamed_data)
                 try:
                     self.gga_gps_qual = int(gga_parse.gps_qual)
