@@ -78,7 +78,7 @@ class F9P_GPS:
         self.geo_sep = 0
         self.cogt = 0
         self.sogk = 0
-
+        self.gps_hz = 0
 
         self.gps_pub = rospy.Publisher(pub_name, NavSatFix, queue_size=10)
         self.gps_qual_pub = rospy.Publisher(pub_name_qual, gpsQual, queue_size=10)
@@ -104,6 +104,7 @@ class F9P_GPS:
                 self.get_gps_freq()
                 if self.hAcc < 500:
                     self.gps_pub.publish(self.gpsfix)
+                    
         if self.method == "stream":
             if self.dev_type =="urcu":
                 streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') #stream method
@@ -272,7 +273,7 @@ class F9P_GPS:
         elif self.gps_time_offset !=99:
             self.poll_buff = 1
         else:
-            self.pull_buff = 24
+            self.poll_buff = 24
         self.poll_buff_pre=self.poll_buff
         
         #print("pulled sentence:",self.poll_buff)            
@@ -307,6 +308,7 @@ class F9P_GPS:
 
         # Inverted average time to calculate hertz
         gps_hz = len(self.gps_time_buf) / sum(self.gps_time_buf)
+        self.gps_hz = gps_hz
 
         #rospy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
         if gps_hz < 2 and self.gps_freq_status != "Critical":
@@ -389,7 +391,7 @@ class F9P_GPS:
         # gpsQualMsg.satInfo = ???
         gpsQualMsg.vCOG = self.cogt
         gpsQualMsg.vSOG = self.sogk
-
+        gpsQualMsg.frequency = self.gps_hz
         self.gps_qual_pub.publish(gpsQualMsg)
 
 

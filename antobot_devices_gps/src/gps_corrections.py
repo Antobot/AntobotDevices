@@ -61,15 +61,15 @@ class gpsCorrections():
             config = yaml.safe_load(file)
             self.ppp_client_id = config['ppp']['device_ID']
             self.ppp_server = 'pp.services.u-blox.com'
-            self.ant_client_id = "Antobot_device_" + config['ant_mqtt']['device_ID']
-            self.ant_mqtt_topic_sub = "Anto_MQTT_F9P_" + config['ant_mqtt']['base_ID']
-            self.ant_broker = config['ant_mqtt']['mqtt_Broker']
-            self.ant_mqtt_port = config['ant_mqtt']['mqtt_Port']
-            self.mqtt_keepalive = config['ant_mqtt']['mqtt_keepalive']
-            # mqtt_UserName = config['mqtt_UserName']
-            # mqtt_PassWord = config['mqtt_PassWord']
-            mqtt_username = "antobot_device"
-            mqtt_password = "SvHCWJFNP98h"
+            
+            if self.corr_type == "ant_mqtt":
+                self.ant_client_id = "anto_rtk_" + config['ant_mqtt']['robot_ID']
+                self.ant_mqtt_topic_sub = "AntoCom/02/" + config['ant_mqtt']['baseStation_ID'] + "/00"
+                self.ant_broker = config['ant_mqtt']['mqtt_Broker']
+                self.ant_mqtt_port = config['ant_mqtt']['mqtt_Port']
+                self.mqtt_keepalive = config['ant_mqtt']['mqtt_keepalive']
+                mqtt_username = config['ant_mqtt']['mqtt_UserName']
+                mqtt_password = config['ant_mqtt']['mqtt_PassWord']
 
 
 
@@ -113,8 +113,11 @@ class gpsCorrections():
                 self.client.connect(self.ppp_server, port=8883)
             elif self.corr_type == "ant_mqtt":
                 self.client.connect(self.ant_broker, self.ant_mqtt_port, self.mqtt_keepalive)
-        except:
-            print("Trying to connect ...")
+            
+            # TODO change SN4010
+            # rospy.loginfo("SN4010: Connected to MQTT broker successfully.")
+        except Exception as e:
+            rospy.logerr("SN4010: Connected to MQTT broker failed. ({e})")
 
         time.sleep(2)
         
@@ -127,28 +130,40 @@ class gpsCorrections():
                 self.client.subscribe(userdata['topics'])
             elif self.corr_type == "ant_mqtt":
                 self.client.subscribe(self.ant_mqtt_topic_sub)
+            rospy.loginfo("SN4010: Connected to broker successfully")
         else: 
-            print("Connection failed!", rc)
+            rospy.logerr("SN4010: Connected to broker failed. (rc = {rc})")
 
     # The callback for when a PUBLISH message is received from the server.
     def on_message(self,client,userdata, msg):
         # write the corrections via UART2
-        if self.corr_type == "ppp":
-            # print("GNSS Userdata: {}".format(userdata['gnss']))
-            data = userdata['gnss'].write(msg.payload)
-        elif self.corr_type == "ant_mqtt":
-            data = self.serial_port.write(msg.payload)
-        #print(msg.payload)
+        try:
+            if self.corr_type == "ppp":
+                data = userdata['gnss'].write(msg.payload)
+            elif self.corr_type == "ant_mqtt":
+                data = self.serial_port.write(msg.payload)
+        except Exception as e:
+            rospy.logerr(f"SN4010: Write the corrections failed. ({e})")
+            dev_port = "/dev/ttyTHS0"
+            baud = 460800
+            self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
+
 
 def main():
-    rospy.init_node ('gpsCorrections') 
-    gps_corr = gpsCorrections()
+
+    rospy.init_node('gpsCorrections') 
+
+    gps_corr = gpsCorrections(corr_type="ant_mqtt") # corr_type="ppp" or "anto_mqtt"
     
     gps_corr.client.loop_start()
-    while(True):
-        time.sleep(1)
-        #print("Running")
 
+    rate = rospy.Rate(1) # 1hz
+
+    while not rospy.is_shutdown():
+        #print("gpsCorrections is running") # for test
+        rate.sleep()
+
+    gps_corr.client.loop_stop()
 
 if __name__ == '__main__':
     main()
