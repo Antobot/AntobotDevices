@@ -24,6 +24,7 @@ import serial
 import socket
 import base64
 from std_msgs.msg import  String
+from antobot_devices_msgs.msg import gpsQual
 import threading
 
 
@@ -43,6 +44,7 @@ class gpsCorrections():
         self.time_offset = rospy.Subscriber("/antobot_gps/quality",gpsQual, self.time_offset_callback)
         self.count = 0
         self.running = True
+        self.sent_time = rospy.Time.now()
         # Reading configuration file
         rospack = rospkg.RosPack()
         packagePath=rospack.get_path('antobot_description')
@@ -135,13 +137,14 @@ class gpsCorrections():
             try:
                 self.sock.send(self.latest_gga.encode())
                 print(f"[INFO] Sent GGA: {self.latest_gga.strip()}")
-                sent_time = rospy.Time.now()
+                self.sent_time = rospy.Time.now()
             except Exception as e:
                 print(f"[WARN] Failed to send GGA: {e}")
                 #self.running=False
                 self.connect_ntrip()
-        if rospy.Time.now()-sent_time > 35:
-            
+        if (rospy.Time.now()-self.sent_time).to_sec() > 35:
+            self.connect_ntrip()
+
 
     def close(self):
         self.running=False

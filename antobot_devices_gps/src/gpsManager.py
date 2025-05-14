@@ -38,7 +38,7 @@ class gpsManager():
     def __init__(self):
 
         self.launch_nodes = False
-        self.launch_corrections = "mqtt"
+        self.launch_corrections = "ntrip"
         self.use_class = True
 
         self.gps_nodes = []
