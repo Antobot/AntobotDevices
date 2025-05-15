@@ -107,7 +107,7 @@ class gpsCorrections():
 
         self.last_receive_time = time.time()
         self.timer = rospy.Timer(rospy.Duration(30), self.check_RTCM_timeout) 
-        rospy.spin()
+        #rospy.spin()
 
     # Attempts to connect to the broker
     def connect_broker(self):
@@ -131,7 +131,7 @@ class gpsCorrections():
                 self.client.subscribe(userdata['topics'])
             elif self.corr_type == "ant_mqtt":
                 self.client.subscribe(self.ant_mqtt_topic_sub)
-            rospy.loginfo("SN4500: Connected to broker successfully")
+            rospy.loginfo("SN4500: Connected to broker successfully.")
         else: 
             rospy.logerr("SN4500: Connected to broker failed. (rc = {rc})")
 
@@ -151,9 +151,9 @@ class gpsCorrections():
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
 
-    def check_RTCM_timeout(self):
+    def check_RTCM_timeout(self, event):
         if time.time() - self.last_receive_time > 30: # 30s
-            rospy.logerr("SN4500: The RTCM time is out of sync.")
+            rospy.logerr("SN4500: The RTCM time is out of sync (30s).")
             self.last_receive_time = time.time()
 
 
