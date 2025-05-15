@@ -43,7 +43,8 @@ class gpsCorrections():
             data = yaml.safe_load(yamlfile)
             dev_type = data['gps'].keys()
         # Importing device-specific packages
-        print(dev_type)
+        #print(dev_type)
+
         if "urcu" in dev_type :
             print("in urcu type")
             GPIO = importlib.import_module("Jetson.GPIO") 
@@ -55,7 +56,7 @@ class gpsCorrections():
 
             
         packagePath=rospack.get_path('antobot_devices_gps')
-        print("packagePath: {}".format(packagePath))
+        #print("packagePath: {}".format(packagePath))
         yaml_file_path = packagePath + "/config/corrections_config.yaml"
         with open(yaml_file_path, 'r') as file:
             config = yaml.safe_load(file)
@@ -103,8 +104,10 @@ class gpsCorrections():
         self.client.on_message = self.on_message
 
         self.connect_broker()
-            
 
+        self.last_receive_time = time.time()
+        self.timer = rospy.Timer(rospy.Duration(30), self.check_RTCM_timeout) 
+        rospy.spin()
 
     # Attempts to connect to the broker
     def connect_broker(self):
@@ -114,10 +117,8 @@ class gpsCorrections():
             elif self.corr_type == "ant_mqtt":
                 self.client.connect(self.ant_broker, self.ant_mqtt_port, self.mqtt_keepalive)
             
-            # TODO change SN4010
-            # rospy.loginfo("SN4010: Connected to MQTT broker successfully.")
         except Exception as e:
-            rospy.logerr("SN4010: Connected to MQTT broker failed. ({e})")
+            rospy.logerr("SN4500: Connected to MQTT broker failed. ({e})")
 
         time.sleep(2)
         
@@ -130,9 +131,9 @@ class gpsCorrections():
                 self.client.subscribe(userdata['topics'])
             elif self.corr_type == "ant_mqtt":
                 self.client.subscribe(self.ant_mqtt_topic_sub)
-            rospy.loginfo("SN4010: Connected to broker successfully")
+            rospy.loginfo("SN4500: Connected to broker successfully")
         else: 
-            rospy.logerr("SN4010: Connected to broker failed. (rc = {rc})")
+            rospy.logerr("SN4500: Connected to broker failed. (rc = {rc})")
 
     # The callback for when a PUBLISH message is received from the server.
     def on_message(self,client,userdata, msg):
@@ -140,13 +141,20 @@ class gpsCorrections():
         try:
             if self.corr_type == "ppp":
                 data = userdata['gnss'].write(msg.payload)
+                self.last_receive_time = time.time()
             elif self.corr_type == "ant_mqtt":
                 data = self.serial_port.write(msg.payload)
+                self.last_receive_time = time.time()
         except Exception as e:
-            rospy.logerr(f"SN4010: Write the corrections failed. ({e})")
+            rospy.logerr(f"SN4500: Write the corrections failed. ({e})")
             dev_port = "/dev/ttyTHS0"
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
+
+    def check_RTCM_timeout(self):
+        if time.time() - self.last_receive_time > 30: # 30s
+            rospy.logerr("SN4500: The RTCM time is out of sync.")
+            self.last_receive_time = time.time()
 
 
 def main():
