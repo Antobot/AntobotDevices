@@ -73,15 +73,17 @@ class gpsManager():
                 gps_cls_tmp = self.get_gps_class(k, v)
                 self.gps_nodes.append(gps_cls_tmp)
 
-        # Launch corrections node - should it be launched directly from SW manager?
+        # Launch corrections node - should it be launched directly from SW manager? will be removed after test
+        """
         if self.launch_corrections == "mqtt":
             self.node_c = Node(name_arg="gpsCorrections", package_arg="antobot_devices_gps", executable_arg="gps_corrections.py", err_code_id="SW234", node_type="sensor", name_space="/", input_args=[])
             self.node_c.define_node()
             self.node_c.launch(self._launch)
         elif self.launch_corrections == "ntrip":
-            self.node_c = Node(name_arg="gpsCorrections", package_arg="antobot_devices_gps", executable_arg="gps_corrections_ntrip.py", err_code_id="SW234",node_type="sensor", name_space="/", input_args= [] )
+            self.node_c = Node(name_arg="gpsCorrections", package_arg="antobot_devices_gps", executable_arg="gps_corrections_new.py", err_code_id="SW234",node_type="sensor", name_space="/", input_args= [] )
             self.node_c.define_node()
             self.node_c.launch(self._launch)
+        """
         return
 
     def read_gps_config(self):
@@ -135,7 +137,7 @@ class gpsManager():
     
     def get_gps_class(self, k, v):
 
-        baud=38400 #460800
+        baud=460800 #460800
 
         if k == "urcu":
 

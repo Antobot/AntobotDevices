@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2023, ANTOBOT LTD.
+# Copyright (c) 2023, ANTOBOT L
 # All rights reserved
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -24,7 +24,7 @@ import sys
 import time
 from datetime import datetime
 import pynmea2
-
+import yaml
 import serial
 
 from sensor_msgs.msg import NavSatFix
@@ -253,8 +253,8 @@ class F9P_GPS:
         # Getting time
         current_time = rospy.Time.now()
         dt0 = self.get_gps_timestamp_utc()
-        # print("current time (ROS): {}".format(current_time.to_sec()))
-        # print("datetime timestamp: {}".format(dt0.timestamp()))
+        #print("current time (ROS): {}".format(current_time.to_sec()))
+        #print("datetime timestamp: {}".format(dt0.timestamp()))
         if (dt0!=None):
             self.gps_time_i=(dt0.timestamp()-self.gpsfix.header.stamp.to_sec())
             self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
@@ -403,7 +403,7 @@ def main(args):
     # init node
     rospy.init_node('rtk', anonymous=True)
     
-    gps_f9p = F9P_GPS("urcu")
+    gps_f9p = F9P_GPS("usb")
 
     baudrate_rtk = 460800 #38400            # Need to resolve baudrate
     gps_f9p.uart2_config(baudrate_rtk)

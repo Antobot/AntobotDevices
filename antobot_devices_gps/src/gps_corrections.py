@@ -21,19 +21,30 @@ import paho.mqtt.client as mqtt
 import rospy, rospkg
 import importlib
 import serial
+import socket
+import base64
+from std_msgs.msg import  String
+from antobot_devices_msgs.msg import gpsQual
+import threading
 
 
 class gpsCorrections():
-    def __init__(self, dev_type=None, corr_type="ppp", serial_port=None):
+    def __init__(self):
         # # # Initialisation of GPS corrections class
         #     Inputs: dev_type - the type of device that this script is running on
         #           "urcu" - the URCU; Jetson-based packages should be used
         #           "rasPi" - antoScout or another rasPi-based system; rasPi-compatible packages should be used
 
 
-        
-        self.corr_type = corr_type
-
+        self.sock = None
+        self.corr_type = "ppp"
+        self.gga_interval=10
+        self.latest_gga = None
+        self.sub_gga = rospy.Subscriber("/antobot_gps/gga",String,self.gga_callback)
+        self.time_offset = rospy.Subscriber("/antobot_gps/quality",gpsQual, self.time_offset_callback)
+        self.count = 0
+        self.running = True
+        self.sent_time = rospy.Time.now()
         # Reading configuration file
         rospack = rospkg.RosPack()
         packagePath=rospack.get_path('antobot_description')
@@ -42,28 +53,30 @@ class gpsCorrections():
         with open(path, 'r') as yamlfile:
             data = yaml.safe_load(yamlfile)
             dev_type = data['gps'].keys()
-        # Importing device-specific packages
-        #print(dev_type)
-
+            for key, value in data['gps'].items():
+                #print(key)
+                self.corr_type=value['rtk_type']
+                dev_port = value['device_port']
         if "urcu" in dev_type :
             print("in urcu type")
             GPIO = importlib.import_module("Jetson.GPIO") 
-            dev_port = "/dev/ttyTHS0"
+            #dev_port = "/dev/ttyTHS0"
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
         elif "f9p_usb" in dev_type:
             self.serial_port = serial.Serial(port="/dev/ttyUSB0", baudrate=38400)  #460800
 
+
             
         packagePath=rospack.get_path('antobot_devices_gps')
-        #print("packagePath: {}".format(packagePath))
+        print("packagePath: {}".format(packagePath))
         yaml_file_path = packagePath + "/config/corrections_config.yaml"
         with open(yaml_file_path, 'r') as file:
             config = yaml.safe_load(file)
-            self.ppp_client_id = config['ppp']['device_ID']
-            self.ppp_server = 'pp.services.u-blox.com'
-            
-            if self.corr_type == "ant_mqtt":
+            if self.corr_type == "ppp":
+                self.ppp_client_id = config['ppp']['device_ID']
+                self.ppp_server = 'pp.services.u-blox.com'
+            elif self.corr_type == "ant_mqtt":
                 self.ant_client_id = "anto_rtk_" + config['ant_mqtt']['robot_ID']
                 self.ant_mqtt_topic_sub = "AntoCom/02/" + config['ant_mqtt']['baseStation_ID'] + "/00"
                 self.ant_broker = config['ant_mqtt']['mqtt_Broker']
@@ -71,16 +84,21 @@ class gpsCorrections():
                 self.mqtt_keepalive = config['ant_mqtt']['mqtt_keepalive']
                 mqtt_username = config['ant_mqtt']['mqtt_UserName']
                 mqtt_password = config['ant_mqtt']['mqtt_PassWord']
-
-
+            elif self.corr_type == "ntrip":
+                self.ntrip_server = config['ntrip']['address']
+                self.ntrip_port = config['ntrip']['port']
+                self.ntrip_username = config['ntrip']['username']
+                self.ntrip_password = config['ntrip']['password']
+                self.ntrip_mountpoint = config['ntrip']['mountpoint']
 
         # Configuring method-specific parameters (MQTT)
-        if self.corr_type == "ppp":
+        if self.corr_type == "ant_mqtt":
+            self.connect = False
+        elif self.corr_type == "ppp":
             dev_port = rospy.get_param("/gps/urcu/device_port","/dev/ttyUSB0")
             self.mqtt_topics = [(f"/pp/ip/eu", 0), ("/pp/ubx/mga", 0), ("/pp/ubx/0236/ip", 0)]
             self.userdata = { 'gnss': self.serial_port, 'topics': self.mqtt_topics } 
-        elif self.corr_type == "ant_mqtt":
-            self.connect = False
+        
 
         # If the uRCU is being used, the appropriate GPIO pin must be set to "high" to enable corrections from Xavier 
         if "urcu" in dev_type:
@@ -91,23 +109,27 @@ class gpsCorrections():
             self.GPIO.setup(self.gpio01, GPIO.OUT)
             #self.GPIO.output(self.gpio01, GPIO.HIGH) # if need 20240424
 
-        # Setting up the MQTT Client
-        if self.corr_type == "ppp":
-            self.client = mqtt.Client(client_id=self.ppp_client_id, userdata=self.userdata)
-            self.certfile=os.path.join(packagePath,"config/")+f'device-{self.ppp_client_id}-pp-cert.crt'
-            self.keyfile=os.path.join(packagePath,"config/")+f'device-{self.ppp_client_id}-pp-key.pem'
-            self.client.tls_set(certfile=self.certfile,keyfile=self.keyfile)
-        elif self.corr_type == "ant_mqtt":
-            self.client = mqtt.Client(self.ant_client_id)
-            self.client.username_pw_set(mqtt_username, mqtt_password)
-        self.client.on_connect = self.on_connect
-        self.client.on_message = self.on_message
 
-        self.connect_broker()
+###added for check
 
-        self.last_receive_time = time.time()
-        self.timer = rospy.Timer(rospy.Duration(30), self.check_RTCM_timeout) 
-        #rospy.spin()
+ # Setting up the MQTT Client
+        if self.corr_type != "ntrip":
+            if self.corr_type == "ppp":
+                self.client = mqtt.Client(client_id=self.ppp_client_id, userdata=self.userdata)
+                self.certfile=os.path.join(packagePath,"config/")+f'device-{self.ppp_client_id}-pp-cert.crt'
+                self.keyfile=os.path.join(packagePath,"config/")+f'device-{self.ppp_client_id}-pp-key.pem'
+                self.client.tls_set(certfile=self.certfile,keyfile=self.keyfile)
+            elif self.corr_type == "ant_mqtt":
+                self.client = mqtt.Client(self.ant_client_id)
+                self.client.username_pw_set(mqtt_username, mqtt_password)
+            self.client.on_connect = self.on_connect
+            self.client.on_message = self.on_message
+
+            self.connect_broker()
+
+            self.last_receive_time = time.time()
+            self.timer = rospy.Timer(rospy.Duration(30), self.check_RTCM_timeout) 
+            
 
     # Attempts to connect to the broker
     def connect_broker(self):
@@ -117,8 +139,10 @@ class gpsCorrections():
             elif self.corr_type == "ant_mqtt":
                 self.client.connect(self.ant_broker, self.ant_mqtt_port, self.mqtt_keepalive)
             
+            # TODO change SN4010
+            # rospy.loginfo("SN4010: Connected to MQTT broker successfully.")
         except Exception as e:
-            rospy.logerr("SN4500: Connected to MQTT broker failed. ({e})")
+            rospy.logerr("SN4010: Connected to MQTT broker failed. ({e})")
 
         time.sleep(2)
         
@@ -131,9 +155,9 @@ class gpsCorrections():
                 self.client.subscribe(userdata['topics'])
             elif self.corr_type == "ant_mqtt":
                 self.client.subscribe(self.ant_mqtt_topic_sub)
-            rospy.loginfo("SN4500: Connected to broker successfully.")
+            rospy.loginfo("SN4010: Connected to broker successfully")
         else: 
-            rospy.logerr("SN4500: Connected to broker failed. (rc = {rc})")
+            rospy.logerr("SN4010: Connected to broker failed. (rc = {rc})")
 
     # The callback for when a PUBLISH message is received from the server.
     def on_message(self,client,userdata, msg):
@@ -141,37 +165,109 @@ class gpsCorrections():
         try:
             if self.corr_type == "ppp":
                 data = userdata['gnss'].write(msg.payload)
-                self.last_receive_time = time.time()
             elif self.corr_type == "ant_mqtt":
                 data = self.serial_port.write(msg.payload)
-                self.last_receive_time = time.time()
         except Exception as e:
-            rospy.logerr(f"SN4500: Write the corrections failed. ({e})")
+            rospy.logerr(f"SN4010: Write the corrections failed. ({e})")
             dev_port = "/dev/ttyTHS0"
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
+
 
     def check_RTCM_timeout(self, event):
         if time.time() - self.last_receive_time > 30: # 30s
             rospy.logerr("SN4500: The RTCM time is out of sync (30s).")
             self.last_receive_time = time.time()
 
+###end
+
+    def make_ntrip_request(self):
+        auth = base64.b64encode(f"{self.ntrip_username}:{self.ntrip_password}".encode()).decode()
+        request = (
+            f"GET /{self.ntrip_mountpoint} HTTP/1.1\r\n"
+            f"Host: {self.ntrip_server}:{self.ntrip_port}\r\n"
+            "User-Agent: NTRIP u-blox client\r\n"
+            f"Authorization: Basic {auth}\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+        )
+        return request.encode()
+
+    def connect_ntrip(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((self.ntrip_server, self.ntrip_port))
+        self.sock.send(self.make_ntrip_request())
+        print("[INFO] Connected to NTRIP server")
+   
+    def stream_corrections(self,event=None):
+        print("[INFO] Streaming corrections...")
+        data = self.sock.recv(1024)
+        if not data:
+            print("[WARN] NTRIP server closed connection")
+            self.connect_ntrip()
+        #print(data)
+        self.serial_port.write(data)
+    
+    def gga_callback(self,data):
+        self.latest_gga=data.data
+        return
+
+    def time_offset_callback(self,data):
+        self.time_offset = data.t_offset
+        return
+
+    def send_gga(self,event=None):
+        
+        print("in send gga")
+        """ Periodically send latest GGA to NTRIP server """ 
+        if self.latest_gga and self.time_offset<0.5:
+            try:
+                self.sock.send(self.latest_gga.encode())
+                print(f"[INFO] Sent GGA: {self.latest_gga.strip()}")
+                self.sent_time = rospy.Time.now()
+            except Exception as e:
+                print(f"[WARN] Failed to send GGA: {e}")
+                #self.running=False
+                self.connect_ntrip()
+        if (rospy.Time.now()-self.sent_time).to_sec() > 35:
+            self.connect_ntrip()
+
+
+    def close(self):
+        self.running=False
+        if self.serial_port:
+            self.serial_port.close()
+        if self.sock:
+            self.sock.close()
+        print("[INFO] Closed connections")
+
 
 def main():
+    rospy.init_node ('gps_correction')
+    gps_corr = gpsCorrections()
+    rate=rospy.Rate(0.1)
+    try:
+        if gps_corr.corr_type == "ntrip":
+            gps_corr.connect_ntrip()
+            rospy.Timer(rospy.Duration(5), gps_corr.send_gga)
+            rospy.Timer(rospy.Duration(0.1), gps_corr.stream_corrections) 
+            rospy.spin() 
+        if gps_corr.corr_type == "ppp" or "ant_mqtt":
+            gps_corr.client.loop_start()
+            rate = rospy.Rate(1) # 1hz
+            while not rospy.is_shutdown():
+                print("gpsCorrections is running") # for test
+                rate.sleep()
+            gps_corr.client.loop_stop()
 
-    rospy.init_node('gpsCorrections') 
-
-    gps_corr = gpsCorrections(corr_type="ant_mqtt") # corr_type="ppp" or "anto_mqtt"
-    
-    gps_corr.client.loop_start()
-
-    rate = rospy.Rate(1) # 1hz
-
-    while not rospy.is_shutdown():
-        #print("gpsCorrections is running") # for test
-        rate.sleep()
-
-    gps_corr.client.loop_stop()
+    except KeyboardInterrupt:
+        print("[INFO] Interrupted by user")
+    except Exception as e:
+        print(f"[ERROR] {e}")
+    finally:
+        if gps_corr.corr_type == "ntrip":
+            gps_corr.close()
+        pass
 
 if __name__ == '__main__':
     main()
