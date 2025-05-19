@@ -258,7 +258,9 @@ class F9P_GPS:
         if (dt0!=None):
             self.gps_time_i=(dt0.timestamp()-self.gpsfix.header.stamp.to_sec())
             self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
-        
+            
+            if dt0.timestamp() > current_time.to_sec():
+                rospy.logerr("SN4013: GPS time is {}s ahead of the system time".format(self.gps_time_offset))
             # # Assigning timestamp part of NavSatFix message
             self.gps_timestamp = rospy.Time.from_sec(dt0.timestamp())
             self.gpsfix.header.stamp = self.gps_timestamp            # Assigning time received from F9P
