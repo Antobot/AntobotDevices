@@ -196,6 +196,23 @@ class F9P_config:
         packet = self.calculate_checksum(packet, length)
         
         return packet
+
+    def cfg_valset_NAVSPG_DYNMODEL(self):
+        print("set navspg dynmodel")
+        # prepare packet
+        length = 17
+        packet = self.prepare_cfg_packet(length)
+        #keyid
+        packet[10] = 0x21
+        packet[11] = 0x00
+        packet[12] = 0x11
+        packet[13] = 0x20
+        #value
+        packet[14] = 0x03
+
+        packet = self.calculate_checksum(packet, length)
+        
+        return packet
     
     def receive_gps(self):
         """Prepares UBX protocol sentence to get the HPPOSLLH"""
@@ -331,6 +348,32 @@ class F9P_config:
                 enable_text = "Enabled"
             print("GPS Config: UART2 RTCM" + msg + " Message " + enable_text + "\n")
 
+    def set_rtcm_messages_uart(self):
+        all_messages = ['1074','1084','1094','1124','1230','4072']
+
+        for msg in all_messages:
+            if msg == '1074':
+                key_id = 0x60
+            elif msg == '1084':
+                key_id = 0x65
+            elif msg == '1094':
+                key_id = 0x6a
+            elif msg == '1124':
+                key_id = 0x6f
+            elif msg == '1230':
+                key_id = 0x05
+            elif msg == '4072':
+                key_id = 0x00
+
+            enable = True
+
+            packet = self.config_uart2_rtcm_msg(key_id, enable)
+            self.port.write(packet)
+
+            enable_text = "Disabled"
+            if enable:
+                enable_text = "Enabled"
+            print("GPS Config: UART2 RTCM" + msg + " Message " + enable_text + "\n")
     def config_uart2_rtcm_msg(self, key_id, enable):
         # prepare packet
         length = 18
@@ -437,12 +480,17 @@ class F9P_config:
         # configure the measurement rate of the chip
         
         ubx_rate_meas = self.cfg_rate_meas()
+        ubx_navspg_dynmodel=self.cfg_valset_NAVSPG_DYNMODEL()
         #print(self.port)
         if self.device=="uart":
             self.port.write(ubx_rate_meas)
             received_bytes = self.receive_ubx_bytes_from_uart()
+            self.port.write(ubx_navspg_dynmodel)
+            received_bytes = self.receive_ubx_bytes_from_uart()
         else:
             self.port.writebytes(ubx_rate_meas)
+            received_bytes = self.receive_ubx_bytes_from_spi()
+            self.port.writebytes(ubx_navspg_dynmodel)
             received_bytes = self.receive_ubx_bytes_from_spi()
             print("config uart2")
             packet = self.cfg_valget_uart2_baudrate()
@@ -465,7 +513,22 @@ class F9P_config:
         self.port.writebytes(packet)
         print('set uart2 baud 460800')
 
+        
+    def config_uart2_rtcm_uart(self):
+        ## Configure the F9P chip to be able to output RTCM messages for the dual-GPS setup (moving base)
+
+        ## HPG 1.32
+        self.set_rtcm_messages_uart()
+
+        # set uart_2 baud 460800
+        packet = self.cfg_valget_uart2_baudrate()
+        self.port.write(packet)
+        print('set uart2 baud 460800')
+        
+
+
 def configure_f9p():
+
 
     rospack = rospkg.RosPack()
     packagePath=rospack.get_path('antobot_description')
@@ -490,16 +553,17 @@ def configure_f9p():
     if moving_base:
         meas_rate = 5
 
+
     if device=="uart":
-        uart = serial.Serial(port='/dev/ttyUSB0', baudrate=460800,timeout=1)
+        uart = serial.Serial(port='/dev/ttyUSB0', baudrate=38400,timeout=1)  #38400
         f9p_cfg = F9P_config(uart, desired_messages, meas_rate,device)
         packet = f9p_cfg.get_ver()
         f9p_cfg.uartwrite(packet)
         received_bytes = f9p_cfg.receive_ubx_bytes_from_uart()
-        #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
+        print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
         f9p_cfg.config_f9p()
     
-
+        #f9p_cfg.config_uart2_rtcm_uart()
         #receive GPS messages
         packet = f9p_cfg.receive_gps()
         f9p_cfg.uartwrite(packet)
@@ -521,8 +585,6 @@ def configure_f9p():
         packet = f9p_cfg.revert_to_default_mode()
         f9p_cfg.write(packet)
         # revert to the default mode
-        packet = f9p_cfg.revert_to_default_mode()
-        f9p_cfg.write(packet)
 
         #configure the f9p to block unwanted messages
         f9p_cfg.config_f9p()

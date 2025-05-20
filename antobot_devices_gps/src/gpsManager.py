@@ -38,7 +38,7 @@ class gpsManager():
     def __init__(self):
 
         self.launch_nodes = False
-        self.launch_corrections = False
+        self.launch_corrections = "ntrip"
         self.use_class = True
 
         self.gps_nodes = []
@@ -73,12 +73,17 @@ class gpsManager():
                 gps_cls_tmp = self.get_gps_class(k, v)
                 self.gps_nodes.append(gps_cls_tmp)
 
-        # Launch corrections node - should it be launched directly from SW manager?
-        if self.launch_corrections:
-            self.node_c = Node(name_arg="gpsCorrections", package_arg="antobot_devices_gps", executable_arg="gps_corrections.py", err_code_id="SW234", node_type="sensor")
+        # Launch corrections node - should it be launched directly from SW manager? will be removed after test
+        """
+        if self.launch_corrections == "mqtt":
+            self.node_c = Node(name_arg="gpsCorrections", package_arg="antobot_devices_gps", executable_arg="gps_corrections.py", err_code_id="SW234", node_type="sensor", name_space="/", input_args=[])
             self.node_c.define_node()
             self.node_c.launch(self._launch)
-
+        elif self.launch_corrections == "ntrip":
+            self.node_c = Node(name_arg="gpsCorrections", package_arg="antobot_devices_gps", executable_arg="gps_corrections_new.py", err_code_id="SW234",node_type="sensor", name_space="/", input_args= [] )
+            self.node_c.define_node()
+            self.node_c.launch(self._launch)
+        """
         return
 
     def read_gps_config(self):
@@ -132,7 +137,7 @@ class gpsManager():
     
     def get_gps_class(self, k, v):
 
-        baud=460800
+        baud=460800 #460800
 
         if k == "urcu":
 
@@ -154,7 +159,7 @@ class gpsManager():
             gps_cls = MovingBase_Ros(self.f9p_urcu_serial_port, self.f9p_usb_port, None)
         if k == "f9p_usb" or k == "f9p_usb2":
             if self.f9p_usb_port == None:
-                self.f9p_usb_port = serial.Serial(v['device_port'], baud)
+                self.f9p_usb_port = serial.Serial(v['device_port'], 38400)
             gps_cls = F9P_GPS("usb", serial_port=self.f9p_usb_port, method=self.method,pub_name="antobot_" + k)
 
         return gps_cls

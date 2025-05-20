@@ -10,6 +10,13 @@ ant_mqtt:
   mqtt_UserName: 'xxx'
   mqtt_PassWord: 'xxx'
 
+ntrip:
+  address: "ppntrip.services.u-blox.com"
+  port: 2101
+  username: "e3a42d60-9905-4a61-b59f-b481195d3804"
+  password: "VWTXb&^9!y"
+  mountpoint: "NEAR-SPARTN"
+  
 ppp:
   # device_ID: '3ae678bd-b829-4dbb-acc4-2d041c3afda1' # purple
   device_ID: '58bab427-cbcd-4954-ab76-b49d68d8893d' # silver

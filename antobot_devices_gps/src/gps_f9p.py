@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2023, ANTOBOT LTD.
+# Copyright (c) 2023, ANTOBOT L
 # All rights reserved
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -24,12 +24,12 @@ import sys
 import time
 from datetime import datetime
 import pynmea2
-
+import yaml
 import serial
 
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
-from std_msgs.msg import UInt8, Float32
+from std_msgs.msg import UInt8, Float32, String
 from antobot_devices_msgs.msg import gpsQual
 from antobot_devices_gps.ublox_gps import UbloxGps
 
@@ -56,7 +56,7 @@ class F9P_GPS:
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
             if serial_port == None:
-                self.baud = 460800  # 38400?? Need to resolve baudrate difference with baudrate_rtk below
+                self.baud = 460800 # 38400?? 460800?Need to resolve baudrate difference with baudrate_rtk below
                 self.port = serial.Serial("/dev/ttyUSB0", self.baud,timeout=2)
             else:
                 self.port = serial_port
@@ -82,6 +82,7 @@ class F9P_GPS:
 
         self.gps_pub = rospy.Publisher(pub_name, NavSatFix, queue_size=10)
         self.gps_qual_pub = rospy.Publisher(pub_name_qual, gpsQual, queue_size=10)
+        self.gga_msg_pub=rospy.Publisher("/antobot_gps/gga", String, queue_size=10)
 
         return
 
@@ -252,8 +253,8 @@ class F9P_GPS:
         # Getting time
         current_time = rospy.Time.now()
         dt0 = self.get_gps_timestamp_utc()
-        # print("current time (ROS): {}".format(current_time.to_sec()))
-        # print("datetime timestamp: {}".format(dt0.timestamp()))
+        #print("current time (ROS): {}".format(current_time.to_sec()))
+        #print("datetime timestamp: {}".format(dt0.timestamp()))
         if (dt0!=None):
             self.gps_time_i=(dt0.timestamp()-self.gpsfix.header.stamp.to_sec())
             self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
@@ -270,9 +271,8 @@ class F9P_GPS:
             rospy.logerr("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
             self.poll_buff =(self.gps_time_offset//0.125)*3
             if self.poll_buff_pre !=1 and  self.poll_buff_pre!= 24 and self.poll_buff_pre!= 3:
-                self.poll_buff = 3
-            
-        elif self.gps_time_offset!=99:
+                self.poll_buff = 3            
+        elif self.gps_time_offset !=99:
             self.poll_buff = 1
         else:
             self.poll_buff = 24
@@ -336,6 +336,8 @@ class F9P_GPS:
 
                 #print(self.hAcc)
             if streamed_data.startswith("$GNGGA"):
+                if self.gps_time_offset < 0.5:
+                    self.gga_msg_pub.publish(streamed_data)
                 gga_parse = pynmea2.parse(streamed_data)
                 try:
                     self.gga_gps_qual = int(gga_parse.gps_qual)
@@ -401,9 +403,11 @@ def main(args):
     # init node
     rospy.init_node('rtk', anonymous=True)
     
-    gps_f9p = F9P_GPS("urcu")
+    gps_f9p = F9P_GPS("usb")
+
     baudrate_rtk = 460800 #38400            # Need to resolve baudrate
     gps_f9p.uart2_config(baudrate_rtk)
+
     mode = 2 # 1: RTK base station; 2: PPP-IP; 3: LBand
     
 

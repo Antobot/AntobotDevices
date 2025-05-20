@@ -3,6 +3,8 @@ project(antobot_devices_msgs)
 
 add_compile_options(-std=c++11)
 
+
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
@@ -39,6 +41,8 @@ install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
   FILES_MATCHING PATTERN "*.h"
   PATTERN ".svn" EXCLUDE)
+
+
 
 
 
