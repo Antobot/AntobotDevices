@@ -8,8 +8,8 @@ The package to use and manage IMU devices on Antobot's robot platform
 
 ### launch
 - imu_euler.launch - used to compensate the costmap calculation based on IMU data
-- static_lidar_frame.launch - used if you do not want to use the IMU data to compensate the 
-- static_lidar_frame_two_lidars.launch - 
+- static_lidar_frame.launch - used if you do not want to use the IMU data to compensate the costmap calculation
+- static_lidar_frame_two_lidars.launch - same as above, but required if using 2 LiDARs
 
 ### src
 - imuManager.py - the main script to launch and manage all GPS code
