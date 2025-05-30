@@ -8,8 +8,8 @@ Press key 's' to save the coordinates of the current pos; it saves average of 80
 Make sure to clean the buffer by pressing 'c' before saving the GPS coordinates for better accuracy.
 It listens to the ros topic /am_gps_urcu
 
-Contact: Aswathi Muralidharan
-email:  aswathi.muralidharan@antobot.ai
+Contact: Zhuang Zhou
+email:  zhuang.zhou@antobot.ai
 */
 #include <iostream>
 #include <termios.h>

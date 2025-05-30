@@ -8,8 +8,8 @@
 ##                          Also it can check the strength of GPS signal, uses the message type UBX-NAV-SAT
 ##                          Number of satellites for a constellation of 5 is 5*4; each constellation needs atleast 4 satellite to be in fixed mode
 
-# Contact: Aswathi Muralidharan 
-# email: aswathi.muralidharan@antobot.ai
+# Contact: Daniel Freer 
+# email: daniel.freer@antobot.ai
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 

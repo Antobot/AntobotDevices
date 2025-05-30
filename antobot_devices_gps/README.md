@@ -1,37 +1,36 @@
-### antobot_devices_gps
+## antobot_devices_gps
 
-The antobot_devices_gps repository outlook:
-* config
-  *ppp_configuration yaml file
-  *PPP certificate pem and crt file, to be downloaded from thing web
-* src
-  * gps_ppp.py: Python script for F9P in uRCU via SPI using the sparkfun library; this script is used when uRCU is using PPP-IP
-  * base_station_test: analyse the performance of base station via USB
-  * f9p_config.py: Python script to configure the F9P in uRCU via SPI. just need to run once for new uURCU.
-  * gps_strength_test: script to test the number of satellite and strength of GPS signal
-  * set_gpio_high: script to set xavier's GPIO01 ping as high to enable PPP. for test purpose 
-  * antobot_devices_gps:
-    * third party dependencies to run the gps_ppp.py (LICENCE provided)
-* setup.py: installation file for antobot_gps_urcu
+The package to use and manage GPS devices on Antobot's robot platform
+
+### config
+
+- Different GPS devices and their relative location to the robot should be configured in the antobot_description package (platform_config.yaml)
+  - Correction type should also be defined in platform_config.yaml
+- Your method for receiving GPS correction messages should be configured in antobot_devices_gps/config/corrections_config.yaml (example provided - true config file gitignored by default)
+  - Correction Types:
+    - ant_mqtt: if using an Antobot base station, messages will come via an Antobot server via MQTT. An appropriate configuration file should come with your robot.
+    - ntrip: using ublox's Thingstream (PointPerfect), a username and password is all you need to receive NRTIP messages for GPS corrections
+    - ppp: ublox's Thingstream (PointPerfect) MQTT-based corrections. For this, a key and cert file are required for corrections messages
+
+### launch
+- gps_config.launch - used to appropriately configure different GPS nodes depending on configuration (used by gpsManager.py)
+
+### meshes
+- dae file of the standard GPS antenna used by the Ant Platform
+
+### src
+- gpsManager.py - the main script to launch and manage all GPS code
+- gps_f9p.py - pulls data from an F9P (either the robot's internal F9P or a UART-connected one) and publishes the GPS data
+- gps_corrections.py - collects corrections from the configured source and sends it to the F9P
+- gps_movingbase.py - used for dual-GPS setups, pulls and publishes the relative location between the two GPS antennae
+- antobot_devices_gps: supporting scripts
+- utils:
+  - f9p_config.py - use this to configure the F9P to receive different messages or other similar changes
+  - field_survey.cpp - an example script for how to survey many points which can be put into
+  - gps_strength_test.py - can be used to print some information about GPS signal strength (number of usable satellites, signal strength, etc.) [likely to be removed in future releases]
+  - RenameSerialPort.sh - used to define a specific USB port which can be used by the robot without changing its name
 
 
-
-## How to use this repository:
-
-* Always configure the F9P chip before it.
-
-* run 'f9p_config.py' to configure the F9P. This will give 8Hz GPS frequency. To make changes to the configuration, make sure that the new configurations are written to both flash and ram memory of F9P. we use only GGA message types [previous name gps_config.py]
-
-* 'gps_base_station.py' is used in uRCU for gps-spi communication   [previous name am_base_station.py]
-
-* 'gps_ppp.py' to use the PPP-IP 8Hz F9P. this works only in HPG1.32 or 04B version of F9P. This script is for uRCU version 1.2C above with nVidia jetson package 35.1.0   [previous name antobot_nRTK_rover.py]
-
-* 'gps_base_station.py' is used to launch gps with base station [previous name antobot_gps.py] 
-
-********* below script has been removed since version 1.6.1 ***********
-* 'antobot_gps1.py' was developed to toggle between the base station script and ppp-ip script upon the button press of 'G'. But this script was never tested or used.
-
-* use 'antobot_gps_nRTK.py' to get the PPP-IP 8Hz F9P. this works only in HPG1.32 or 04B version of F9P. This script is for USB communication
 
 
 

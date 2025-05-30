@@ -120,7 +120,7 @@ class gpsManager():
         uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
         roslaunch.configure_logging(uuid)
 
-        cli_args = ['antobot_devices_gps', 'gps_config_launch.launch', 'exec_name:='+exec_name, 'node_name:='+node_name, 'dual_gps:='+self.dual_gps]
+        cli_args = ['antobot_devices_gps', 'gps_config.launch', 'exec_name:='+exec_name, 'node_name:='+node_name, 'dual_gps:='+self.dual_gps]
 
         roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
         print(roslaunch_file)
