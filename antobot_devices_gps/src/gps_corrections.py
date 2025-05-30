@@ -139,10 +139,9 @@ class gpsCorrections():
             elif self.corr_type == "ant_mqtt":
                 self.client.connect(self.ant_broker, self.ant_mqtt_port, self.mqtt_keepalive)
             
-            # TODO change SN4010
-            # rospy.loginfo("SN4010: Connected to MQTT broker successfully.")
+            # rospy.loginfo("SN4500: Connected to MQTT broker successfully.")
         except Exception as e:
-            rospy.logerr("SN4010: Connected to MQTT broker failed. ({e})")
+            rospy.logerr("SN4500: Connected to MQTT broker failed. ({e})")
 
         time.sleep(2)
         
@@ -155,9 +154,9 @@ class gpsCorrections():
                 self.client.subscribe(userdata['topics'])
             elif self.corr_type == "ant_mqtt":
                 self.client.subscribe(self.ant_mqtt_topic_sub)
-            rospy.loginfo("SN4010: Connected to broker successfully")
+            rospy.loginfo("SN4500: Connected to broker successfully")
         else: 
-            rospy.logerr("SN4010: Connected to broker failed. (rc = {rc})")
+            rospy.logerr("SN4500: Connected to broker failed. (rc = {rc})")
 
     # The callback for when a PUBLISH message is received from the server.
     def on_message(self,client,userdata, msg):
@@ -167,8 +166,9 @@ class gpsCorrections():
                 data = userdata['gnss'].write(msg.payload)
             elif self.corr_type == "ant_mqtt":
                 data = self.serial_port.write(msg.payload)
+            self.last_receive_time = time.time()
         except Exception as e:
-            rospy.logerr(f"SN4010: Write the corrections failed. ({e})")
+            rospy.logerr(f"SN4500: Write the corrections failed. ({e})")
             dev_port = "/dev/ttyTHS0"
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
@@ -176,9 +176,9 @@ class gpsCorrections():
 
     def check_RTCM_timeout(self, event):
         if time.time() - self.last_receive_time > 30: # 30s
-            rospy.logerr("SN4500: The RTCM time is out of sync (30s).")
-            self.last_receive_time = time.time()
-
+            rospy.logerr("SN4500: The RTCM message update timeout ({} > 30s).".format(time.time() - self.last_receive_time))
+            #self.last_receive_time = time.time()
+        #print(time.time() - self.last_receive_time) # test
 ###end
 
     def make_ntrip_request(self):
@@ -256,7 +256,7 @@ def main():
             gps_corr.client.loop_start()
             rate = rospy.Rate(1) # 1hz
             while not rospy.is_shutdown():
-                print("gpsCorrections is running") # for test
+                #print("gpsCorrections is running") # for test
                 rate.sleep()
             gps_corr.client.loop_stop()
 
