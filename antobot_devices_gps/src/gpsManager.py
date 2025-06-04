@@ -21,7 +21,7 @@ import rospy
 import roslaunch
 import rospkg
 
-from antobot_manager_software.launchManager import Node, RoslaunchWrapperObject
+from antobot_urcu.launchManager import Node, RoslaunchWrapperObject
 # from antobot_manager_msgs.srv import netMonitorLaunch, netMonitorLaunchResponse
 
 from gps_f9p import F9P_GPS

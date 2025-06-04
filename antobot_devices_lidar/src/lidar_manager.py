@@ -26,7 +26,7 @@ from datetime import datetime
 import roslaunch # Using this until we develop our own camera manager solution
 import rospkg
 
-from antobot_manager_software.launchManager import ProcessListener, RoslaunchWrapperObject
+from antobot_urcu.launchManager import ProcessListener, RoslaunchWrapperObject
 
 from antobot_devices_msgs.srv import lidarManager, lidarManagerResponse
 from antobot_devices_msgs.srv import costmapToggleObservation, costmapToggleObservationRequest
