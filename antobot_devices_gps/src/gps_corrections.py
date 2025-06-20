@@ -194,20 +194,25 @@ class gpsCorrections():
         return request.encode()
 
     def connect_ntrip(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((self.ntrip_server, self.ntrip_port))
-        self.sock.send(self.make_ntrip_request())
-        print("[INFO] Connected to NTRIP server")
-   
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect((self.ntrip_server, self.ntrip_port))
+            self.sock.send(self.make_ntrip_request())
+            print("[INFO] Connected to NTRIP server") 
+        except:
+            print("[ERROR] can't connect to NTRIP server")
     def stream_corrections(self,event=None):
-        print("[INFO] Streaming corrections...")
-        data = self.sock.recv(1024)
-        if not data:
-            print("[WARN] NTRIP server closed connection")
+        try:
+            print("[INFO] Streaming corrections...")
+            data = self.sock.recv(1024)
+            if not data:
+                print("[WARN] NTRIP server closed connection")
+                self.connect_ntrip()
+            #print(data)
+            self.serial_port.write(data)
+        except:
+            print("[ERROR] NTRIP server break, reconnecting")
             self.connect_ntrip()
-        #print(data)
-        self.serial_port.write(data)
-    
     def gga_callback(self,data):
         self.latest_gga=data.data
         return
@@ -267,7 +272,7 @@ def main():
     finally:
         if gps_corr.corr_type == "ntrip":
             gps_corr.close()
-        pass
+            pass
 
 if __name__ == '__main__':
     main()
