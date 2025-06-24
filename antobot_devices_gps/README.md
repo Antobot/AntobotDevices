@@ -30,6 +30,9 @@ The package to use and manage GPS devices on Antobot's robot platform
   - gps_strength_test.py - can be used to print some information about GPS signal strength (number of usable satellites, signal strength, etc.) [likely to be removed in future releases]
   - RenameSerialPort.sh - used to define a specific USB port which can be used by the robot without changing its name
 
+*for switching between base station and other correction methods state above
+-  gps_f9p.py: change self.base_station=True for base station correction, otherwise False
+- /catkin_ws/src/antUV/AntobotPlatform/AntobotRobot/antobot_navigation/launch/antobot_sensors.launch, set false for gpsCorrection node if use base station otherwise true
 
 
 

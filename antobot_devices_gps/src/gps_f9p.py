@@ -52,6 +52,7 @@ class F9P_GPS:
         self.method = method
         self.poll_buff = 1
         self.poll_buff_pre =1
+        self.base_station=True
         if self.dev_type == "urcu":
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
@@ -61,6 +62,9 @@ class F9P_GPS:
             else:
                 self.port = serial_port
         self.gps_dev = UbloxGps(self.port)
+        if (self.base_station==True):
+            baud_uart2 = self.gps_dev.ubx_set_val(0x40530001,38400)
+            set_uart2=self.gps_dev.ubx_set_val(0x19539995,0x01)
         self.geo = None
         self.fix_status = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
         self.gps_status = "Critical"
