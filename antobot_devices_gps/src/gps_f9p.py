@@ -52,6 +52,7 @@ class F9P_GPS:
         self.method = method
         self.poll_buff = 1
         self.poll_buff_pre =1
+        self.base_station=False
         if self.dev_type == "urcu":
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
@@ -61,6 +62,9 @@ class F9P_GPS:
             else:
                 self.port = serial_port
         self.gps_dev = UbloxGps(self.port)
+        if (self.base_station==True):
+            baud_uart2 = self.gps_dev.ubx_set_val(0x40530001,38400)
+            set_uart2=self.gps_dev.ubx_set_val(0x19539995,0x01)
         self.geo = None
         self.fix_status = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
         self.gps_status = "Critical"
@@ -336,12 +340,12 @@ class F9P_GPS:
 
                 #print(self.hAcc)
             if streamed_data.startswith("$GNGGA"):
-                if self.gps_time_offset < 0.5:
-                    self.gga_msg_pub.publish(streamed_data)
                 gga_parse = pynmea2.parse(streamed_data)
                 try:
                     self.gga_gps_qual = int(gga_parse.gps_qual)
                     self.num_sats = int(gga_parse.num_sats)         # Number of satellites
+                    if self.gps_time_offset < 0.5:
+                    self.gga_msg_pub.publish(streamed_data)
                 except:
                     print("GPS_quality value invalid")
                 
