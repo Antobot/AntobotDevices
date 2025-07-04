@@ -344,8 +344,8 @@ class F9P_GPS:
                 try:
                     self.gga_gps_qual = int(gga_parse.gps_qual)
                     self.num_sats = int(gga_parse.num_sats)         # Number of satellites
-                    if self.gps_time_offset < 0.5:
-                    self.gga_msg_pub.publish(streamed_data)
+                    if self.gps_time_offset < 0.5 and self.num_sats > 0:
+                        self.gga_msg_pub.publish(streamed_data)
                 except:
                     print("GPS_quality value invalid")
                 
