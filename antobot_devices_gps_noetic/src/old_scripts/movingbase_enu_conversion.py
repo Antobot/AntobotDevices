@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import math
-import rospy
+import rclpy
 from std_msgs.msg import Float64
 
 
@@ -26,8 +26,8 @@ class MovingBase_Heading:
     def __init__(self,angle):
         self.angle = angle # angle between the vector created by the two antenna and the x axis of the base_link
 
-        self.sub_heading_enu = rospy.Subscriber('am_heading_enu', Float64, self.headingCallback)
-        self.pub_heading_robot = rospy.Publisher('am_heading_robot', Float64, queue_size=10)
+        self.sub_heading_enu = rclpy.Subscriber('am_heading_enu', Float64, self.headingCallback)
+        self.pub_heading_robot = rclpy.Publisher('am_heading_robot', Float64, queue_size=10)
 
 
     def headingCallback(self,msg_enu):
@@ -37,21 +37,21 @@ class MovingBase_Heading:
         
 if __name__ == '__main__':
     
-    rospy.init_node('ENUConversion', anonymous=True)
+    rclpy.init_node('ENUConversion', anonymous=True)
 
     # Only considering px and py (two antennas should be placed at the same height)
-    urcu_px = rospy.get_param("/gps/urcu/px",0.1)
-    urcu_py = rospy.get_param("/gps/urcu/py",0.6)
+    urcu_px = rclpy.get_param("/gps/urcu/px",0.1)
+    urcu_py = rclpy.get_param("/gps/urcu/py",0.6)
 
-    rover_px = rospy.get_param("/gps/ublox_rover/px",0.1)
-    rover_py = rospy.get_param("/gps/ublox_rover/py",-0.6)
+    rover_px = rclpy.get_param("/gps/ublox_rover/px",0.1)
+    rover_py = rclpy.get_param("/gps/ublox_rover/py",-0.6)
 
     angle = calculate_enu_angle(urcu_px, urcu_py, rover_px, rover_py)
     print(f"ENU Angle (relative to East): {angle:.2f} degrees")
     
     MH = MovingBase_Heading(angle)
 
-    rospy.spin()
+    rclpy.spin()
 
   
 

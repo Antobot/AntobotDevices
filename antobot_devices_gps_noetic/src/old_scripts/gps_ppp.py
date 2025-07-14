@@ -33,7 +33,7 @@ import os
 import paho.mqtt.client as mqtt
 
 #ros dependencies
-import rospy, rostopic, rospkg
+import rclpy, rostopic, rospkg
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8
@@ -98,12 +98,12 @@ class nRTK:
         self.connect_broker()
 
         #To check the frequency of the GPS topic
-        #self.timer = rospy.Timer(rospy.Duration(1.0), self.frequency_check)
+        #self.timer = rclpy.Timer(rclpy.Duration(1.0), self.frequency_check)
         self.gps_hz = 0.0
         self.gps_hz_status = "None"
         self.msg_count = 0
         self.first_message = True
-        self.last_time = rospy.get_time()
+        self.last_time = rclpy.get_time()
 
         self.gps_time_buf = []
 
@@ -148,11 +148,11 @@ class nRTK:
 
 def main(args):
 
-    node_name = 'gps_ppp' #rospy.get_param('gps_node_name')
+    node_name = 'gps_ppp' #rclpy.get_param('gps_node_name')
 
-    rospy.init_node (node_name)
+    rclpy.init_node (node_name)
 
-    dev_port = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
+    dev_port = rclpy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
 
     parent_directory = os.path.dirname(os.path.abspath(__file__))
     yaml_file_path = os.path.join(parent_directory, "../config/ppp_config.yaml")
@@ -162,12 +162,12 @@ def main(args):
         client_id = config['device_ID']
 
     print(client_id)
-    rate = rospy.Rate(50)
+    rate = rclpy.Rate(50)
     
     baudrate = 460800
 
     #Publisher to publish nRTK
-    gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10) # am_nRTK_urcu
+    gps_pub = rclpy.Publisher('antobot_gps', NavSatFix, queue_size=10) # am_nRTK_urcu
     gps_f9p = F9P_GPS()
     gps_f9p.uart2_config(baudrate)
 
@@ -179,7 +179,7 @@ def main(args):
 
     # Create the message for ROS
     gpsfix = NavSatFix()
-    gpsfix.header.stamp = rospy.Time.now()
+    gpsfix.header.stamp = rclpy.Time.now()
     gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
     gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED        
 
@@ -190,7 +190,7 @@ def main(args):
     # Set the horizontal accuracy limit (in m)
     h_acc = 0.075 
     hAcc = 500
-    while not rospy.is_shutdown():
+    while not rclpy.is_shutdown():
 
         #GPIO.output(nRTK_node.gpio01,nRTK_node.GPIO.HIGH)
 
@@ -211,24 +211,24 @@ def main(args):
             # Get GPS fix status
             #gpsfix.status.status = gps_f9p.get_fix_status()
             if gps_f9p.geo.gps_qual == 4 and gps_status != 'Good':
-                rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
                 gps_status = 'Good'
                 gpsfix.status.status = 3
             elif gps_f9p.geo.gps_qual == 2 or 5:
                 if hAcc<h_acc:
                     gpsfix.status.status = 3
                     if gps_status != 'Good':
-                        rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                        rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
                         gps_status = 'Good'
                 else:   
                     gpsfix.status.status = 1
                     if gps_status != 'Warning':
-                        rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
+                        rclpy.logwarn("SN4010: GPS Fix Status: Float Mode")
                         gps_status = 'Warning'
             else:
                 gpsfix.status.status = 0 #no fix
                 if gps_status != 'Critical':
-                    rospy.logerr("SN4010: GPS Fix Status: Critical")
+                    rclpy.logerr("SN4010: GPS Fix Status: Critical")
                     gps_status = 'Critical'
 
             # Assumptions made on covariance
@@ -237,7 +237,7 @@ def main(args):
             gpsfix.position_covariance[8] = (4*hAcc)**2 
 
             # Update the navsatfix messsage
-            current_time = rospy.Time.now()
+            current_time = rclpy.Time.now()
             gps_time_i=(current_time.to_sec()-gpsfix.header.stamp.to_sec())
             gpsfix.header.stamp = current_time
 
@@ -254,15 +254,15 @@ def main(args):
             if hAcc < 0.75:
                 gps_pub.publish(gpsfix)
 
-            #rospy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
+            #rclpy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
             if gps_hz < 2 and gps_freq_status != "Critical":
-                rospy.logerr("SN4012: GPS Frequency status: Critical (<2 hz)")
+                rclpy.logerr("SN4012: GPS Frequency status: Critical (<2 hz)")
                 gps_freq_status = "Critical"
             elif gps_hz >=2 and gps_hz < 6 and gps_freq_status != "Warning":
-                rospy.logwarn("SN4012: GPS Frequency status: Warning (<6 hz)")
+                rclpy.logwarn("SN4012: GPS Frequency status: Warning (<6 hz)")
                 gps_freq_status = "Warning"
             elif gps_hz >= 6 and gps_freq_status != "Good":
-                rospy.loginfo("SN4012: GPS Frequency status: Good (>6 hz)")
+                rclpy.loginfo("SN4012: GPS Frequency status: Good (>6 hz)")
                 gps_freq_status = "Good"
 
         rate.sleep()

@@ -13,7 +13,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-import rospy
+import rclpy
 import rosservice
 from antobot_devices_msgs.srv import antoRec, antoRecRequest, antoRecResponse
 
@@ -25,7 +25,7 @@ class antoRecClient():
 
         self.serviceName = serviceName
 
-        self.antoRecClient = rospy.ServiceProxy(self.serviceName, antoRec)
+        self.antoRecClient = rclpy.ServiceProxy(self.serviceName, antoRec)
         self.command = command
         self.timestamp = timestamp
 
@@ -39,7 +39,7 @@ class antoRecClient():
     def sendCameraCommand(self):
 
         # In ROS it's common to wait for a service. However, this blocks execution and is not always useful. Use checkForService method instead.
-        # rospy.wait_for_service('localUserInput')
+        # rclpy.wait_for_service('localUserInput')
         # camCommand = camManagerRequest
         # camCommand.camera_num=self.camera_num
         # camCommand.command=self.command
@@ -48,7 +48,7 @@ class antoRecClient():
             response = self.antoRecClient(self.command, self.timestamp)
             return response
 
-        except rospy.ServiceException as e:
+        except rclpy.ServiceException as e:
             print("Service call failed: %s" % e)
 
 

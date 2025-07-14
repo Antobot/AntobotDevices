@@ -13,7 +13,7 @@
 
 import yaml
 import socket
-import rospy
+import rclpy
 
 import roslaunch
 import rospkg
@@ -134,12 +134,12 @@ class gpsManager():
         return launcher
 
 def main():
-    rospy.init_node ('gpsManager') 
+    rclpy.init_node ('gpsManager') 
     gpsMgr = gpsManager()
     
-    rate = rospy.Rate(1) # 1hz
+    rate = rclpy.Rate(1) # 1hz
 
-    while not rospy.is_shutdown():
+    while not rclpy.is_shutdown():
         gpsMgr.check_gps()
         rate.sleep()
 

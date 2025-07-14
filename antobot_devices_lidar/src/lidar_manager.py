@@ -19,7 +19,7 @@
 
 import sys
 import yaml
-import rospy
+import rclpy
 from pathlib import Path
 from datetime import datetime
 
@@ -38,9 +38,9 @@ from std_srvs.srv import Empty, EmptyRequest, EmptyResponse
 class costmapManager:
     def __init__(self):
         self.launch = None
-        self.costmapManagerService = rospy.Service('/costmap_manager/node_died_costmap',Empty,self.restart_costmap)
+        self.costmapManagerService = rclpy.Service('/costmap_manager/node_died_costmap',Empty,self.restart_costmap)
 
-        self.costmapManagerService = rospy.Service('/costmap_manager/node_died_imu',Empty,self.restart_imu)
+        self.costmapManagerService = rclpy.Service('/costmap_manager/node_died_imu',Empty,self.restart_imu)
 
         # launch imu euler 
         self.launch_imu_euler()
@@ -111,14 +111,14 @@ class lidar: # Currently for C16 lidar
         
 
         ## Client for controlling lidar input to the costmap node
-        self.costmapToggleClient = rospy.ServiceProxy('/costmap_node/costmap/toggle_observation',costmapToggleObservation)
+        self.costmapToggleClient = rclpy.ServiceProxy('/costmap_node/costmap/toggle_observation',costmapToggleObservation)
 
         ##############################################################################
         ## Check for the simulation parameter which should be set by am_sim     
         ##############################################################################
            
         try:
-            self.sim = rospy.get_param("/simulation")
+            self.sim = rclpy.get_param("/simulation")
         except:
             self.sim=False # If the simulation parameter has not been assigned, assume not a simulation
 
@@ -231,7 +231,7 @@ class lidarManagerClass:
         ##############################################################################
            
         try:
-            self.sim = rospy.get_param("/simulation")
+            self.sim = rclpy.get_param("/simulation")
 
         except:
             self.sim=False # If the simulation parameter has not been assigned, assume not a simulation
@@ -247,7 +247,7 @@ class lidarManagerClass:
             print('Lidar Manager: This is NOT a simulation - using real Lidar')
 
         # Create a service to allow other nodes to start/stop lidars
-        self.srvLidarMgr = rospy.Service("/antobot/lidarManager", lidarManager, self._serviceCallbackLidarMgr)
+        self.srvLidarMgr = rclpy.Service("/antobot/lidarManager", lidarManager, self._serviceCallbackLidarMgr)
 
 
     
@@ -255,7 +255,7 @@ class lidarManagerClass:
         rospack = rospkg.RosPack()
 
         try:
-            device_type = rospy.get_param("/device_type",'robot') #Add default value - used when not launching with softwareManager
+            device_type = rclpy.get_param("/device_type",'robot') #Add default value - used when not launching with softwareManager
             # path = rospack.get_path('antobot_platform_' + device_type)
             path = rospack.get_path('antobot_description')
             with open(path+'/config/platform_config.yaml','r') as file:
@@ -381,20 +381,20 @@ class lidarManagerClass:
 
 def main(args):
     
-    rospy.init_node('lidarManager', anonymous=False)
+    rclpy.init_node('lidarManager', anonymous=False)
     # Turn lidars on
     lidarMgr = lidarManagerClass()
     print('Lidar Manager started')
-    rospy.sleep(1.0)
+    rclpy.sleep(1.0)
 
     # launch costmap node
     if lidarMgr.for_navigation:
         costmapMgr = costmapManager()
         print('Costmap Manager started')
 
-    rate = rospy.Rate(10) # 10hz
+    rate = rclpy.Rate(10) # 10hz
 
-    while not rospy.is_shutdown():
+    while not rclpy.is_shutdown():
         rate.sleep()
 
 if __name__ == '__main__':

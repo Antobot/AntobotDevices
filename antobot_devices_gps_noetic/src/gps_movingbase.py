@@ -33,7 +33,7 @@ import asyncio
 import time
 import math
 
-import rospy,rostopic
+import rclpy,rostopic
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8
@@ -60,8 +60,8 @@ class MovingBase_Ros:
 
         self.time_buf_len = 10
 
-        self.pub_heading_urcu = rospy.Publisher('antobot_heading_urcu', Float64, queue_size=10)
-        self.pub_heading_robot = rospy.Publisher('antobot_heading_robot', Float64, queue_size=10)
+        self.pub_heading_urcu = rclpy.Publisher('antobot_heading_urcu', Float64, queue_size=10)
+        self.pub_heading_robot = rclpy.Publisher('antobot_heading_robot', Float64, queue_size=10)
         self.heading_hz = 0
         self.heading_freq_status = None
         self.heading_time_buf = []
@@ -69,11 +69,11 @@ class MovingBase_Ros:
         self.heading_status_str = None
 
         # Only considering px and py (two antennas should be placed at the same height)
-        urcu_px = rospy.get_param("/gps/urcu/px",0.1)
-        urcu_py = rospy.get_param("/gps/urcu/py",0.6)
+        urcu_px = rclpy.get_param("/gps/urcu/px",0.1)
+        urcu_py = rclpy.get_param("/gps/urcu/py",0.6)
 
-        rover_px = rospy.get_param("/gps/movingbase/px",0.1)
-        rover_py = rospy.get_param("/gps/movingbase/py",-0.6)
+        rover_px = rclpy.get_param("/gps/movingbase/px",0.1)
+        rover_py = rclpy.get_param("/gps/movingbase/py",-0.6)
 
         self.robot_angle_correction = self.calculate_enu_angle(urcu_px, urcu_py, rover_px, rover_py)
 
@@ -101,10 +101,10 @@ class MovingBase_Ros:
             self.heading_status = False
 
         if self.heading_status is False and self.heading_status_str != "Invalid":
-            rospy.logerr("SN4020: Heading Status: Invalid")
+            rclpy.logerr("SN4020: Heading Status: Invalid")
             self.heading_status_str  = "Invalid"
         elif self.heading_status and self.heading_status_str != "Valid":
-            rospy.loginfo("SN4020: Heading Status: Valid")
+            rclpy.loginfo("SN4020: Heading Status: Valid")
             self.heading_status_str = "Valid"
 
         if len(self.heading_time_buf) > self.time_buf_len:
@@ -116,13 +116,13 @@ class MovingBase_Ros:
             self.heading_hz = 0
 
         if self.heading_hz < self.freq_low and self.heading_freq_status != "Critical":
-            rospy.logerr(f"SN4022: Heading Frequency status: Critical (<{self.freq_low} hz)")
+            rclpy.logerr(f"SN4022: Heading Frequency status: Critical (<{self.freq_low} hz)")
             self.heading_freq_status = "Critical"
         elif self.heading_hz >= self.freq_low and self.heading_hz < self.freq_high and self.heading_freq_status != "Warning":
-            rospy.logwarn(f"SN4022: Heading Frequency status: Warning (<{self.freq_high} hz)")
+            rclpy.logwarn(f"SN4022: Heading Frequency status: Warning (<{self.freq_high} hz)")
             self.heading_freq_status = "Warning"
         elif self.heading_hz >= self.freq_high and self.heading_freq_status != "Good":
-            rospy.loginfo(f"SN4022: Heading Frequency status: Good (>{self.freq_high} hz)")
+            rclpy.loginfo(f"SN4022: Heading Frequency status: Good (>{self.freq_high} hz)")
             self.heading_freq_status = "Good"
     
     def calculate_enu_angle(xA, yA, xB, yB):
@@ -151,7 +151,7 @@ class MovingBase_Ros:
                 return MB
             except Exception as e:
                 if self.publish_first:
-                    rospy.logerr('MovingBase initialization failed: %s:', str(e))
+                    rclpy.logerr('MovingBase initialization failed: %s:', str(e))
                     self.publish_first = False
                 time.sleep(1)
         
@@ -163,12 +163,12 @@ class MovingBase_Ros:
                 self.pub_head(headFrame)
 
             except:
-                rospy.logerr(f"MovingBase: Close the MovingBase node")
+                rclpy.logerr(f"MovingBase: Close the MovingBase node")
                 break
 
 if __name__ == '__main__':
     
-    rospy.init_node("nRTK", disable_signals=True)
+    rclpy.init_node("nRTK", disable_signals=True)
     
    
     # GPIO
@@ -176,11 +176,11 @@ if __name__ == '__main__':
     GPIO.setmode(GPIO.BOARD)
     GPIO.setup(gpioID, GPIO.OUT)
 
-    base_port_uart = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
-    rover_port = rospy.get_param("/gps/ublox_rover/device_port","/dev/AntoF9P")
+    base_port_uart = rclpy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
+    rover_port = rclpy.get_param("/gps/ublox_rover/device_port","/dev/AntoF9P")
     base_port_spi = None
     
-    rtk_type = rospy.get_param("/gps/urcu/rtk_type","ppp") # or "base_station"
+    rtk_type = rclpy.get_param("/gps/urcu/rtk_type","ppp") # or "base_station"
     if rtk_type == "ppp":
         mode = 2
     else:

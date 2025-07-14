@@ -17,7 +17,7 @@
 # email: aswathi.muralidharan@antobot.ai
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-import rospy
+import rclpy
 import rospkg
 import spidev
 import sys
@@ -65,7 +65,7 @@ class F9P_GPS:
             self.fix_status = self.geo.fixType #3: 3Dfix, 2:2Dfix
 
             if self.fix_status == 3 and self.gps_status != 'Good':
-                rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
                 self.gps_status = 'Good'
 
         elif self.geo.flags.carrSoln == 1: #float conditions
@@ -73,35 +73,35 @@ class F9P_GPS:
             if self.geo.hAcc < h_acc:
                 self.fix_status = 3
                 if self.gps_status != 'Good':
-                    rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                    rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
                     self.gps_status = 'Good'
             elif self.geo.hAcc > h_acc :
                 self.fix_status = 1
                 if self.gps_status != 'Warning':
-                    rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
+                    rclpy.logwarn("SN4010: GPS Fix Status: Float Mode")
                     self.gps_status = 'Warning'
 
         else:
             self.fix_status = 0 #no fix
             if self.gps_status != 'Critical':
-                rospy.logerr("SN4010: GPS Fix Status: Critical")
+                rclpy.logerr("SN4010: GPS Fix Status: Critical")
                 self.gps_status = 'Critical'
         '''
         if isinstance(self.geo,str) and self.geo.startswith("$GNGGA"):
             self.geo = pynmea2.parse(self.geo)
             if self.geo.gps_qual == 4 and self.gps_status != 'Good':
-                rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
                 self.gps_status = 'Good'
                 self.fix_status = 3
             elif self.geo.gps_qual == 2 or 5:
                 self.fix_status = 1
                 if self.gps_status != 'Warning':
-                    rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
+                    rclpy.logwarn("SN4010: GPS Fix Status: Float Mode")
                     self.gps_status = 'Warning'
             else:
                 self.fix_status = 0 #no fix
                 if self.gps_status != 'Critical':
-                    rospy.logerr("SN4010: GPS Fix Status: Critical")
+                    rclpy.logerr("SN4010: GPS Fix Status: Critical")
                     self.gps_status = 'Critical'
         
 
@@ -114,22 +114,22 @@ def main(args):
 
     try:
         # init node
-        rospy.init_node('rtk', anonymous=True)
-        rate = rospy.Rate(50)  # 8hz
+        rclpy.init_node('rtk', anonymous=True)
+        rate = rclpy.Rate(50)  # 8hz
         gps_f9p = F9P_GPS()
 
         baudrate_rtk = 38400
         gps_f9p.uart2_config(baudrate_rtk)
 
-        gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10)
+        gps_pub = rclpy.Publisher('antobot_gps', NavSatFix, queue_size=10)
         gpsfix = NavSatFix()
-        gpsfix.header.stamp = rospy.Time.now()
+        gpsfix.header.stamp = rclpy.Time.now()
         gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
         gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
         #last_print = time.monotonic()
 
         mode = 1 # 1: RTK base station; 2: PPP-IP; 3: LBand
-        while not rospy.is_shutdown():
+        while not rclpy.is_shutdown():
             gps_f9p.get_gps()
 
             # Check the new data is viable and update message
@@ -147,7 +147,7 @@ def main(args):
                 gpsfix.position_covariance[8] = (4*gps_f9p.geo.horizontal_dil*0.1*0.001)**2 
 
                 # Update the navsatfix messsage
-                current_time = rospy.Time.now()
+                current_time = rclpy.Time.now()
                 gps_time_i=(current_time.to_sec()-gpsfix.header.stamp.to_sec())
                 gpsfix.header.stamp = current_time
 
@@ -163,19 +163,19 @@ def main(args):
                 if gps_f9p.geo.horizontal_dil < 1:
                     gps_pub.publish(gpsfix)
 
-                #rospy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
+                #rclpy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
                 if gps_hz < 2 and gps_freq_status != "Critical":
-                    rospy.logerr("SN4012: GPS Frequency status: Critical (<2 hz)")
+                    rclpy.logerr("SN4012: GPS Frequency status: Critical (<2 hz)")
                     gps_freq_status = "Critical"
                 elif gps_hz >=2 and gps_hz < 6 and gps_freq_status != "Warning":
-                    rospy.logwarn("SN4012: GPS Frequency status: Warning (<6 hz)")
+                    rclpy.logwarn("SN4012: GPS Frequency status: Warning (<6 hz)")
                     gps_freq_status = "Warning"
                 elif gps_hz >= 6 and gps_freq_status != "Good":
-                    rospy.loginfo("SN4012: GPS Frequency status: Good (>6 hz)")
+                    rclpy.loginfo("SN4012: GPS Frequency status: Good (>6 hz)")
                     gps_freq_status = "Good"
 
             rate.sleep()
-    except rospy.ROSInterruptException:
+    except rclpy.ROSInterruptException:
         pass
 
 

@@ -3,7 +3,7 @@ import sys
 from serial import Serial
 from pyubx2 import UBXReader
 
-import rospy
+import rclpy
 from sensor_msgs.msg import NavSatFix
 
 
@@ -13,7 +13,7 @@ class BasicGPS:
         self.stream.flush()
         self.ubr = UBXReader(self.stream)
 
-        self.gps_pub = rospy.Publisher('gps', NavSatFix, queue_size=1)
+        self.gps_pub = rclpy.Publisher('gps', NavSatFix, queue_size=1)
 
     def run(self):
         (raw_data,parsed_data) = self.ubr.read()
@@ -27,7 +27,7 @@ class BasicGPS:
                 # print("Number of satellites available: ", parsed_data.numSV)
                 
                 msg = NavSatFix()
-                msg.header.stamp = rospy.Time.now()
+                msg.header.stamp = rclpy.Time.now()
                 msg.latitude = parsed_data.lat
                 msg.longitude = parsed_data.lon
                 msg.altitude = parsed_data.alt
@@ -36,11 +36,11 @@ class BasicGPS:
 
 
 def main(argv):
-    rospy.init_node('gps_publisher')
+    rclpy.init_node('gps_publisher')
 
     gps = BasicGPS()
 
-    while not rospy.is_shutdown():
+    while not rclpy.is_shutdown():
         try:
             gps.run()
         except KeyboardInterrupt:

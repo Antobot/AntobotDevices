@@ -12,7 +12,7 @@
 # Contacts:     soyoung.kim@antobot.ai
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-import rospy
+import rclpy
 import time
 import math
 import sys, signal
@@ -33,8 +33,8 @@ class imuTf:
         self.angles = None
 
         # Subscribers
-        self.sub_imu = rospy.Subscriber('imu/data', Imu, self.imuCallback) # Check frequency is 50Hz 
-        #self.sub_imu = rospy.Subscriber('/imu/data_corrected', Imu, self.imuCallback) # Check frequency is 10hz
+        self.sub_imu = rclpy.Subscriber('imu/data', Imu, self.imuCallback) # Check frequency is 50Hz 
+        #self.sub_imu = rclpy.Subscriber('/imu/data_corrected', Imu, self.imuCallback) # Check frequency is 10hz
 
 ###################################################################################################       
 ### Callback functions 
@@ -52,7 +52,7 @@ class imuTf:
 
 if __name__ == '__main__':
     # init node
-    rosnode = rospy.init_node('imu_euler', anonymous=True)
+    rosnode = rclpy.init_node('imu_euler', anonymous=True)
     
     # Define imuTf calibration
     imuTf = imuTf()
@@ -60,15 +60,15 @@ if __name__ == '__main__':
     br = tf.TransformBroadcaster()
 
     # Front lidar
-    listener.waitForTransform("base_link", "laser_link_front", rospy.Time.now(), rospy.Duration(3.0))
-    (trans,rot) = listener.lookupTransform ("base_link", "laser_link_front", rospy.Time(0))
+    listener.waitForTransform("base_link", "laser_link_front", rclpy.Time.now(), rclpy.Duration(3.0))
+    (trans,rot) = listener.lookupTransform ("base_link", "laser_link_front", rclpy.Time(0))
     rpy = tf.transformations.euler_from_quaternion(rot) 
 
     # Rear lidar
     rear_lidar_available = True # only available in v3 platform
     try:
-        listener.waitForTransform("base_link", "laser_link_rear", rospy.Time.now(), rospy.Duration(3.0))
-        (trans_2,rot_2) = listener.lookupTransform ("base_link", "laser_link_rear", rospy.Time.now())
+        listener.waitForTransform("base_link", "laser_link_rear", rclpy.Time.now(), rclpy.Duration(3.0))
+        (trans_2,rot_2) = listener.lookupTransform ("base_link", "laser_link_rear", rclpy.Time.now())
         rpy_2 = tf.transformations.euler_from_quaternion(rot_2) 
     except:
         print("Rear lidar frame not available")
@@ -78,9 +78,9 @@ if __name__ == '__main__':
     
 
     # loop rate
-    rate = rospy.Rate(50)  # 10hz for imu publishing
+    rate = rclpy.Rate(50)  # 10hz for imu publishing
     
-    while not rospy.is_shutdown():
+    while not rclpy.is_shutdown():
         if (imuTf.angles is not None):
             # Front lidar frame
             q1 = tf.transformations.quaternion_from_euler(imuTf.angles[0], 0.0, 0.0) # RPY
@@ -88,12 +88,12 @@ if __name__ == '__main__':
             q3 = tf.transformations.quaternion_multiply(q1, q2)
             br.sendTransform((trans[0], trans[1], 0),
                        q3,
-                        rospy.Time.now(),
+                        rclpy.Time.now(),
                         "laser_tmp_front",
                         "base_link")
             br.sendTransform((0, 0, trans[2]),
                        tf.transformations.quaternion_from_euler(0.0, 0.0, 0.0),
-                        rospy.Time.now(),
+                        rclpy.Time.now(),
                         "laser_link_front",
                         "laser_tmp_front")
             
@@ -103,12 +103,12 @@ if __name__ == '__main__':
                 q3 = tf.transformations.quaternion_multiply(q1, q2)
                 br.sendTransform((trans_2[0], trans_2[1], 0),
                         q3,
-                            rospy.Time.now(),
+                            rclpy.Time.now(),
                             "laser_tmp_rear",
                             "base_link")
                 br.sendTransform((0, 0, trans_2[2]),
                         tf.transformations.quaternion_from_euler(0.0, 0.0, 0.0),
-                            rospy.Time.now(),
+                            rclpy.Time.now(),
                             "laser_link_rear",
                             "laser_tmp_rear")
         rate.sleep()

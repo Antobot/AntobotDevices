@@ -17,7 +17,7 @@ import spidev
 import serial
 import time
 import yaml
-import rospy, rospkg
+import rclpy, rospkg
 
 class F9P_config:
     """GPS parsing module.	Can parse simple NMEA data sentences from SPI

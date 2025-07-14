@@ -16,7 +16,7 @@ import socket
 import serial
 import asyncio
 
-import rospy
+import rclpy
 
 import roslaunch
 import rospkg
@@ -168,7 +168,7 @@ class gpsManager():
     async def check_gps_async(self):
 
         MB = await self.create_MovingBase()
-        while not rospy.is_shutdown():
+        while not rclpy.is_shutdown():
             try:
 
                 self.check_gps_node(self.urcu_gps_node)
@@ -177,7 +177,7 @@ class gpsManager():
                 self.pub_head(headFrame)
 
             except:
-                rospy.logerr(f"MovingBase: Close the MovingBase node")
+                rclpy.logerr(f"MovingBase: Close the MovingBase node")
                 break
         return
     
@@ -193,11 +193,11 @@ class gpsManager():
     
 
 def main():
-    rospy.init_node ('gpsManager') 
+    rclpy.init_node ('gpsManager') 
     gpsMgr = gpsManager()
 
-    rate = rospy.Rate(50)  # check at 50hz
-    # rate = rospy.Rate(1) # check at 1hz
+    rate = rclpy.Rate(50)  # check at 50hz
+    # rate = rclpy.Rate(1) # check at 1hz
 
     # If movingbase is being used with dual-GPS
     if gpsMgr.movingbase:
@@ -209,7 +209,7 @@ def main():
             GPIO.cleanup()
             loop.close()
     else:       # Most other situations
-        while not rospy.is_shutdown():
+        while not rclpy.is_shutdown():
             if not gpsMgr.launch_nodes:
                 gpsMgr.check_gps()
             rate.sleep()

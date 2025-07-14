@@ -24,7 +24,7 @@
 # # # #  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import sys
-import rospy
+import rclpy
 
 import roslaunch # Using this until we develop our own camera manager solution
 
@@ -44,17 +44,17 @@ from diagnostic_msgs.msg import DiagnosticStatus
 def main(args):
     
     
-    rospy.init_node('fakeZed', anonymous=False)
+    rclpy.init_node('fakeZed', anonymous=False)
 
-    camera_name = rospy.get_param("/fake_camera_name")
+    camera_name = rclpy.get_param("/fake_camera_name")
 
     # Create a publisher
-    diag_pub = rospy.Publisher("/"+camera_name+"_node/diagnostics", DiagnosticStatus, queue_size=1)
+    diag_pub = rclpy.Publisher("/"+camera_name+"_node/diagnostics", DiagnosticStatus, queue_size=1)
 
-    rate = rospy.Rate(10) # 10hz
+    rate = rclpy.Rate(10) # 10hz
 
-    # Due to rospy only allowing nodes to be called from within the main thread, we need to move them into here
-    while not rospy.is_shutdown():
+    # Due to rclpy only allowing nodes to be called from within the main thread, we need to move them into here
+    while not rclpy.is_shutdown():
 
         emptyData=DiagnosticStatus()
         diag_pub.publish(emptyData)

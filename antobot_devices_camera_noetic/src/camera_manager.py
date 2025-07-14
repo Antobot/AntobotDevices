@@ -19,7 +19,7 @@
 
 import sys
 import yaml
-import rospy
+import rclpy
 import rospkg
 from datetime import datetime
 from std_msgs.msg import Bool, String
@@ -41,7 +41,7 @@ class cameraManager:
         self.cameras = {}
         self.read_config_file()
         try:
-            self.sim = rospy.get_param("/simulation")
+            self.sim = rclpy.get_param("/simulation")
 
         except:
             self.sim=False # If the simulation parameter has not been assigned, assume not a simulation
@@ -58,14 +58,14 @@ class cameraManager:
 
 
         # Get ros parameters for cameras
-        #camera_config = rospy.get_param("/camera")
+        #camera_config = rclpy.get_param("/camera")
 
         # Create a service to allow other nodes to start/stop cameras
-        self.srvCamMgr = rospy.Service("/antobot/camera_manager/camera", camManager, self._serviceCallbackCamMgr)
+        self.srvCamMgr = rclpy.Service("/antobot/camera_manager/camera", camManager, self._serviceCallbackCamMgr)
 
         # self.updateClient = progressUpdateClient(state=0, sourceID='camManager')
         
-        self.pub_scout_light = rospy.Publisher("/antobot_manager_device/scout_light",Bool, queue_size=1)
+        self.pub_scout_light = rclpy.Publisher("/antobot_manager_device/scout_light",Bool, queue_size=1)
 
     def read_config_file(self):
         rospack = rospkg.RosPack()
@@ -89,7 +89,7 @@ class cameraManager:
 
                     # Todo: launch corresponding camera node on carrier board
             else:
-                rospy.loginfo(f'SW2312: Camera Manager: No camera settings found in config')
+                rclpy.loginfo(f'SW2312: Camera Manager: No camera settings found in config')
 
         except Exception as e:
             print(f"Failed to read robot config file, error: {e}")
@@ -125,8 +125,8 @@ class cameraManager:
 
             for cam in cams.values():
                 if cam:
-                    rospy.loginfo(f'SW2312: Camera Manager: {cam.location} {cam.camType} camera open state: {cam.isOpen}')
-                    rospy.loginfo(f'SW2312: Camera Manager: Make request to toggle {cam.location} {cam.camType} camera open state')
+                    rclpy.loginfo(f'SW2312: Camera Manager: {cam.location} {cam.camType} camera open state: {cam.isOpen}')
+                    rclpy.loginfo(f'SW2312: Camera Manager: Make request to toggle {cam.location} {cam.camType} camera open state')
                     response = cam.toggleOpen()
                     return_msg.responseCode = response.responseCode
                     return_msg.responseString = response.responseString
@@ -140,8 +140,8 @@ class cameraManager:
                 cams = self.cameras['right']
 
             for cam in cams.values():
-                rospy.loginfo(f'SW2312: Camera Manager: {cam.location} {cam.camType} camera recording state: {cam.isRecording}')
-                rospy.loginfo(f'SW2312: Camera Manager: Make request to toggle {cam.location} {cam.camType} camera recording state')
+                rclpy.loginfo(f'SW2312: Camera Manager: {cam.location} {cam.camType} camera recording state: {cam.isRecording}')
+                rclpy.loginfo(f'SW2312: Camera Manager: Make request to toggle {cam.location} {cam.camType} camera recording state')
                 response = cam.toggleRecording()
                 return_msg.responseCode = response.responseCode
                 return_msg.responseString = response.responseString
@@ -149,11 +149,11 @@ class cameraManager:
                 if cam.camType == 'zed':  # only check the zed status for now
                     if cam.isRecording:
                         self.pub_scout_light.publish(True)  # only turn on scouting light when camera starts recording
-                        rospy.loginfo(
+                        rclpy.loginfo(
                             f'SW2312: Camera Manager: Scouting light turn on')
                     else:
                         self.pub_scout_light.publish(False)  # turn off scouting light when camera stops recording
-                        rospy.loginfo(
+                        rclpy.loginfo(
                             f'SW2312: Camera Manager: Scouting light turn off')
 
                     if return_msg.responseCode:
@@ -165,7 +165,7 @@ class cameraManager:
                     self.updateJobManagerState()
 
             if not cams:
-                rospy.loginfo(f'SW2312: Camera Manager: No camera settings in the config file')
+                rclpy.loginfo(f'SW2312: Camera Manager: No camera settings in the config file')
 
         return return_msg
 
@@ -192,7 +192,7 @@ class Camera:
         self.filename = None
 
         self.antoRecClient = antoRecClient(command=0, timestamp='', serviceName=serviceName)
-        self.rec_manager_timestamp_sub = rospy.Subscriber("/recManager/timestamp",String,self.timestamp_callback)
+        self.rec_manager_timestamp_sub = rclpy.Subscriber("/recManager/timestamp",String,self.timestamp_callback)
 
     def timestamp_callback(self,data):
         self.filename = data.data
@@ -215,8 +215,8 @@ class Camera:
                 self.isOpen = not self.isOpen
 
         else:
-            rospy.loginfo('SW2312: CameraManager - Unable to make request - toggle camera open state')
-            rospy.loginfo(
+            rclpy.loginfo('SW2312: CameraManager - Unable to make request - toggle camera open state')
+            rclpy.loginfo(
                 'SW2312: CameraManager - ROS service ' + self.antoRecClient.serviceName + ' is not available')
 
         return response
@@ -242,8 +242,8 @@ class Camera:
                 self.isRecording = not self.isRecording
 
         else:
-            rospy.loginfo('SW2312: CameraManager - Unable to make request - toggle camera recording state')
-            rospy.loginfo(
+            rclpy.loginfo('SW2312: CameraManager - Unable to make request - toggle camera recording state')
+            rclpy.loginfo(
                 'SW2312: CameraManager - ROS service ' + self.antoRecClient.serviceName + ' is not available')
 
         return response
@@ -256,13 +256,13 @@ class Camera:
 
 def main(args):
     
-    rospy.init_node('cameraManager', anonymous=False)
+    rclpy.init_node('cameraManager', anonymous=False)
     camManager = cameraManager()
 
-    rate = rospy.Rate(10) # 10hz
+    rate = rclpy.Rate(10) # 10hz
 
-    # Due to rospy only allowing nodes to be called from within the main thread, we need to move them into here
-    while not rospy.is_shutdown():
+    # Due to rclpy only allowing nodes to be called from within the main thread, we need to move them into here
+    while not rclpy.is_shutdown():
         rate.sleep()
 
 if __name__ == '__main__':

@@ -32,7 +32,7 @@ import threading
 import asyncio
 import time
 
-import rospy,rostopic
+import rclpy,rostopic
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8
@@ -58,9 +58,9 @@ class MovingBase_Ros:
         self.time_buf_len = 10
 
         # Create the message for ROS
-        self.gps_pub = rospy.Publisher('antobot_gps', NavSatFix, queue_size=10)
+        self.gps_pub = rclpy.Publisher('antobot_gps', NavSatFix, queue_size=10)
         self.gpsfix = NavSatFix()
-        self.gpsfix.header.stamp = rospy.Time.now()
+        self.gpsfix.header.stamp = rclpy.Time.now()
         self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
         self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED 
         self.gps_hz = 0 
@@ -70,8 +70,8 @@ class MovingBase_Ros:
         self.gps_fix_status_str = None
         self.h_acc = 500
 
-        self.heading_pub = rospy.Publisher('am_heading_urcu', Float64, queue_size=10)
-        self.heading_pub_enu = rospy.Publisher('am_heading_enu', Float64, queue_size=10)
+        self.heading_pub = rclpy.Publisher('am_heading_urcu', Float64, queue_size=10)
+        self.heading_pub_enu = rclpy.Publisher('am_heading_enu', Float64, queue_size=10)
         self.heading_hz = 0
         self.heading_freq_status = None
         self.heading_time_buf = []
@@ -106,14 +106,14 @@ class MovingBase_Ros:
        
 
         if self.gps_fix_status == 0 and self.gps_fix_status_str != "Critical":
-            rospy.logerr("SN4010: GPS Fix Status: Crtitial")
+            rclpy.logerr("SN4010: GPS Fix Status: Crtitial")
             self.gps_fix_status_str = "Critical"
         elif self.gps_fix_status == 1 and self.gps_fix_status_str != "Warning":
             self.gps_fix_status_str = "Warning"
-            rospy.logwarn("SN4010: GPS Fix Status: Float Mode")
+            rclpy.logwarn("SN4010: GPS Fix Status: Float Mode")
         elif self.gps_fix_status == 3 and self.gps_fix_status_str != "Good":
             self.gps_fix_status_str = "Good"
-            rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+            rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
 
         if len(self.gps_time_buf) > self.time_buf_len:
             self.gps_time_buf.pop(0)
@@ -124,13 +124,13 @@ class MovingBase_Ros:
             self.gps_hz = 0
 
         if self.gps_hz < self.freq_low and self.gps_freq_status != "Critical":
-            rospy.logerr(f"SN4012: GPS Frequency status: Critical (<{self.freq_low} hz)")
+            rclpy.logerr(f"SN4012: GPS Frequency status: Critical (<{self.freq_low} hz)")
             self.gps_freq_status = "Critical"
         elif self.gps_hz >= self.freq_low and self.gps_hz < self.freq_high and self.gps_freq_status != "Warning":
-            rospy.logwarn(f"SN4012: GPS Frequency status: Warning (<{self.freq_high} hz)")
+            rclpy.logwarn(f"SN4012: GPS Frequency status: Warning (<{self.freq_high} hz)")
             self.gps_freq_status = "Warning"
         elif self.gps_hz >= self.freq_high and self.gps_freq_status != "Good":
-            rospy.loginfo(f"SN4012: GPS Frequency status: Good (>{self.freq_high} hz) ")
+            rclpy.loginfo(f"SN4012: GPS Frequency status: Good (>{self.freq_high} hz) ")
             self.gps_freq_status = "Good"   
 
     def pub_head(self, frame):
@@ -154,10 +154,10 @@ class MovingBase_Ros:
             self.heading_status = False
 
         if self.heading_status is False and self.heading_status_str != "Invalid":
-            rospy.logerr("SN4020: Heading Status: Invalid")
+            rclpy.logerr("SN4020: Heading Status: Invalid")
             self.heading_status_str  = "Invalid"
         elif self.heading_status and self.heading_status_str != "Valid":
-            rospy.loginfo("SN4020: Heading Status: Valid")
+            rclpy.loginfo("SN4020: Heading Status: Valid")
             self.heading_status_str = "Valid"
 
         if len(self.heading_time_buf) > self.time_buf_len:
@@ -169,13 +169,13 @@ class MovingBase_Ros:
             self.heading_hz = 0
 
         if self.heading_hz < self.freq_low and self.heading_freq_status != "Critical":
-            rospy.logerr(f"SN4022: Heading Frequency status: Critical (<{self.freq_low} hz)")
+            rclpy.logerr(f"SN4022: Heading Frequency status: Critical (<{self.freq_low} hz)")
             self.heading_freq_status = "Critical"
         elif self.heading_hz >= self.freq_low and self.heading_hz < self.freq_high and self.heading_freq_status != "Warning":
-            rospy.logwarn(f"SN4022: Heading Frequency status: Warning (<{self.freq_high} hz)")
+            rclpy.logwarn(f"SN4022: Heading Frequency status: Warning (<{self.freq_high} hz)")
             self.heading_freq_status = "Warning"
         elif self.heading_hz >= self.freq_high and self.heading_freq_status != "Good":
-            rospy.loginfo(f"SN4022: Heading Frequency status: Good (>{self.freq_high} hz)")
+            rclpy.loginfo(f"SN4022: Heading Frequency status: Good (>{self.freq_high} hz)")
             self.heading_freq_status = "Good"
     
 
@@ -187,7 +187,7 @@ class MovingBase_Ros:
                 return MB
             except Exception as e:
                 if self.publish_first:
-                    rospy.logerr('MovingBase inilization failed: %s:', str(e))
+                    rclpy.logerr('MovingBase inilization failed: %s:', str(e))
                     self.publish_first = False
                 time.sleep(1)
         
@@ -203,12 +203,12 @@ class MovingBase_Ros:
                 self.pub_head(headFrame)
 
             except:
-                rospy.logerr(f"nRTK: Close the nRTK Node")
+                rclpy.logerr(f"nRTK: Close the nRTK Node")
                 break
 
 if __name__ == '__main__':
     
-    rospy.init_node("nRTK", disable_signals=True)
+    rclpy.init_node("nRTK", disable_signals=True)
     
    
     # GPIO
@@ -217,11 +217,11 @@ if __name__ == '__main__':
     GPIO.setup(gpioID, GPIO.OUT)
 
     
-    base_port_uart = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
-    rover_port = rospy.get_param("/gps/ublox_rover/device_port","/dev/AntoF9P")
+    base_port_uart = rclpy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
+    rover_port = rclpy.get_param("/gps/ublox_rover/device_port","/dev/AntoF9P")
     base_port_spi = None
     
-    rtk_type = rospy.get_param("/gps/urcu/rtk_type","ppp") # or "base_station"
+    rtk_type = rclpy.get_param("/gps/urcu/rtk_type","ppp") # or "base_station"
     if rtk_type == "ppp":
         mode = 2
     else:

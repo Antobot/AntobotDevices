@@ -18,7 +18,7 @@ import os
 import time
 import yaml
 import paho.mqtt.client as mqtt
-import rospy, rospkg
+import rclpy, rospkg
 import importlib
 import serial
 
@@ -75,7 +75,7 @@ class gpsCorrections():
 
         # Configuring method-specific parameters (MQTT)
         if self.corr_type == "ppp":
-            dev_port = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
+            dev_port = rclpy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
             self.mqtt_topics = [(f"/pp/ip/eu", 0), ("/pp/ubx/mga", 0), ("/pp/ubx/0236/ip", 0)]
             self.userdata = { 'gnss': self.serial_port, 'topics': self.mqtt_topics } 
         elif self.corr_type == "ant_mqtt":
