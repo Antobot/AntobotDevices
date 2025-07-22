@@ -15,7 +15,7 @@ import yaml
 import socket
 import serial
 import asyncio
-
+import importlib
 import rospy
 
 import roslaunch
@@ -55,6 +55,17 @@ class gpsManager():
 
         # Read gps config
         gps_data = self.read_gps_config()
+        
+        try:
+            if gps_data['urcu']['rtk_type'] != "base_station":
+                GPIO = importlib.import_module("Jetson.GPIO") 
+                self.gpio01 = 29
+                self.GPIO = GPIO
+                self.GPIO.setmode(GPIO.BOARD)
+                self.GPIO.setup(self.gpio01, GPIO.OUT)
+                self.GPIO.output(self.gpio01, GPIO.HIGH)
+        except:
+            pass
 
         # Initialise ROS Launcher
         self._launch = roslaunch.scriptapi.ROSLaunch()
@@ -107,8 +118,8 @@ class gpsManager():
 
         if k == "urcu":
             exec_name = "gps_f9p.py"
-        if k == "movingbase":
-            exec_name = "gps_movingbase.py"
+        #if k == "movingbase":
+        #    exec_name = "gps_movingbase.py"
         if k == "f9p_usb" or k == "f9p_usb2":
             exec_name = "gps_f9p.py"
 
@@ -138,36 +149,39 @@ class gpsManager():
     def get_gps_class(self, k, v):
 
         baud=460800 #460800
-
+        gps_cls = None
         if k == "urcu":
-
+            #print("k=",k)
             # Define serial port for the F9P inside of the uRCU (for movingbase or otherwise)
             if self.f9p_urcu_serial_port == None:
                 self.f9p_urcu_serial_port = serial.Serial(v['device_port'], baud)
 
             # Define the class object
             gps_cls = F9P_GPS("urcu",method=self.method)
+            #print("gps_cls:",gps_cls)
             self.urcu_gps_node = gps_cls
-
-        if k == "movingbase":
+        """
+        if k == "movingbase" :
             # Define serial port for the movingbase F9P (connected via USB)
 
             if self.f9p_usb_port == None:
                 self.f9p_usb_port = serial.Serial(v['device_port'], baud)
 
             # Define the class object
-            gps_cls = MovingBase_Ros(self.f9p_urcu_serial_port, self.f9p_usb_port, None)
+            gps_cls = MovingBase_Ros("/dev/AntoF9P", "/dev/ttyTHS0")
+        """
         if k == "f9p_usb" or k == "f9p_usb2":
             if self.f9p_usb_port == None:
                 self.f9p_usb_port = serial.Serial(v['device_port'], 38400)
             gps_cls = F9P_GPS("usb", serial_port=self.f9p_usb_port, method=self.method,pub_name="antobot_" + k)
-
+        #print("gps_cls:",gps_cls)
         return gps_cls
     
     def check_gps(self,event=None):
         # Checks whether there have been any changes to the robot's network
 
         if not self.launch_nodes:
+            #print(self.gps_nodes)
             for gps_node in self.gps_nodes:
                 if gps_node.node_type == "gps_f9p":
                     self.check_gps_node(gps_node)
@@ -213,18 +227,23 @@ def main():
     gpsMgr = gpsManager()
 
     # If movingbase is being used with dual-GPS
-    if gpsMgr.movingbase:
+    if False: #gpsMgr.movingbase:
         loop = asyncio.get_event_loop()
+        print("loop")
         try:
             loop.run_until_complete(gpsMgr.check_gps_async)
         except Exception as e:     
-            GPIO = importlib.import_module("Jetson.GPIO")
-            GPIO.cleanup()
+            #GPIO = importlib.import_module("Jetson.GPIO")
+            #GPIO.cleanup()
             loop.close()
     else:       # Most other situations
-        rospy.Timer(rospy.Duration(0.02), gpsMgr.check_gps)  # Runs periodically without blocking
-        rospy.spin() 
-        
+        try:
+            rospy.Timer(rospy.Duration(0.02), gpsMgr.check_gps)  # Runs periodically without blocking
+            rospy.spin() 
+        except Exception as e: 
+            #GPIO = importlib.import_module("Jetson.GPIO")            
+            #GPIO.cleanup()
+            pass
 
 if __name__ == '__main__':
     main()
