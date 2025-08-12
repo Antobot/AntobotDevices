@@ -197,6 +197,26 @@ class F9P_config:
         
         return packet
 
+
+        def cfg_valset_NAVSPG_INFIL_MINELEV(self):
+        
+        # prepare packet
+        length = 17
+        packet = self.prepare_cfg_packet(length)
+        #keyid
+        packet[10] = 0xA4
+        packet[11] = 0x00
+        packet[12] = 0x11
+        packet[13] = 0x20
+        #value
+        packet[14] = 0x1E
+
+
+        packet = self.calculate_checksum(packet, length)
+        
+        return packet
+
+
     def cfg_valset_NAVSPG_DYNMODEL(self):
         print("set navspg dynmodel")
         # prepare packet
