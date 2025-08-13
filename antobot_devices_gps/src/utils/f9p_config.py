@@ -198,7 +198,7 @@ class F9P_config:
         return packet
 
 
-        def cfg_valset_NAVSPG_INFIL_MINELEV(self):
+    def cfg_valset_NAVSPG_INFIL_MINELEV(self):
         
         # prepare packet
         length = 17
@@ -501,11 +501,14 @@ class F9P_config:
         
         ubx_rate_meas = self.cfg_rate_meas()
         ubx_navspg_dynmodel=self.cfg_valset_NAVSPG_DYNMODEL()
+        ubx_navspg_minelev=self.cfg_valset_NAVSPG_INFIL_MINELEV()
         #print(self.port)
         if self.device=="uart":
             self.port.write(ubx_rate_meas)
             received_bytes = self.receive_ubx_bytes_from_uart()
             self.port.write(ubx_navspg_dynmodel)
+            received_bytes = self.receive_ubx_bytes_from_uart()
+            self.port.write(ubx_navspg_minelev)
             received_bytes = self.receive_ubx_bytes_from_uart()
         else:
             self.port.writebytes(ubx_rate_meas)
@@ -513,6 +516,9 @@ class F9P_config:
             self.port.writebytes(ubx_navspg_dynmodel)
             received_bytes = self.receive_ubx_bytes_from_spi()
             print("config uart2")
+            self.port.writebytes(ubx_navspg_minelev)
+            received_bytes = self.receive_ubx_bytes_from_spi()
+            print("config elev angle")
             packet = self.cfg_valget_uart2_baudrate()
             self.port.writebytes(packet)
             received_bytes = self.receive_ubx_bytes_from_spi()
