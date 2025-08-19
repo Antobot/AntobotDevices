@@ -36,7 +36,7 @@ from std_srvs.srv import Empty, EmptyRequest, EmptyResponse
 ###################################################################################################################################################
 
 class costmapManager:
-    def __init__(self,imu_frame,lidar_count):
+    def __init__(self,imu_frame,lidar_count, lidar_type='c16'):
         self.lidar_count = lidar_count
         self.imu_frame = imu_frame
         self.costmapLaunchWrapper = None
@@ -282,7 +282,135 @@ class lidar: # Currently for C16 lidar
     def checkStatus(self):
         pass # data check / or error message / turned on/off
 
+class lidar_mid360: # Currently for Mid360
+    '''Stores lidar specific information'''
+    def __init__(self,name ="c16",ip="",m_port="",d_port="",frame_id="",location="front"):
 
+        # Save arguments
+        self.ip = ip
+        self.m_port = str(m_port)
+        self.d_port = str(d_port)
+        self.name_space = name
+        self.frame_id = frame_id
+        self.active = False # Lidar turn on/off 
+        self.enabled_in_costmap = True # default True
+        self.launch = None
+        self.location = location
+
+        
+        ## Client for controlling lidar input to the costmap node
+        self.costmapToggleClient = rospy.ServiceProxy('/costmap_node/costmap/toggle_observation',costmapToggleObservation)
+
+        ##############################################################################
+        ## Check for the simulation parameter which should be set by am_sim     
+        ##############################################################################
+           
+        try:
+            self.sim = rospy.get_param("/simulation")
+        except:
+            self.sim=False # If the simulation parameter has not been assigned, assume not a simulation
+
+        if self.sim:
+            rospy.loginfo('SW2320: Lidar Manager: Simulation - robot lidar launched with Gazebo')
+            self.active = True
+        else:
+            # By default, turn on all the available lidar 
+            self.createLauncher()
+            self.start() # TODO: do we want logerr for lidar node?
+
+#################################################
+
+    def createLauncher(self):
+        '''Starts a camera by calling the c16 launch file'''
+
+        # Generate a unique id for the node
+        uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
+        roslaunch.configure_logging(uuid)
+
+        # cli_args = ['antobot_devices_lidar', 'lslidar_config_launch_updated.launch', 'name_space:='+self.name_space, 'frame_id:='+self.frame_id,  'device_ip:='+self.ip, 'msop_port:='+self.m_port, 'difop_port:='+self.d_port]
+
+        cli_args = ['antobot_devices_lidar', 'mid360_config_launch.launch', 'frame_id:='+self.frame_id]
+
+        roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
+        #print(roslaunch_file)
+        roslaunch_args = cli_args[2:]
+
+        launch_files = [(roslaunch_file, roslaunch_args)]
+
+        self.launch = RoslaunchWrapperObject(run_id = uuid, roslaunch_files = launch_files)
+        
+#################################################
+
+    def start(self):
+        if self.active==False:
+            self.active=True
+            self.launch.start()
+
+#################################################
+
+    def shutdown(self):
+        if self.active==True:
+            self.active=False
+            self.launch.stop()
+            rospy.loginfo("SW2320: Lidar Manager: Lidar {} shutdown".format(self.location))
+
+        else:
+            rospy.loginfo("SW2320: Lidar Manager: Shutdown requested but no active lidar")
+
+#################################################
+    
+    def disableInCostmap(self):
+        # disable this input from the costmap
+        return_msg = lidarManagerResponse()
+        if self.active and self.enabled_in_costmap:
+            topic_name = "/lidar_"+self.location+"/lslidar_point_cloud"
+            req = costmapToggleObservationRequest(observation_source = topic_name,command = False)
+            response = self.costmapToggleClient.call(req) # Always return true 
+            return_msg.responseCode = True
+            return_msg.responseString = topic_name + " disabled in the costmap"
+            self.enabled_in_costmap = False
+        elif not self.active:
+            return_msg.responseCode = False
+            return_msg.responseString = "lidar not turned off - no disabling the topic in the costmap"
+        elif not self.enabled_in_costmap:
+            return_msg.responseCode = True # True since it's already disabled
+            return_msg.responseString = "topic already disabled in the costmap"
+        else:
+            # This Shouldn't happen
+            rospy.loginfo("SW2320: Lidar Manager: Lidar topic is neither active nor enabled in costmap - failed to disable the topic")
+            return_msg.responseCode = False
+            return_msg.responseString = "Failed to disable the topic"
+        
+        return return_msg
+    
+#################################################
+
+    def enableInCostmap(self):
+        return_msg = lidarManagerResponse()
+        if self.active and not self.enabled_in_costmap:
+            topic_name = "/lidar_"+self.location+"/lslidar_point_cloud"
+            req = costmapToggleObservationRequest(observation_source = topic_name,command = True)
+            response = self.costmapToggleClient.call(req) # Always return true 
+            return_msg.responseCode = True
+            return_msg.responseString = topic_name + " enabled in the costmap"
+            self.enabled_in_costmap = True
+        elif not self.active:
+            return_msg.responseCode = False
+            return_msg.responseString = "lidar not turned off - no enabling the topic in the costmap"
+        elif self.enabled_in_costmap:
+            return_msg.responseCode = True # True since it's already enabled
+            return_msg.responseString = "topic already enabled in the costmap"
+        else:
+            rospy.loginfo("SW2320: Lidar Manager: Lidar topic is alrady active and enabled in costmap")
+            return_msg.responseCode = False
+            return_msg.responseString = "Failed to enable the topic"
+
+        return return_msg
+
+#################################################
+
+    def checkStatus(self):
+        pass # data check / or error message / turned on/off
 
 
 
@@ -352,21 +480,37 @@ class lidarManagerClass:
             else:
                 self.imu_frame = True
             print('test')
+            print(f'imu_frame: {self.imu_frame}')
             self.lidars = {}
             
             for lidar_type in params["lidar"]:
-                ip = params["lidar"][lidar_type]["device_ip"]
-                m_port = params["lidar"][lidar_type]["msop_port"]
-                d_port = params["lidar"][lidar_type]["difop_port"]
+                if lidar_type[0:6] == 'mid360':
+                    ip = params["lidar"][lidar_type]["device_ip"]
+                    m_port = params["lidar"][lidar_type]["msop_port"]
+                    d_port = params["lidar"][lidar_type]["difop_port"]
 
-                if params["lidar"][lidar_type]["mode"] == "navigation":
-                    frame_id = "laser_link_" + params["lidar"][lidar_type]["location"]
-                    self.for_navigation = True
-                    print('navigation')
-                else:
-                    frame_id = "laser_link_" + params["lidar"][lidar_type]["location"] + "_static"
+                    if params["lidar"][lidar_type]["mode"] == "navigation":
+                        frame_id = "laser_link_" + params["lidar"][lidar_type]["location"]
+                        self.for_navigation = True
+                        print('navigation')
+                    else:
+                        frame_id = "laser_link_" + params["lidar"][lidar_type]["location"] + "_static"
+                    print(frame_id)
+                    self.lidars[lidar_type] = lidar_mid360('lidar_'+params["lidar"][lidar_type]["location"], ip, m_port, d_port, frame_id,location=params["lidar"][lidar_type]["location"])
 
-                self.lidars[lidar_type] = lidar('lidar_'+params["lidar"][lidar_type]["location"], ip, m_port, d_port, frame_id,location=params["lidar"][lidar_type]["location"])
+                else: # c16
+                    ip = params["lidar"][lidar_type]["device_ip"]
+                    m_port = params["lidar"][lidar_type]["msop_port"]
+                    d_port = params["lidar"][lidar_type]["difop_port"]
+
+                    if params["lidar"][lidar_type]["mode"] == "navigation":
+                        frame_id = "laser_link_" + params["lidar"][lidar_type]["location"]
+                        self.for_navigation = True
+                        print('navigation')
+                    else:
+                        frame_id = "laser_link_" + params["lidar"][lidar_type]["location"] + "_static"
+
+                    self.lidars[lidar_type] = lidar('lidar_'+params["lidar"][lidar_type]["location"], ip, m_port, d_port, frame_id,location=params["lidar"][lidar_type]["location"])
         except:
             rospy.logerr("SW2320: Lidar Manager: Failed to read robot config file")
 
