@@ -1,24 +1,6 @@
 cmake_minimum_required(VERSION 3.8)
 project(antobot_devices_imu)
 
-<<<<<<< Updated upstream
-find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  sensor_msgs
-  geometry_msgs 
-  tf
-  geonav_transform
-  tf2
-  tf2_ros
-  std_msgs
-  rospy
-)
-=======
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
->>>>>>> Stashed changes
-
 # find dependencies
 find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in
