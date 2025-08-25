@@ -9,27 +9,10 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-<<<<<<< Updated upstream
-  <buildtool_depend>catkin</buildtool_depend>
-  <depend>roscpp</depend>
-  <depend>sensor_msgs</depend>
-  <depend>geometry_msgs</depend>
-  <depend>tf</depend>
-  <depend>tf2</depend>
-  <depend>tf2_ros</depend>
-  <depend>geonav_transform</depend>
-  <depend>antobot_manager_software</depend>
-  <depend>std_msgs</depend>
-  <build_depend>rclpy</build_depend>
-  <build_export_depend>rclpy</build_export_depend>
-  <exec_depend>rclpy</exec_depend>
-
-=======
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
   </export>
->>>>>>> Stashed changes
 </package>
