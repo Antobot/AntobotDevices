@@ -2,7 +2,7 @@
 import os
 import sys
 import yaml
-import rospy
+import rclpy
 import time
 import roslaunch
 import rospkg
@@ -66,14 +66,14 @@ class imuManager():
         launch = roslaunch.scriptapi.ROSLaunch()
         launch.start()
         if device_bno  and not device_xsens :
-            rospy.loginfo("Launching BNO550 IMU ")
+            rclpy.loginfo("Launching BNO550 IMU ")
             node_bno = roslaunch.core.Node(package="am_bno055_imu",
                                            node_type="am_bno055_imu_node",
                                            name="imu_bno",namespace="imu")
             launch.launch(node_bno)
 
         elif not device_bno  and  device_xsens :
-            rospy.loginfo("Launching Xsens IMU")
+            rclpy.loginfo("Launching Xsens IMU")
             # node_xsens = roslaunch.core.Node(package="xsens_mti_driver",
             #                                node_type="xsens_mti_node",
             #                                name="imu_xsens",namespace="/",output="screen")    
@@ -94,13 +94,13 @@ class imuManager():
             uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
             roslaunch.configure_logging(uuid)
             if nav_imu == "urcu":
-                rospy.loginfo("Launching BNO's node (/imu/data) and XSENS's node  /xsens/imu/data")
+                rclpy.loginfo("Launching BNO's node (/imu/data) and XSENS's node  /xsens/imu/data")
                 node_bno = roslaunch.core.Node(package="am_bno055_imu",
                                            node_type="am_bno055_imu_node",
                                            name="imu",namespace="imu")  
                 cli_args=['xsens_mti_driver','xsens_mti_node.launch','name_space:=xsens']
             else:
-                rospy.loginfo("Launching BNO's node (/bno/imu/data) and XSENS's node /imu/data")
+                rclpy.loginfo("Launching BNO's node (/bno/imu/data) and XSENS's node /imu/data")
                 node_bno = roslaunch.core.Node(package="am_bno055_imu",
                                            node_type="am_bno055_imu_node",
                                            name="imu",namespace="bno/imu")  
@@ -117,7 +117,7 @@ class imuManager():
             
             
         else:
-            rospy.loginfo("No IMU device enabled in YAML. Nothing to launch.")
+            rclpy.loginfo("No IMU device enabled in YAML. Nothing to launch.")
             sys.exit(0)
 
         
@@ -125,13 +125,13 @@ class imuManager():
 
 def main():
         try:
-            rospy.init_node('imuManager')
+            rclpy.init_node('imuManager')
             imuMgr = imuManager()
-            rate = rospy.Rate(50) 
-            while not rospy.is_shutdown():
+            rate = rclpy.Rate(50) 
+            while not rclpy.is_shutdown():
                 rate.sleep()
         except KeyboardInterrupt:
-            rospy.loginfo("Shutting down launcher...")
+            rclpy.loginfo("Shutting down launcher...")
         finally:
             pass
 
