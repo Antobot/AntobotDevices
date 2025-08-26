@@ -33,7 +33,7 @@ import importlib
 
 class gpsManager(Node):
     def __init__(self):
-        super().__init__("gpsManager")
+        super().__init__("gps_manager")
         self.launch_nodes = False
         self.launch_corrections = False
         self.use_class = True

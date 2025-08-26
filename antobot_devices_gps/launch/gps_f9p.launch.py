@@ -6,8 +6,7 @@ def generate_launch_description():
         Node(
             package='antobot_devices_gps',
             namespace='/',
-            executable='gpsManager',
-            name='gpsManager'
+            executable='gps_manager',
         ),
         
         Node(

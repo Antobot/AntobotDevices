@@ -24,7 +24,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'gpsManager = antobot_devices_gps.gpsManager:main',
+            'gps_manager = antobot_devices_gps.gpsManager:main',
             'gps_corrections= antobot_devices_gps.gps_corrections:main'
         ],
     },
