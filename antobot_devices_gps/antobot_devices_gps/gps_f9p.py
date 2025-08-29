@@ -16,60 +16,70 @@
 # email: daniel.freer@antobot.ai
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
+import threading
 import rclpy
+from rclpy.executors import ExternalShutdownException
+from rclpy.node import Node
+from rclpy.clock import Clock
 import rospkg
 import spidev
 import sys
-import time
+from builtin_interfaces.msg import Time
 from datetime import datetime
 import pynmea2
 
 import serial
-
+from std_msgs.msg import  String
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
-from std_msgs.msg import UInt8, Float32
-from antobot_devices_msgs.msg import gpsQual
-from antobot_devices_gps.ublox_gps import UbloxGps
+from std_msgs.msg import UInt8, Float32, Header
+from antobot_devices_msgs.msg import GpsQual
+from antobot_devices_gps.ublox_gps.ublox_gps import UbloxGps
 
-class F9P_GPS:
+class F9P_GPS(Node):
 
 
-    def __init__(self, dev_type, serial_port=None, method="stream", pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
+    def __init__(self, dev_type="usb", serial_port=None, method="stream", pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
 
         # # # GPS class initialisation
         #     Inputs: dev_type - the device type of the F9P chip. 
         #           "urcu" - if using the F9P inside of the URCU
         #           "usb" - if using an external F9P conncected via USB
 
-        self.node_type = "gps_f9p"
-
+        self.node_type = ""
+        print("in gps_f9p")
+        super().__init__("gps_f9p")
         self.gpsfix = NavSatFix()
+        self.gpsfix.header= Header()
         self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
         self.message = "GGA" #or"GNS"
         self.dev_type = dev_type
         self.method = method
         self.poll_buff = 1
         self.poll_buff_pre =1
+        self.base_station = True
         if self.dev_type == "urcu":
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
             if serial_port == None:
-                self.baud = 460800  # 38400?? Need to resolve baudrate difference with baudrate_rtk below
-                self.port = serial.Serial("/dev/ttyUSB0", self.baud,timeout=2)
+                self.baud = 460800  # 460800 38400?? Need to resolve baudrate difference with baudrate_rtk below
+                self.port = serial.Serial("/dev/ttyUSB0", self.baud)
             else:
                 self.port = serial_port
         self.gps_dev = UbloxGps(self.port)
+        if (self.base_station==True):
+            baud_uart2 = self.gps_dev.ubx_set_val(0x40530001,460800)
+            set_uart2=self.gps_dev.ubx_set_val(0x19539995,0x01)
+            print("configed")
         self.geo = None
         self.fix_status = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
         self.gps_status = "Critical"
         self.gps_freq_status = "Critical"
         self.gps_time_buf = []
         self.hAcc = 500
-        self.h_acc_thresh = 75  # 
-       
-        current_time = rclpy.Time.now()
+        self.h_acc_thresh = 0.1  # 
+        clock = Clock()
+        current_time = clock.now().to_msg()
         self.gps_time_i=0.1
         self.gpsfix.header.stamp = current_time
         self.gps_timestamp = current_time
@@ -78,23 +88,32 @@ class F9P_GPS:
         self.geo_sep = 0
         self.cogt = 0
         self.sogk = 0
+        self.gps_pub = self.create_publisher( NavSatFix,pub_name, 10)
+        self.gps_qual_pub = self.create_publisher( GpsQual,"/antobot_gps/quality", 10)
+        self.gga_msg_pub=self.create_publisher(String, "/antobot_gps/gga", 10)
+        self._timer = self.create_timer(1 / 50, self.do_publish)
+       
 
 
-        self.gps_pub = rclpy.Publisher(pub_name, NavSatFix, queue_size=10)
-        self.gps_qual_pub = rclpy.Publisher(pub_name_qual, gpsQual, queue_size=10)
 
         return
 
+    def do_publish(self):
+         self.get_gps()
+         print("do_publish")
+        
 
     def uart2_config(self,baud):
         #set the baud rate of uart2 to appropriate value (38400?)
         self.gps_dev.ubx_set_val(0x40530001,baud)
         #set the uart2 enable true
         self.gps_dev.ubx_set_val(0x10530005,0x01) #cfg-uart2-enable
+        print("config uart2 successful")
 
         
     def get_gps(self):
         # Get the data from the F9P
+        print("get_gps")
         if self.method == "poll":
             self.geo = self.gps_dev.geo_coords() #poll method
             self.hAcc=self.geo.hAcc
@@ -107,11 +126,11 @@ class F9P_GPS:
             if self.dev_type =="urcu":
                 streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') #stream method
             if self.dev_type == "usb":
-                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8')  self.poll_buff
+                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') 1 self.poll_buff
             self.get_gps_quality(streamed_data)
 
 
-            #print(streamed_data)
+            print("streamed_data:",streamed_data)
 
 
             # Check the new data is viable and update message
@@ -130,6 +149,7 @@ class F9P_GPS:
         if self.message == "GGA":
             if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
                 self.geo = pynmea2.parse(streamed_data)
+                print("gps_format_true")
                 return True
         if self.message == "GNS":
             if isinstance(streamed_data,str) and streamed_data.startswith("$GNGNS"):
@@ -142,24 +162,24 @@ class F9P_GPS:
     def get_fix_status(self):
         # print(self.geo.gps_qual)
         if self.geo.gps_qual == 4 and self.gps_status != 'Good':
-            rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+            self.get_logger().info("SN4010: GPS Fix Status: Fixed Mode")
             self.gps_status = 'Good'
             self.fix_status = 3
-        elif self.geo.gps_qual == 2 or 5:
+        elif self.geo.gps_qual == 2 or self.geo.gps_qual == 5:
             if self.hAcc < self.h_acc_thresh:
                 self.fix_status = 3
                 if self.gps_status != 'Good':
-                    rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                    self.get_logger().info("SN4010: GPS Fix Status: Fixed Mode")
                     self.gps_status = 'Good'
             else:   
                 self.fix_status = 1
                 if self.gps_status != 'Warning':
-                    rclpy.logwarn("SN4010: GPS Fix Status: Float Mode")
+                    self.get_logger().warn("SN4010: GPS Fix Status: Float Mode")
                     self.gps_status = 'Warning'
         else:
             self.fix_status = 0 #no fix
             if self.gps_status != 'Critical':
-                rclpy.logerr("SN4010: GPS Fix Status: Critical")
+                self.get_logger().error("SN4010: GPS Fix Status: Critical")
                 self.gps_status = 'Critical'
         
         return self.fix_status
@@ -171,7 +191,7 @@ class F9P_GPS:
             self.fix_status = self.geo.fixType #3: 3Dfix, 2:2Dfix
 
             if self.fix_status == 3 and self.gps_status != 'Good':
-                rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
                 self.gps_status = 'Good'
 
         elif self.geo.flags.carrSoln == 1: #float conditions
@@ -179,35 +199,35 @@ class F9P_GPS:
             if self.hAcc < self.h_acc_thresh:
                 self.fix_status = 3
                 if self.gps_status != 'Good':
-                    rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                    self.get_logger().info("SN4010: GPS Fix Status: Fixed Mode")
                     self.gps_status = 'Good'
             elif self.geo.hAcc > h_acc :
                 self.fix_status = 1
                 if self.gps_status != 'Warning':
-                    rclpy.logwarn("SN4010: GPS Fix Status: Float Mode")
+                    self.get_logger().warn("SN4010: GPS Fix Status: Float Mode")
                     self.gps_status = 'Warning'
 
         else:
             self.fix_status = 0 #no fix
             if self.gps_status != 'Critical':
-                rclpy.logerr("SN4010: GPS Fix Status: Critical")
+                self.get_logger().error("SN4010: GPS Fix Status: Critical")
                 self.gps_status = 'Critical'
 
         return self.fix_status
 
     def create_gps_msg(self):
-
+        print("create_gps_msg")
         self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
 
-        self.gpsfix.altitude = 0
-        self.gpsfix.latitude = 0
-        self.gpsfix.longitude = 0
+        self.gpsfix.altitude = 0.0
+        self.gpsfix.latitude = 0.0
+        self.gpsfix.longitude = 0.0
         if self.message == "GGA":
              if  self.geo.latitude is not None and self.geo.latitude != 0:
-                self.gpsfix.latitude = self.geo.latitude
-                self.gpsfix.longitude = self.geo.longitude
+                self.gpsfix.latitude = float(self.geo.latitude)
+                self.gpsfix.longitude = float(self.geo.longitude)
 
-                self.gpsfix.altitude = self.geo.altitude
+                self.gpsfix.altitude = float(self.geo.altitude)
         
         # Get GPS fix status
         self.gpsfix.status.status = self.get_fix_status()
@@ -248,22 +268,28 @@ class F9P_GPS:
     def set_gps_msg_time(self):
 
         # Getting time
-        current_time = rclpy.Time.now()
+        print("set_gps_msg_time")
+        current_time = self.get_clock().now().to_msg()
         dt0 = self.get_gps_timestamp_utc()
-        # print("current time (ROS): {}".format(current_time.to_sec()))
-        # print("datetime timestamp: {}".format(dt0.timestamp()))
+        #print("current time (ROS): {}".format(current_time.to_sec()))
+        #print("datetime timestamp: {}".format(dt0.timestamp()))
         if (dt0!=None):
-            self.gps_time_i=(dt0.timestamp()-self.gpsfix.header.stamp.to_sec())
-            self.gps_time_offset = current_time.to_sec() - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
+            rostimestamp = self.gpsfix.header.stamp
+            rostimestamp_tosec = rostimestamp.sec + rostimestamp.nanosec / 1e9  # Convert to seconds
+            self.gps_time_i = dt0.timestamp() - rostimestamp_tosec
+            current_time_to_sec=current_time.sec +current_time.nanosec/1e9
+            self.gps_time_offset = current_time_to_sec - dt0.timestamp()-3600      # Calculating offset between current time and GPS timestamp
         
             # # Assigning timestamp part of NavSatFix message
-            self.gps_timestamp = rclpy.Time.from_sec(dt0.timestamp())
+            sec=int(dt0.timestamp())
+            nanosec = int((dt0.timestamp() - sec) * 1e9)
+            self.gps_timestamp = Time(sec=sec, nanosec=nanosec)
             self.gpsfix.header.stamp = self.gps_timestamp            # Assigning time received from F9P
         # self.gpsfix.header.stamp = current_time.to_sec()       # Assigning current time (ROS) - DEPRECATED
         else:
             self.gps_time_offset == 99
         if self.gps_time_offset > 0.5 and self.gps_time_offset != 99:
-            rclpy.logerr("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
+            self.get_logger().error("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
             self.poll_buff =(self.gps_time_offset//0.125)*3
             if self.poll_buff_pre !=1 and  self.poll_buff_pre!= 24 and self.poll_buff_pre!= 3:
                 self.poll_buff = 3
@@ -307,15 +333,15 @@ class F9P_GPS:
         # Inverted average time to calculate hertz
         gps_hz = len(self.gps_time_buf) / sum(self.gps_time_buf)
 
-        #rclpy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
+        #rospy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
         if gps_hz < 2 and self.gps_freq_status != "Critical":
-            rclpy.logerr("SN4012: GPS Frequency status: Critical (<2 hz)")
+            self.get_logger().error("SN4012: GPS Frequency status: Critical (<2 hz)")
             self.gps_freq_status = "Critical"
         elif gps_hz >=2 and gps_hz < 6 and self.gps_freq_status != "Warning":
-            rclpy.logwarn("SN4012: GPS Frequency status: Warning (<6 hz)")
+            self.get_logger().warn("SN4012: GPS Frequency status: Warning (<6 hz)")
             self.gps_freq_status = "Warning"
         elif gps_hz >= 6 and self.gps_freq_status != "Good":
-            rclpy.loginfo("SN4012: GPS Frequency status: Good (>6 hz)")
+            self.get_logger().info("SN4012: GPS Frequency status: Good (>6 hz)")
             self.gps_freq_status = "Good" 
 
     def get_gps_quality(self, streamed_data):
@@ -335,8 +361,15 @@ class F9P_GPS:
                 try:
                     self.gga_gps_qual = int(gga_parse.gps_qual)
                     self.num_sats = int(gga_parse.num_sats)         # Number of satellites
-                except:
-                    print("GPS_quality value invalid")
+                    print("self.gps_time_offset:",self.gps_time_offset)
+                    print("num_sats:",self.num_sats)
+                    if self.gps_time_offset < 0.5 and self.num_sats >0:
+                        print("publish gga")
+                        msg=String()
+                        msg.data = streamed_data
+                        self.gga_msg_pub.publish(msg)
+                except Exception as e:
+                    print(e)
                 
                 try:
                     self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
@@ -375,43 +408,73 @@ class F9P_GPS:
         return
 
     def create_quality_msg(self):
-        gpsQualMsg = gpsQual()
+        gpsQualMsg = GpsQual()
         gpsQualMsg.stamp = self.gps_timestamp
-        gpsQualMsg.t_offset = self.gps_time_offset
-        gpsQualMsg.hAcc = self.hAcc
-        gpsQualMsg.gpsQualVal = self.gga_gps_qual
-        gpsQualMsg.numSats = self.num_sats
-        gpsQualMsg.horDil = self.hor_dil
-        gpsQualMsg.geoSep = self.geo_sep
+        gpsQualMsg.t_offset = float(self.gps_time_offset)
+        gpsQualMsg.h_acc = float(self.hAcc)
+        gpsQualMsg.gps_qual_val = self.gga_gps_qual
+        gpsQualMsg.num_sats = self.num_sats
+        gpsQualMsg.hor_dil = float(self.hor_dil)
+        gpsQualMsg.geo_sep = float(self.geo_sep)
         # gpsQualMsg.satInfo = ???
-        gpsQualMsg.vCOG = self.cogt
-        gpsQualMsg.vSOG = self.sogk
+        gpsQualMsg.v_cog = float(self.cogt)
+        gpsQualMsg.v_sog = float(self.sogk)
 
         self.gps_qual_pub.publish(gpsQualMsg)
+     
+def spin_in_background(self):
+    executor = rclpy.get_global_executor()
+    try:
+        executor.spin()
+    except ExternalShutdownException:
+        pass 
 
-
-def main(args):
+def main(args=None):
+    rclpy.init()
+    '''
     mqtt_publish = False
+    t = threading.Thread(target=spin_in_background)
+    t.start()
 
     # init node
-    rclpy.init_node('rtk', anonymous=True)
+    node=rclpy.create_node('rtk')
+    rclpy.get_global_executor().add_node(node)
     
-    gps_f9p = F9P_GPS("urcu")
-    if gps_f9p.method == "poll":
-        rate = rclpy.Rate(8)  # 8hz
-    if gps_f9p.method == "stream":
-        rate = rclpy.Rate(50)  # 8hz
+        #rclpy.init(args=args)
+    gps_node = F9P_GPS()
+    gps_pub = node.create_publisher( NavSatFix,"/antobot_gps", 10)
+    gps_qual_pub = node.create_publisher( GpsQual,"/antobot_gps/quality", 10)
+    print(gps_node.method)
+    if gps_node.method == "poll":
+        rate = node.creat_rate(8)  # 8hz
+    if gps_node.method == "stream":
+        rate = node.create_rate(50)  # 8hz
 
     baudrate_rtk = 460800#38400            # Need to resolve baudrate
-    gps_f9p.uart2_config(baudrate_rtk)
+    #gps_node.uart2_config(baudrate_rtk)
 
     mode = 2 # 1: RTK base station; 2: PPP-IP; 3: LBand
-    while not rclpy.is_shutdown():
-        gps_f9p.get_gps()
-
+    while rclpy.ok():
+        gps_node.get_gps()
+        print("running")
         rate.sleep()
+        
+    t.join()
+            
+   '''
+    try:
+        #node = F9P_GPS()  # Create an instance of the F9P_GPS class
+        
+        #baudrate_rtk = 460800#38400            # Need to resolve baudrate
+        #node.uart2_config(baudrate_rtk)
+        rclpy.spin(F9P_GPS())
+    except (ExternalShutdownException, KeyboardInterrupt):
+        pass
+    finally:
+        rclpy.try_shutdown()
+
 
 
 if __name__ == '__main__':   
-    main(sys.argv)
+    main()
 
