@@ -20,8 +20,8 @@ class imuManager():
         rospack = rospkg.RosPack()
         configPath=rospack.get_path('antobot_description')
         config_file = configPath+ "/config/platform_config.yaml"
-        paramPath = rospack.get_path('xsens_mti_driver')
-        param_file = paramPath+ "/param/xsens_mti_node.yaml"
+        #paramPath = rospack.get_path('xsens_mti_driver')
+        #param_file = paramPath+ "/param/xsens_mti_node.yaml"
 
         imu_config = self.load_config()
 
