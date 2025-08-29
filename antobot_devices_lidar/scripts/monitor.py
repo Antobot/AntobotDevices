@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
 import psutil
 import time
 import subprocess
 import datetime
-import argparse
 import signal
 import sys
 import os
@@ -14,70 +12,61 @@ import re
 
 
 class ROSNodeMonitor:
-    def __init__(self, node_name, log_file="ros_node_monitor.txt", interval=1):
-        self.node_name = node_name
+    def __init__(self, log_file="ros_node_monitor.txt", interval=1):
         self.log_file = log_file
         self.interval = interval
         self.running = True
+        self.process_cache = {}   # cache pid -> psutil.Process
 
-        
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
 
     def signal_handler(self, signum, frame):
-        """ctrl + c"""
-        print(f"\nReceived Ctrl C, stopping monitor...")
+        print(f"\nReceived Ctrl+C, stopping monitor...")
         self.running = False
 
-    def get_node_pid_from_rosnode(self):
-        
+    def get_all_nodes(self):
+        """Get all running ROS nodes"""
         try:
-            result = subprocess.run(
-                ['rosnode', 'info', self.node_name],
-                capture_output=True, text=True
-            )
+            result = subprocess.run(['rosnode', 'list'],
+                                    capture_output=True, text=True)
+            if result.returncode == 0:
+                return result.stdout.strip().splitlines()
+        except Exception as e:
+            print(f"rosnode list failed: {e}")
+        return []
+
+    def get_node_pid(self, node_name):
+        """Get PID of a given node"""
+        try:
+            result = subprocess.run(['rosnode', 'info', node_name],
+                                    capture_output=True, text=True)
             if result.returncode == 0:
                 match = re.search(r"Pid\s*:\s*(\d+)", result.stdout)
                 if match:
-                    return [int(match.group(1))]
+                    return int(match.group(1))
         except Exception as e:
-            print(f"rosnode info get PID faile: {e}")
-        return []
+            print(f"rosnode info failed: {e}")
+        return None
 
-    def get_node_processes(self):
-        
-        
-        pids = self.get_node_pid_from_rosnode()
-
-        if not pids:
-            try:
-                result = subprocess.run(
-                    ['pgrep', '-f', self.node_name],
-                    capture_output=True, text=True
-                )
-                if result.stdout.strip():
-                    pids = [int(pid) for pid in result.stdout.strip().split('\n') if pid.isdigit()]
-            except Exception as e:
-                print(f"pgrep get PID faile: {e}")
-
-        return pids
-
-    def get_process_info(self, pid):
-        
+    def get_process_info(self, pid, node_name):
+        """Get process information"""
         try:
-            process = psutil.Process(pid)
+            if pid not in self.process_cache:
+                proc = psutil.Process(pid)
+                proc.cpu_percent(None)  # warm up
+                self.process_cache[pid] = proc
 
-            
-            cpu_percent = process.cpu_percent(interval=0.1)
+            process = self.process_cache[pid]
+            cpu_percent = process.cpu_percent(interval=0)  # non-blocking
 
-            
             memory_info = process.memory_info()
-            memory_mb = memory_info.rss / 1024 / 1024  #MB
+            memory_mb = memory_info.rss / 1024 / 1024
             memory_percent = process.memory_percent()
 
-            process_info = {
+            return {
                 'pid': pid,
-                'name': process.name(),
+                'node_name': node_name,
                 'status': process.status(),
                 'cpu_percent': cpu_percent,
                 'memory_mb': memory_mb,
@@ -85,73 +74,56 @@ class ROSNodeMonitor:
                 'create_time': datetime.datetime.fromtimestamp(process.create_time()),
                 'num_threads': process.num_threads()
             }
-            return process_info
-
         except psutil.NoSuchProcess:
+            if pid in self.process_cache:
+                del self.process_cache[pid]
             return None
         except Exception as e:
-            print(f"get PID faile (PID: {pid}): {e}")
+            print(f"failed to get process info (PID: {pid}): {e}")
             return None
 
     def write_log_header(self):
         with open(self.log_file, 'w', encoding='utf-8') as f:
-            f.write(f"ROS node monitor\n")
-            f.write(f"node name: {self.node_name}\n")
-            f.write(f"start time: {datetime.datetime.now()}\n")
-            f.write(f"monitor interva: {self.interval}s\n")
-            f.write("="*80 + "\n")
-            f.write(f"{'Time':<20} {'PID':<8} {'CPU%':<8} {'Memory MB':<10} {'Memory%':<8} {'Threads':<8} {'Status':<10}\n")
-            f.write("-"*80 + "\n")
+            f.write(f"ROS Node Monitor\n")
+            f.write(f"Start time: {datetime.datetime.now()}\n")
+            f.write(f"Monitor interval: {self.interval}s\n")
+            f.write("="*100 + "\n")
+            f.write(f"{'Time':<20} {'Node':<30} {'PID':<8} {'CPU%':<8} "
+                    f"{'Memory MB':<10} {'Memory%':<8} {'Threads':<8} {'Status':<10}\n")
+            f.write("-"*100 + "\n")
 
     def write_log_entry(self, process_info):
-        
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
         with open(self.log_file, 'a', encoding='utf-8') as f:
-            f.write(f"{timestamp:<20} {process_info['pid']:<8} {process_info['cpu_percent']:<8.2f} "
-                   f"{process_info['memory_mb']:<10.2f} {process_info['memory_percent']:<8.2f} "
-                   f"{process_info['num_threads']:<8} {process_info['status']:<10}\n")
+            f.write(f"{timestamp:<20} {process_info['node_name']:<30} {process_info['pid']:<8} "
+                   f"{process_info['cpu_percent']:<8.2f} {process_info['memory_mb']:<10.2f} "
+                   f"{process_info['memory_percent']:<8.2f} {process_info['num_threads']:<8} "
+                   f"{process_info['status']:<10}\n")
 
     def monitor(self):
-        
-        print(f"start : {self.node_name}")
-        print(f"log: {os.path.abspath(self.log_file)}")
-        print(f"interval: {self.interval}秒")
-        print("Ctrl+C to stop\n")
+        print(f"Log file: {os.path.abspath(self.log_file)}")
+        print(f"Interval: {self.interval} seconds")
+        print("Press Ctrl+C to stop\n")
 
-        
         self.write_log_header()
-
         monitor_count = 0
-        no_process_count = 0
 
         while self.running:
             try:
-                pids = self.get_node_processes()
-
-                if not pids:
-                    no_process_count += 1
-                    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                    if no_process_count == 1: 
-                        print(f"[{current_time}] cant find '{self.node_name}' process")
-                        with open(self.log_file, 'a', encoding='utf-8') as f:
-                            f.write(f"{current_time:<20} {'N/A':<8} {'N/A':<8} {'N/A':<10} {'N/A':<8} {'N/A':<8} {'no running':<10}\n")
-
-                    if no_process_count % 10 == 0:
-                        print(f"[{current_time}] node '{self.node_name}' still stop (have waitting for {no_process_count}times)")
-
-                else:
-                    no_process_count = 0
-
-                    for pid in pids:
-                        process_info = self.get_process_info(pid)
+                nodes = self.get_all_nodes()
+                if not nodes:
+                    print("[WARN] No running nodes found")
+                for node in nodes:
+                    pid = self.get_node_pid(node)
+                    if pid:
+                        process_info = self.get_process_info(pid, node)
                         if process_info:
                             monitor_count += 1
                             current_time = datetime.datetime.now().strftime("%H:%M:%S")
-                            print(f"[{current_time}] PID: {process_info['pid']:<6} "
+                            print(f"[{current_time}] {node:<30} "
+                                  f"PID: {process_info['pid']:<6} "
                                   f"CPU: {process_info['cpu_percent']:<6.2f}% "
-                                  f"Memory: {process_info['memory_mb']:<8.2f}MB "
+                                  f"Mem: {process_info['memory_mb']:<6.2f}MB "
                                   f"({process_info['memory_percent']:<5.2f}%) "
                                   f"Threads: {process_info['num_threads']}")
                             self.write_log_entry(process_info)
@@ -159,25 +131,25 @@ class ROSNodeMonitor:
                 time.sleep(self.interval)
 
             except Exception as e:
-                print(f"monitor error: {e}")
+                print(f"Monitor error: {e}")
                 time.sleep(self.interval)
 
         with open(self.log_file, 'a', encoding='utf-8') as f:
-            f.write("\n" + "="*80 + "\n")
-            f.write(f"finish monitor time: {datetime.datetime.now()}\n")
-            f.write(f"monitor times: {monitor_count}\n")
+            f.write("\n" + "="*100 + "\n")
+            f.write(f"End time: {datetime.datetime.now()}\n")
+            f.write(f"Total records: {monitor_count}\n")
 
-        print(f"\nmonitor stopped，record {monitor_count} datas")
-        print(f"Saved in: {os.path.abspath(self.log_file)}")
+        print(f"\nMonitor stopped, {monitor_count} records written")
+        print(f"Saved to: {os.path.abspath(self.log_file)}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='monitor CPU && Memory')
-    parser.add_argument('node_name', help='node name which to monitor')
+    import argparse
+    parser = argparse.ArgumentParser(description='ROS Node CPU & Memory Monitor')
     parser.add_argument('-f', '--file', default='ros_node_monitor.txt',
-                       help='log name (ros_node_monitor.txt)')
+                       help='log file name (default: ros_node_monitor.txt)')
     parser.add_argument('-i', '--interval', type=float, default=1.0,
-                       help='interval (normal: 1.0)')
+                       help='monitor interval (default: 1.0 seconds)')
 
     args = parser.parse_args()
 
@@ -185,10 +157,10 @@ def main():
         with open(args.file, 'w') as f:
             pass
     except Exception as e:
-        print(f"cant create log file {args.file}: {e}")
+        print(f"Cannot create log file {args.file}: {e}")
         return 1
 
-    monitor = ROSNodeMonitor(args.node_name, args.file, args.interval)
+    monitor = ROSNodeMonitor(args.file, args.interval)
     monitor.monitor()
     return 0
 
