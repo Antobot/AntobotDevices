@@ -1,13 +1,10 @@
 cmake_minimum_required(VERSION 3.8)
 project(antobot_devices_imu)
 
-<<<<<<< HEAD
-=======
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
->>>>>>> ed24918fbe035ef1e2d04c3d7ab8fe5094c81baa
 # find dependencies
 find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in

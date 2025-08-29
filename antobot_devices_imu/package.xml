@@ -9,18 +9,10 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-<<<<<<< HEAD
-
-=======
->>>>>>> ed24918fbe035ef1e2d04c3d7ab8fe5094c81baa
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
   </export>
-<<<<<<< HEAD
-
-=======
->>>>>>> ed24918fbe035ef1e2d04c3d7ab8fe5094c81baa
 </package>
