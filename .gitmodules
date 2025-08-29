@@ -1,3 +1,6 @@
 [submodule "AntobotCamera"]
 	path = AntobotCamera
 	url = https://github.com/Antobot/AntobotCamera.git
+[submodule "acCamera"]
+	path = acCamera
+	url = https://git.nicecart.ai/AntoCART/acCamera.git
