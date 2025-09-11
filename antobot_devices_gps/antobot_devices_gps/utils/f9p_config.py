@@ -56,6 +56,8 @@ class F9P_config:
             packet[4] = 0x0a
         elif length==17:
             packet[4] = 0x09
+        elif length ==20:
+            packet[4]= 0x0c
         else:
             length_i = length - 8
             print("length_i: {}".format(length_i))
@@ -486,13 +488,14 @@ class F9P_config:
             received_bytes = self.receive_ubx_bytes_from_spi()
             self.port.writebytes(ubx_navspg_dynmodel)
             received_bytes = self.receive_ubx_bytes_from_spi()
-            print("config uart2")
+            
             self.port.writebytes(ubx_navspg_minelev)
             received_bytes = self.receive_ubx_bytes_from_spi()
             print("config elev angle")
             packet = self.cfg_valget_uart2_baudrate()
             self.port.writebytes(packet)
             received_bytes = self.receive_ubx_bytes_from_spi()
+            print("config uart2")
         self.check_ubx_uart(received_bytes)            
         print("Configured the measurement rate as " + str(self.meas_rate) + " Hz") 
 
@@ -552,7 +555,7 @@ if __name__ == '__main__':
         received_bytes = f9p_cfg.receive_ubx_bytes_from_uart() 
     else:
         spi = spidev.SpiDev()
-        spi.open(2, 0)  # (2,0) for spi1, (0,0) for spi0
+        spi.open(1, 0)  # (2,0) for spi1, (0,0) for spi0
         spi.max_speed_hz =  7800000 # 1000000, 15600000,62400000....
         spi.mode = 0
         spi.no_cs
@@ -563,13 +566,13 @@ if __name__ == '__main__':
         packet = f9p_cfg.get_ver()
         f9p_cfg.write(packet)
         received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()
-        #print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
+        print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
 
         # revert to the default mode
-        if moving_base:
-            packet = f9p_cfg.revert_to_default_mode()
-            f9p_cfg.write(packet)
-
+        
+        packet = f9p_cfg.revert_to_default_mode()
+        f9p_cfg.write(packet)
+        received_bytes = f9p_cfg.receive_ubx_bytes_from_spi() 
         #configure the f9p to block unwanted messages
         f9p_cfg.config_f9p()
     

@@ -34,12 +34,12 @@ from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8, Float32, Header
 from antobot_devices_msgs.msg import GpsQual
-from antobot_devices_gps.ublox_gps.ublox_gps import UbloxGps
+from .ublox_gps.ublox_gps import UbloxGps
 
 class F9P_GPS(Node):
 
 
-    def __init__(self, dev_type="usb", serial_port=None, method="stream", pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
+    def __init__(self, dev_type="urcu", serial_port=None, method="stream", pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
 
         # # # GPS class initialisation
         #     Inputs: dev_type - the device type of the F9P chip. 
@@ -57,20 +57,26 @@ class F9P_GPS(Node):
         self.method = method
         self.poll_buff = 1
         self.poll_buff_pre =1
-        self.base_station = True
+        self.base_station = False
         if self.dev_type == "urcu":
             self.port = spidev.SpiDev()
         elif self.dev_type == "usb":
             if serial_port == None:
                 self.baud = 460800  # 460800 38400?? Need to resolve baudrate difference with baudrate_rtk below
-                self.port = serial.Serial("/dev/ttyUSB0", self.baud)
+                self.port = serial.Serial("/dev/ttyUSB4", self.baud)
             else:
                 self.port = serial_port
         self.gps_dev = UbloxGps(self.port)
         if (self.base_station==True):
             baud_uart2 = self.gps_dev.ubx_set_val(0x40530001,460800)
-            set_uart2=self.gps_dev.ubx_set_val(0x19539995,0x01)
+            set_uart2=self.gps_dev.ubx_set_val(0x10530005,0x01)
             print("configed")
+            
+        self.gps_dev.ubx_set_val(0x40530001,460800)
+        #set the uart2 enable true
+        self.gps_dev.ubx_set_val(0x10530005,0x01) #cfg-uart2-enable
+        print("config uart2 successful")
+
         self.geo = None
         self.fix_status = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
         self.gps_status = "Critical"
@@ -92,7 +98,8 @@ class F9P_GPS(Node):
         self.gps_qual_pub = self.create_publisher( GpsQual,"/antobot_gps/quality", 10)
         self.gga_msg_pub=self.create_publisher(String, "/antobot_gps/gga", 10)
         self._timer = self.create_timer(1 / 50, self.do_publish)
-       
+        
+
 
 
 

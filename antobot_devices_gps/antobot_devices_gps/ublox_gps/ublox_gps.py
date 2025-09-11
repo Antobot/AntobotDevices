@@ -917,7 +917,7 @@ class sfeSpiWrapper(object):
 
         #print("SPI PORT",self.spi_port)
         # For URCU
-        self.spi_port.open(2,0) 
+        self.spi_port.open(1,0) 
         self.spi_port.max_speed_hz =10000000 #7500000  #1000000 #Hz 7500000
         
         #self.spi_port.open(0,0) # This needs to be

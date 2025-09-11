@@ -63,11 +63,11 @@ class gpsCorrections(Node):
         if "urcu" in dev_type :
             print("in urcu type")
             GPIO = importlib.import_module("Jetson.GPIO") 
-            dev_port = "/dev/ttyTHS0"
+            dev_port = "/dev/ttyTHS1"
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400 460800
         elif "f9p_usb" in dev_type:
-            self.serial_port = serial.Serial(port="/dev/ttyUSB0", baudrate=460800)
+            self.serial_port = serial.Serial(port="/dev/ttyUSB4", baudrate=460800)
         elif "rasPi" in dev_type:
             print("import rasPi specific packages!")
 
@@ -176,7 +176,7 @@ class gpsCorrections(Node):
             self.last_receive_time = time.time()
         except Exception as e:
             self.get_logger().error(f"SN4500: Write the corrections failed. ({e})")
-            dev_port = "/dev/ttyTHS0"
+            dev_port = "/dev/ttyTHS1"
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
 
@@ -217,6 +217,7 @@ class gpsCorrections(Node):
                 self.connect_ntrip()
             print(data)
             self.serial_port.write(data)
+            print(self.serial_port)
         except:
             print("[ERROR] NTRIP server break, reconnecting")
             self.connect_ntrip()
