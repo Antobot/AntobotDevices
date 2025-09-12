@@ -108,13 +108,13 @@ class gpsCorrections(Node):
         
 
         # If the uRCU is being used, the appropriate GPIO pin must be set to "high" to enable corrections from Xavier 
-        if "urcu" in dev_type:
-            # Set the GPIO pin of the URCU high
-            self.gpio01 = 29
-            self.GPIO = GPIO
-            self.GPIO.setmode(GPIO.BOARD)
-            self.GPIO.setup(self.gpio01, GPIO.OUT)
-            #self.GPIO.output(self.gpio01, GPIO.HIGH) # if need 20240424
+        #if "urcu" in dev_type:
+        #    # Set the GPIO pin of the URCU high
+        #    self.gpio01 = 29
+        #    self.GPIO = GPIO
+        #    self.GPIO.setmode(GPIO.BOARD)
+        #    self.GPIO.setup(self.gpio01, GPIO.OUT)
+        #    #self.GPIO.output(self.gpio01, GPIO.HIGH) # if need 20240424
 
 
 ###added for check

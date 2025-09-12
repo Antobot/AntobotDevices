@@ -540,7 +540,7 @@ if __name__ == '__main__':
 
 
     if device=="uart":
-        uart = serial.Serial(port='/dev/ttyUSB0', baudrate=460800,timeout=1)
+        uart = serial.Serial(port='/dev/ttyUSB4', baudrate=460800,timeout=1)
         f9p_cfg = F9P_config(uart, desired_messages, meas_rate,device)
         packet = f9p_cfg.get_ver()
         f9p_cfg.uartwrite(packet)

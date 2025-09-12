@@ -75,7 +75,7 @@ class F9P_GPS(Node):
         self.gps_dev.ubx_set_val(0x40530001,460800)
         #set the uart2 enable true
         self.gps_dev.ubx_set_val(0x10530005,0x01) #cfg-uart2-enable
-        print("config uart2 successful")
+        #print("config uart2 successful")
 
         self.geo = None
         self.fix_status = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              

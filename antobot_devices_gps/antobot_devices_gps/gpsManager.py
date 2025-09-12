@@ -28,7 +28,7 @@ from antobot_devices_gps.gps_f9p import F9P_GPS
 #from antobot_devices_gps.gps_movingbase import MovingBase_Ros
 from antobot_devices_gps.gps_corrections import gpsCorrections
 import importlib
-#import Jetson.GPIO as GPIO
+import Jetson.GPIO as GPIO
 
 
 class gpsManager(Node):
@@ -138,6 +138,11 @@ class gpsManager(Node):
 
         if k == "urcu":
 
+            self.gpio01 = 29
+            self.GPIO = GPIO
+            self.GPIO.setmode(GPIO.BOARD)
+            self.GPIO.setup(self.gpio01, GPIO.OUT)
+            
             # Define serial port for the F9P inside of the uRCU (for movingbase or otherwise)
             if self.f9p_urcu_serial_port == None:
                 self.f9p_urcu_serial_port = serial.Serial(v['device_port'], baud)
