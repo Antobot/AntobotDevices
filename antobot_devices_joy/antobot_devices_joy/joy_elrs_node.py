@@ -12,6 +12,10 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import time
+import array
+from collections import deque
+
+
 import rclpy
 from rclpy.node import Node
 
@@ -29,7 +33,7 @@ class Joystick_ELRS(Node):
 
         self.device_port = self.get_parameter('device_port').get_parameter_value().string_value
 
-        self.timer_period = 1/frequency 
+        self.timer_period = 1 / frequency 
 
         self.device_connect = False
         self.publish_first = True
@@ -45,6 +49,11 @@ class Joystick_ELRS(Node):
         self.joy_msg = Joy()
         self.joy_msg.header.frame_id = self.device_port
 
+        # =======
+        self.buttons_SD_last = None
+        self.buttons_SD_dq = deque(maxlen=3)
+
+        # =======
         self.channel5_pre = None
         self.channel6_pre = None
         
@@ -63,7 +72,7 @@ class Joystick_ELRS(Node):
         
         self.debug_ = False
         
-        self.SE_cnt = 0
+
 
         self.timer = self.create_timer(self.timer_period, self.update)
 
@@ -95,48 +104,51 @@ class Joystick_ELRS(Node):
         self.RT = 0
         
     def create_joy_msg(self, frame):
-    
-        left_rocker_LR = frame[4]
-        left_rocker_FB = frame[3]
-        right_rocker_LR = frame[1] 
-        right_rocker_FB = frame[2]
         
-        SE = frame[9]
-        # SE = 1 if frame[9] > 1500 else 0
+        
+        left_rocker_LR = frame[4] # 1000 ~ 2000
+        left_rocker_FB = frame[3] # 1000 ~ 2000
+        right_rocker_LR = frame[1] # 1000 ~ 2000
+        right_rocker_FB = frame[2] # 1000 ~ 2000
+
+        SA = frame[5] # 1000 / 2000
+        SB = frame[6] # 1000 / 1500 / 2000
+        SC = frame[7] # 1000 / 1500 / 2000
+        SD = frame[8] # 1000 / 2000
+        SE = frame[9] # 1000 / 2000
+
+        if SD <= 1400 or SD >= 1600: # Filter out outliers
+            self.buttons_SD_dq.append(SD)
+
+        if len(self.buttons_SD_dq) == 3:
+            if all(x > 1750 for x in self.buttons_SD_dq):
+                sd = 1
+            elif all(x < 1750 for x in self.buttons_SD_dq):   
+                sd = 0 
+
+            if self.buttons_SD_last is None:
+                self.buttons_SD_last = sd
+            elif self.buttons_SD_last != sd:
+                self.buttons_SD_last = sd
+                # print("manul")
+                self.LB = 1
+                self.RB = 1
+
 
         axes = [self.translate_axes(left_rocker_LR), self.translate_axes(left_rocker_FB), self.translate_axes(right_rocker_LR, -1), self.translate_axes(right_rocker_FB)]
 
-        if SE > 1500:
-            self.SE_cnt += 1
-        else:
-            self.SE_cnt = 0
+        # update the axes and buttons
+        self.axes = [0, axes[1], 0, axes[2], axes[3], self.RT, 0, axes[0]]
+        self.buttons = [self.A, self.B, self.X, self.Y, self.LB, self.RB, self.BACK, 0, 0, 0, 0]
 
-        if self.SE_cnt > 10: # trigger, 10 times for security
-            self.LB = 1
-            self.RB = 1
-            self.SE_cnt = 0
-            # print('Manual')
-
-
-        self.axes[1] = axes[1]
-        self.axes[3] = axes[2]
-        self.axes[4] = axes[3]
-        self.axes[7] = axes[0]
-
-        # self.axes = [0.0, axes[1], 0.0, axes[2], axes[3], self.RT, 0.0, axes[0]]
-        # self.buttons = [self.A, self.B, self.X, self.Y, self.LB, self.RB, self.BACK, 0, 0, 0, 0]
-        self.buttons[4] = self.LB
-        self.buttons[5] = self.RB
-        # print(self.axes)
         # print(self.axes != self.axes_pre)
         # if self.axes != self.axes_pre or self.buttons != self.buttons_pre or abs(self.axes[1]) > 0.9 or abs(self.axes[3]) > 0.9 or (self.LB == 1 and self.RB == 1):
 
-        self.joy_msg.axes = self.axes
+        self.joy_msg.axes = array.array('f', self.axes)
         self.joy_msg.buttons = self.buttons   
         self.joy_msg.header.stamp = self.get_clock().now().to_msg() 
         self.joy_pub.publish(self.joy_msg)
 
-        
         self.axes_pre = self.axes
         self.buttons_pre = self.buttons
         self.set_buttos_zero()
