@@ -15,9 +15,19 @@
 
 import sys
 import yaml
-import rospy
+import rclpy
+from rclpy.node import Node
+from rclpy.executors import ExternalShutdownException
 from pathlib import Path
 from datetime import datetime
+import os
+from launch import LaunchService
+from launch_ros import get_default_launch_description
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.actions import Node
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from ament_index_python.packages import get_package_share_directory
 
 import roslaunch # Using this until we develop our own camera manager solution
 import rospkg
@@ -31,124 +41,8 @@ from std_srvs.srv import Empty, EmptyRequest, EmptyResponse
 
 ###################################################################################################################################################
 
-class costmapManager:
-    def __init__(self,imu_frame,lidar_count, lidar_type='c16'):
-        self.lidar_count = lidar_count
-        self.imu_frame = imu_frame
-        self.costmapLaunchWrapper = None
-        self.imuLaunchWrapper = None
-
-        self.costmapManagerService = rospy.Service('/costmap_manager/node_died_costmap',Empty,self.restart_costmap)
-        self.costmapManagerService = rospy.Service('/costmap_manager/node_died_imu',Empty,self.restart_imu)
-
-        # Set the costmap and imu to relaunch by default
-        self.costMapTargetState=True
-        self.imuTargetState=True
-
-        # launch imu euler 
-        self.launch_imu_euler()
-
-        # launch costmap
-        self.launch_costmap()
-
-#################################################
-
-    def restart_costmap(self,req):
-
-        if self.costMapTargetState:
-
-            rospy.loginfo('SW2320: Lidar Manager: Costmap node relaunching')
-            self.launch_costmap()
-        else:
-            rospy.loginfo('SW2320: Lidar Manager: Costmap disabled - not relaunching')
-
-        return EmptyResponse()
-
-#################################################
-
-    def restart_imu(self,req):
-
-        if self.imuTargetState:
-
-            rospy.loginfo('SW2320: Lidar Manager: IMU node relaunching')
-            self.launch_imu_euler()
-        else:
-            rospy.loginfo('SW2320: Lidar Manager: IMU disabled - not relaunching')
-
-        return EmptyResponse()
-
-#################################################   
-
-    def launch_costmap(self):
-        # Generate a unique id for the node
-        uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-        roslaunch.configure_logging(uuid)
-
-        cli_args = ['antobot_move_costmap_2d', 'ant_costmap_only.launch'] # default costmap launch file (applied for both V2 and V3)
-
-        roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
-        #print(roslaunch_file)
-
-        launch_files = [roslaunch_file]
-
-        self.costmapLaunchWrapper = RoslaunchWrapperObject(run_id = uuid, roslaunch_files = launch_files,process_listeners=[ProcessListener()])
-        # start the launch file
-        self.costmapLaunchWrapper.start_node_name("costmap")
-        
-        # Set the target State to True
-        self.costMapTargetState=True
-    
-#################################################
-
-    def launch_imu_euler(self):
-        # Generate a unique id for the node
-        uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-        roslaunch.configure_logging(uuid)
-        
-        if self.imu_frame: # use imu roll angle to generate lidar frame (imu compensated frame)  
-            rospy.loginfo("SW2320: Lidar Manager: use IMU compensated lidar frames")
-            cli_args = ['antobot_devices_imu', 'imu_euler.launch']
-        else:
-            if self.lidar_count == 1:
-                rospy.loginfo("SW2320: Lidar Manager: Using static lidar frame for the front lidar")
-                cli_args = ['antobot_devices_imu', 'static_lidar_frame.launch']
-            else: # dual lidar
-                rospy.loginfo("SW2320: Lidar Manager: Using static lidar frames for both lidars")
-                cli_args = ['antobot_devices_imu', 'static_lidar_frame_two_lidars.launch']
-
-        roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
-        #print(roslaunch_file)
-
-        launch_files = [roslaunch_file]
-
-        self.imuLaunchWrapper = RoslaunchWrapperObject(run_id = uuid, roslaunch_files = launch_files,process_listeners=[ProcessListener()])
-        # start the launch file
-        self.imuLaunchWrapper.start_node_name("imu_euler")
-
-
-#################################################
-
-    def stop_costmap(self):
-        if self.costMapTargetState==True:
-            self.costMapTargetState=False
-            self.costmapLaunchWrapper.stop()
-            rospy.loginfo("SW2320: Lidar Manager: Shutting down costmap node")
-        else:
-            rospy.loginfo("SW2320: Lidar Manager: Shutdown requested but no active costmap node")
-
-#################################################
-
-    def stop_imu_euler(self):
-        if self.imuTargetState==True:
-            self.imuTargetState=False
-            self.imuLaunchWrapper.stop()
-            rospy.loginfo("SW2320: Lidar Manager: Shutting down imu node")
-        else:
-            rospy.loginfo("SW2320: Lidar Manager: Shutdown requested but no active imu node")
-
-
 ###################################################################################################################################################
-class lidar: # lidar pare
+class lidar(Node): # lidar pare
     '''Stores lidar specific information'''
     def __init__(self,ip, location="front"):
 
@@ -158,30 +52,34 @@ class lidar: # lidar pare
         self.enabled_in_costmap = True # default True
         self.launch = None
         self.location = location
+        self.type = ""
+
+        self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
 
         
         ## Client for controlling lidar input to the costmap node
-        self.costmapToggleClient = rospy.ServiceProxy('/costmap_node/costmap/toggle_observation',costmapToggleObservation)
+        self.costmapToggleClient = self.create_client(costmapToggleObservation,'/costmap_node/costmap/toggle_observation')
            
 
 
 #################################################
     def run(self):
         ##############################################################################
-        ## Check for the simulation parameter which should be set by am_sim     
+        ## Check for the /ros_gz_bridge node to check whether we need to launch lidar driver node    
         ##############################################################################
-        try:
-            self.sim = rospy.get_param("/simulation")
-        except:
-            self.sim=False # If the simulation parameter has not been assigned, assume not a simulation
+        node_names = self.get_node_names()
+        if '/ros_gz_bridge' in node_names:
+            self.sim = True
+        else:
+            self.sim = False
 
         if self.sim:
-            rospy.loginfo('SW2320: Lidar Manager: Simulation - robot lidar launched with Gazebo')
+            self.get_logger().info('SW2320: Lidar Manager: Simulation - robot lidar launched with Gazebo')
             self.active = True
         else:
             # By default, turn on all the available lidar 
             self.createLauncher()
-            self.start() # TODO: do we want logerr for lidar node?
+            self.start()
 
 #################################################
 
@@ -203,10 +101,10 @@ class lidar: # lidar pare
         if self.active==True:
             self.active=False
             self.launch.stop()
-            rospy.loginfo("SW2320: Lidar Manager: Lidar {} shutdown".format(self.location))
+            self.get_logger().info("SW2320: Lidar Manager: Lidar {} shutdown".format(self.location))
 
         else:
-            rospy.loginfo("SW2320: Lidar Manager: Shutdown requested but no active lidar")
+            self.get_logger().info("SW2320: Lidar Manager: Shutdown requested but no active lidar")
 
 #################################################
     
@@ -228,7 +126,7 @@ class lidar: # lidar pare
             return_msg.responseString = "topic already disabled in the costmap"
         else:
             # This Shouldn't happen
-            rospy.loginfo("SW2320: Lidar Manager: Lidar topic is neither active nor enabled in costmap - failed to disable the topic")
+            self.get_logger().info("SW2320: Lidar Manager: Lidar topic is neither active nor enabled in costmap - failed to disable the topic")
             return_msg.responseCode = False
             return_msg.responseString = "Failed to disable the topic"
         
@@ -252,22 +150,17 @@ class lidar: # lidar pare
             return_msg.responseCode = True # True since it's already enabled
             return_msg.responseString = "topic already enabled in the costmap"
         else:
-            rospy.loginfo("SW2320: Lidar Manager: Lidar topic is alrady active and enabled in costmap")
+            self.get_logger().info("SW2320: Lidar Manager: Lidar topic is alrady active and enabled in costmap")
             return_msg.responseCode = False
             return_msg.responseString = "Failed to enable the topic"
 
         return return_msg
 
-#################################################
-
-    def checkStatus(self):
-        pass # data check / or error message / turned on/off
-    
-class lidar_c16(lidar): # Currently for C16 lidar
+class lidar_c16(lidar):
     '''Stores lidar specific information'''
     def __init__(self,name ="c16",ip="",m_port="",d_port="",frame_id="",location="front"):
         super().__init__(ip, frame_id, location)
-
+        self.type = 'cx' # Can support C16, C32
         # Save arguments
         self.m_port = str(m_port)
         self.d_port = str(d_port)
@@ -285,7 +178,7 @@ class lidar_c16(lidar): # Currently for C16 lidar
         roslaunch.configure_logging(uuid)
         
 
-        rospy.loginfo("SW2320: Lidar Manager: Creating launcher for front lidar")
+        self.get_logger().info("SW2320: Lidar Manager: Creating launcher for front lidar")
         cli_args = ['antobot_devices_lidar', 'lslidar_config_launch_updated.launch', 'name_space:='+self.name_space, 'frame_id:='+self.frame_id,  'device_ip:='+self.ip, 'msop_port:='+self.m_port, 'difop_port:='+self.d_port]
 
         roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
@@ -300,10 +193,11 @@ class lidar_c16(lidar): # Currently for C16 lidar
 ###################################################################################################################################################
 
 
-class lidar_mid360(lidar): # Currently for C16 lidar
+class lidar_mid360(lidar):
     '''Stores lidar specific information'''
     def __init__(self,name ="mid360",ip="",frame_id="",location="front"):
         super().__init__(ip, location)
+        self.type = 'mid360'
 
         # Save arguments
         # TODO: mid360 port settings
@@ -334,7 +228,7 @@ class lidar_mid360(lidar): # Currently for C16 lidar
 ###################################################################################################################################################
 
 
-class lidarManagerClass:
+class lidarManagerClass(Node):
     # # # The lidarManager class reads the intended configuration for a particular device, then launches
     # # # and monitors the software for each individual lidar.
 
@@ -347,38 +241,23 @@ class lidarManagerClass:
         ##############################################################################
         ## Check for the simulation parameter which should be set by am_sim     
         ##############################################################################
-           
-        try:
-            self.sim = rospy.get_param("/simulation")
-
-        except:
-            self.sim=False # If the simulation parameter has not been assigned, assume not a simulation
-
+        node_names = self.get_node_names()
+        if '/ros_gz_bridge' in node_names:
+            self.sim = True
+        else:
+            self.sim = False
 
         ##############################################################################
         ## Run either real or simulated manager    
         ##############################################################################
 
         if self.sim:
-            rospy.loginfo("SW2320: Lidar Manager: Running in simulation mode")
+            self.get_logger().info("SW2320: Lidar Manager: Running in simulation mode")
         else:
-            rospy.loginfo("SW2320: Lidar Manager: This is NOT a simulation - using real Lidar")
+            self.get_logger().info("SW2320: Lidar Manager: This is NOT a simulation - using real Lidar")
 
         # Create a service to allow other nodes to start/stop lidars
-        self.srvLidarMgr = rospy.Service("/antobot/lidarManager", lidarManager, self._serviceCallbackLidarMgr)
-
-        ##############################################################################
-        ## Launch the costmap manager  
-        ##############################################################################
-
-
-        # launch costmap node if this lidar is being used for navigation
-        if self.for_navigation:
-            rospy.sleep(1.0) # Wait for the lidars to be ready
-            self.costmapMgr = costmapManager(self.imu_frame, len(self.lidars)) # imu_compensated frame flag, number of lidars 
-            rospy.loginfo("SW2320: Lidar Manager: Costmap Manager started")
-
-
+        self.srvlidarMgr = self.create_service(lidarManager,"/antobot/lidarManager",self._serviceCallbackLidarMgr)
 
 
 #################################################
@@ -387,7 +266,6 @@ class lidarManagerClass:
         rospack = rospkg.RosPack()
 
         try:
-            device_type = rospy.get_param("/device_type",'robot') #Add default value - used when not launching with softwareManager
             path = rospack.get_path('antobot_description')
             with open(path+'/config/platform_config.yaml','r') as file:
                 params = yaml.safe_load(file)
@@ -430,7 +308,7 @@ class lidarManagerClass:
 
                     self.lidars[lidar_type] = lidar_c16('lidar_'+params["lidar"][lidar_type]["location"], ip, m_port, d_port, frame_id, location=params["lidar"][lidar_type]["location"])
         except Exception as e:
-            rospy.logerr(f"SW2320: Lidar Manager: Failed to read robot config file. Error: {e}")
+            self.get_logger().err(f"SW2320: Lidar Manager: Failed to read robot config file. Error: {e}")
 
 
 
@@ -476,41 +354,32 @@ class lidarManagerClass:
                 if request.frontPowerOn:
                     # Check if the lidar is already active
                     if lidar_i.active:
-                        rospy.loginfo("SW2320: Lidar Manager: Front Lidar already active. ")
+                        self.get_logger().info("SW2320: Lidar Manager: Front Lidar already active. ")
                     else:
                         # Simulated Lidar just impersonates real lidar
                         if self.sim:
-                            rospy.loginfo("SW2320: Lidar Manager: Simulated front lidar should be turned on (logic check)")
+                            self.get_logger().info("SW2320: Lidar Manager: Simulated front lidar should be turned on (logic check)")
                             lidar_i.active = True
 
                         else: # For the real lidar
-                            rospy.loginfo("SW2320: Lidar Manager: Turning on front Lidar")
+                            self.get_logger().info("SW2320: Lidar Manager: Turning on front Lidar")
                             lidar_i.createLauncher()
                             lidar_i.start()
                 
                 else:
                     # Check if the lidar is already inactive
                     if not lidar_i.active:
-                        rospy.loginfo("SW2320: Lidar Manager: Front Lidar already inactive")
+                        self.get_logger().info("SW2320: Lidar Manager: Front Lidar already inactive")
                     else:
                         # Simulated Lidar just impersonates real lidar
                         if self.sim:
-                            rospy.loginfo("SW2320: Lidar Manager: Simulated front lidar should be turned off (logic check)")
+                            self.get_logger().info("SW2320: Lidar Manager: Simulated front lidar should be turned off (logic check)")
                             lidar_i.active = False
 
                         else: # For the real lidar
-                            rospy.loginfo("SW2320: Lidar Manager: Turning off front Lidar")
+                            self.get_logger().info("SW2320: Lidar Manager: Turning off front Lidar")
                             lidar_i.shutdown()
 
-                
-                ## Front Lidar Costmap ---------------------------------------------------------
-
-                # Add the output of this lidar to the costmap
-                if request.frontCostmapEnable:
-                    return_msg1 = lidar_i.enableInCostmap()
-                else:
-                    return_msg1 = lidar_i.disableInCostmap()
-            
             
             #######################################################################################
             
@@ -526,79 +395,39 @@ class lidarManagerClass:
                 if request.rearPowerOn:
                     # Check if the lidar is already active
                     if lidar_i.active:
-                        rospy.loginfo("SW2320: Lidar Manager: Rear Lidar already active. ")
+                        self.get_logger().info("SW2320: Lidar Manager: Rear Lidar already active. ")
                     else:
                         # Simulated Lidar just impersonates real lidar
                         if self.sim:
-                            rospy.loginfo("SW2320: Lidar Manager: Simulated rear lidar should be turned on (logic check)")
+                            self.get_logger().info("SW2320: Lidar Manager: Simulated rear lidar should be turned on (logic check)")
                             lidar_i.active = True
 
                         else: # For the real lidar
-                            rospy.loginfo("SW2320: Lidar Manager: Turning on rear Lidar")
+                            self.get_logger().info("SW2320: Lidar Manager: Turning on rear Lidar")
                             lidar_i.createLauncher()
                             lidar_i.start()
                 
                 else:
                     # Check if the lidar is already inactive
                     if not lidar_i.active:
-                        rospy.loginfo("SW2320: Lidar Manager: Rear Lidar already inactive")
+                        self.get_logger().info("SW2320: Lidar Manager: Rear Lidar already inactive")
                     else:
                         # Simulated Lidar just impersonates real lidar
                         if self.sim:
-                            rospy.loginfo("SW2320: Lidar Manager: Simulated rear lidar should be turned off (logic check)")
+                            self.get_logger().info("SW2320: Lidar Manager: Simulated rear lidar should be turned off (logic check)")
                             lidar_i.active = False
 
                         else: # For the real lidar
-                            rospy.loginfo("SW2320: Lidar Manager: Turning off rear Lidar")
+                            self.get_logger().info("SW2320: Lidar Manager: Turning off rear Lidar")
                             lidar_i.shutdown()
 
-                
-                ## Rear Lidar Costmap ---------------------------------------------------------
 
-                # Add the output of this lidar to the costmap
-                if request.rearCostmapEnable:
-                    return_msg1 = lidar_i.enableInCostmap()
-                else:
-                    return_msg1 = lidar_i.disableInCostmap()
-            
                   
         # If neither front nor rear lidar were found
         if (not rearLidarAvailable) and (not frontLidarAvailable):
             return_msg.responseCode = False 
-            rospy.loginfo("SW2320: Lidar Manager: Unable to find any configurable lidar")
+            self.get_logger().info("SW2320: Lidar Manager: Unable to find any configurable lidar")
             return_msg.responseString = "Unable to find any configurable lidar. "
-
-
-
-
-
-
-        #################################################################################
-        
-        # The costmap node is toggled based on lidar status
-    
-        if self.for_navigation: # If these lidars are used for navigation
-
-            # If there are NO active lidars
-            if (not request.frontPowerOn) and (not request.rearPowerOn):
-
-                rospy.loginfo("SW2320: Lidar Manager: No active lidar - costmap should be stopped")
-
-                # If the costmap is still active
-                if self.costmapMgr.costMapTargetState:
-
-                    rospy.loginfo("SW2320: Lidar Manager: No Lidar active:  Stopping costmap")
-                    self.costmapMgr.stop_costmap()
-
-            else: # If there are active lidars
-
-                rospy.loginfo("SW2320: Lidar Manager: At least 1 lidar active - costmap required")
-
-                # If the costmap is not active
-                if not self.costmapMgr.costMapTargetState:
-
-                    rospy.loginfo("SW2320: Lidar Manager: Lidar active - starting costmap")
-                    self.costmapMgr.launch_costmap()
 
 
         return return_msg
@@ -613,12 +442,17 @@ class lidarManagerClass:
 
 def main(args):
     
-    rospy.init_node('lidarManager', anonymous=False)
-    # Turn lidars on
-    lidarMgr = lidarManagerClass()
-    rospy.loginfo("SW2320: Lidar Manager: Lidar Manager started")
-
-    rospy.spin()
+    rclpy.init()
+    try:
+        lm = lidarManagerClass()
+        rclpy.spin(lm)
+    except KeyboardInterrupt:
+        sys.exit(1)
+    except ExternalShutdownException:
+        sys.exit(1)
+    finally:
+        rclpy.try_shutdown()
+        lm.destroy_node()
 
 if __name__ == '__main__':
     main(sys.argv)
