@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
-from antobot_devices_msgs.srv import LidarManager
+import rospy
+import rosservice
+from antobot_devices_msgs.srv import lidarManager, lidarManagerResponse
 
 class lidarManagerClient():
     '''Client for controllig lidar'''
 
-    def __init__(self, node_in=None):    
+    def __init__(self):    
         
         self.serviceName = '/antobot/lidarManager'
-        self.lidarManagerClient = node_in.create_client(LidarManager, self.serviceName)
+        self.lidarManagerClient = rospy.ServiceProxy(self.serviceName, lidarManager)
 
         # Message contents
         self.frontPowerOn=False			  # Turn on/off 
@@ -16,22 +18,23 @@ class lidarManagerClient():
         self.rearPowerOn=False			  # Turn on/off 
         self.rearCostmapEnable=False      # Enable/disable in costmap
 
-        self.req = LidarManager.Request()
-
        
     def checkForService(self):
-        return self.lidarManagerClient.service_is_ready()
+        service_list = rosservice.get_service_list()
+        if self.serviceName in service_list:
+            return True
+        else:
+            return False
 
     def updateLidar(self):
         
-        self.req.front_power_on = self.frontPowerOn
-        self.req.front_costmap_enable = self.frontCostmapEnable
-        self.req.rear_power_on = self.rearPowerOn
-        self.req.rear_costmap_enable = self.rearCostmapEnable
-
-        lmResponse = self.lidarManagerClient.call_async(self.req)
+        lmResponse = self.lidarManagerClient(self.frontPowerOn,self.frontCostmapEnable,self.rearPowerOn,self.rearCostmapEnable)
 
         print('Lidar Manager Client: '+ lmResponse.responseString)
         return lmResponse
+
+
+
+
 
 
