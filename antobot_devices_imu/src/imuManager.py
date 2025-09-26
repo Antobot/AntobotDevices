@@ -128,7 +128,7 @@ def main():
             rclpy.init_node('imuManager')
             imuMgr = imuManager()
             rate = rclpy.Rate(50) 
-            while not rclpy.is_shutdown():
+            while not rclpy.ok():
                 rate.sleep()
         except KeyboardInterrupt:
             rclpy.loginfo("Shutting down launcher...")
