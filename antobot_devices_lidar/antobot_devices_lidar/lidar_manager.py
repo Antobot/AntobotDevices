@@ -54,14 +54,19 @@ class lidar(Node): # lidar pare
         ##############################################################################
         ## Check for the /ros_gz_bridge node to check whether we need to launch lidar driver node    
         ##############################################################################
-        node_names = self.get_node_names()
-        if '/ros_gz_bridge' in node_names:
-            self.sim = True
-        else:
-            self.sim = False
+
+        services = self.get_service_names_and_types()
+        #print(services)
+        self.sim = False
+        for srv_name, _ in services:
+            print(f"[{srv_name}]") 
+            if srv_name.startswith(f'/{"ros_gz_bridge"}'):
+                self.get_logger().info('SW2320: Lidar Manager: Simulation - robot lidar launched with Gazebo')
+                self.sim = True
+                return
 
         if self.sim:
-            self.get_logger().info('SW2320: Lidar Manager: Simulation - robot lidar launched with Gazebo')
+            
             self.active = True
         else:
             # By default, turn on all the available lidar 
@@ -243,11 +248,14 @@ class lidarManagerClass(Node):
         ##############################################################################
         ## Check for the simulation parameter which should be set by am_sim     
         ##############################################################################
-        node_names = self.get_node_names()
-        if '/ros_gz_bridge' in node_names:
-            self.sim = True
-        else:
-            self.sim = False
+        self.sim = False
+        services = self.get_service_names_and_types()
+        for srv_name, _ in services:
+            print(f"[{srv_name}]") 
+            if srv_name.startswith(f'/{"ros_gz_bridge"}'):
+                self.get_logger().info('SW2320: Lidar Manager: Simulation - robot lidar launched with Gazebo')
+                self.sim = True
+                return
 
         ##############################################################################
         ## Run either real or simulated manager    
