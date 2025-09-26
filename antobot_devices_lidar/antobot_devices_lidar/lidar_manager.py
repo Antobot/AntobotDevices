@@ -12,27 +12,21 @@
 
 # # # #  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-
+import os
 import sys
 import yaml
+
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import ExternalShutdownException
-import os
 from launch import LaunchService
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from ament_index_python.packages import get_package_share_directory
 
-import rospkg
-
-
-
 from antobot_devices_msgs.srv import LidarManager
 from antobot_devices_msgs.srv import CostmapToggleObservation
-from std_srvs.srv import Empty
-
 
 ###################################################################################################################################################
 
@@ -40,7 +34,7 @@ from std_srvs.srv import Empty
 class lidar(Node): # lidar pare
     '''Stores lidar specific information'''
     def __init__(self,location="front"):
-        super().__init__('node') # Initialise Node class first
+        super().__init__(location) # Initialise Node class first
         # Save arguments
         self.active = False # Lidar turn on/off 
         self.enabled_in_costmap = True # default True
@@ -72,7 +66,7 @@ class lidar(Node): # lidar pare
         else:
             # By default, turn on all the available lidar 
             self.createLauncher()
-            self.start()
+            #self.start()
 
 #################################################
 
@@ -92,7 +86,7 @@ class lidar(Node): # lidar pare
     def shutdown(self):
         if self.active==True:
             self.active=False
-            self.launch.stop()
+            #self.launch.stop()
             self.get_logger().info("SW2320: Lidar Manager: Lidar {} shutdown".format(self.location))
 
         else:
@@ -200,11 +194,12 @@ class lidar_mid360(lidar):
     def __init__(self,name ="mid360",ip="",frame_id="",location="front"):
         super().__init__(location)
         self.type = 'mid360'
-
+        print('hello')
         # Save arguments
         # TODO: mid360 port settings
         self.frame_id = frame_id
         self.name_space = name
+        self.ip = ip
 
         super().run() # run the lidar (create launcher and start if not simulation)
 #################################################
@@ -212,19 +207,24 @@ class lidar_mid360(lidar):
     def createLauncher(self):
         '''Starts mid360 launch file'''
 
-        # # Generate a unique id for the node
-        # uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-        # roslaunch.configure_logging(uuid)
 
-        # cli_args = ['antobot_devices_lidar', 'mid360_config_launch.launch', 'frame_id:='+self.frame_id]
+        self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
 
-        # roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
+        included_launch = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(self.launch_file_path),
+            launch_arguments={
+                'name_space': self.name_space,
+                'frame_id': self.frame_id
+            }.items()
+        )
 
-        # roslaunch_args = cli_args[2:]
+        ld = LaunchDescription()
+        ld.add_action(included_launch)
 
-        # launch_files = [(roslaunch_file, roslaunch_args)]
+        ls = LaunchService()
+        ls.include_launch_description(ld)
 
-        # self.launch = RoslaunchWrapperObject(run_id = uuid, roslaunch_files = launch_files)
+        return ls.run()
     
 
 ###################################################################################################################################################
@@ -259,14 +259,12 @@ class lidarManagerClass(Node):
             self.get_logger().info("SW2320: Lidar Manager: This is NOT a simulation - using real Lidar")
 
         # Create a service to allow other nodes to start/stop lidars
-        self.srvlidarMgr = self.create_service(lidarManager,"/antobot/lidarManager",self._serviceCallbackLidarMgr)
+        self.srvlidarMgr = self.create_service(LidarManager,"/antobot/lidarManager",self._serviceCallbackLidarMgr)
 
 
 #################################################
     
     def read_config_file(self):
-        rospack = rospkg.RosPack()
-
         try:
             package_path = get_package_share_directory('antobot_description')
             config_file = os.path.join(package_path, 'config', 'platform_config.yaml')
@@ -279,8 +277,6 @@ class lidarManagerClass(Node):
             for lidar_type in params["lidar"]:
                 if lidar_type == 'mid360':
                     ip = params["lidar"][lidar_type]["device_ip"]
-                    m_port = params["lidar"][lidar_type]["msop_port"]
-                    d_port = params["lidar"][lidar_type]["difop_port"]
 
                     if params["lidar"][lidar_type]["mode"] == "navigation":
                         frame_id = "laser_link_" + params["lidar"][lidar_type]["location"]
@@ -327,7 +323,7 @@ class lidarManagerClass(Node):
 
 
         # Create the return message
-        return_msg = lidarManagerResponse()
+        return_msg = LidarManager.Response()
 
         frontLidarAvailable=False
         rearLidarAvailable=False
