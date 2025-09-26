@@ -1,0 +1,7 @@
+## subscribe
+lidar_topic: /livox/lidar_192_168_1_200
+## output frame
+lidar_frame: livox_frame_pointcloud2
+filter_num: 3
+lidar_max_range: 20.0
+lidar_min_range: 0.0
