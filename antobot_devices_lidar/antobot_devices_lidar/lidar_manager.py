@@ -18,25 +18,20 @@ import yaml
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import ExternalShutdownException
-from pathlib import Path
-from datetime import datetime
 import os
 from launch import LaunchService
-from launch_ros import get_default_launch_description
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from ament_index_python.packages import get_package_share_directory
 
-import roslaunch # Using this until we develop our own camera manager solution
 import rospkg
 
-from antobot_manager_software.launchManager import ProcessListener, RoslaunchWrapperObject
 
-from antobot_devices_msgs.srv import lidarManager, lidarManagerResponse
-from antobot_devices_msgs.srv import costmapToggleObservation, costmapToggleObservationRequest
-from std_srvs.srv import Empty, EmptyRequest, EmptyResponse
+
+from antobot_devices_msgs.srv import LidarManager
+from antobot_devices_msgs.srv import CostmapToggleObservation
+from std_srvs.srv import Empty
 
 
 ###################################################################################################################################################
@@ -44,21 +39,19 @@ from std_srvs.srv import Empty, EmptyRequest, EmptyResponse
 ###################################################################################################################################################
 class lidar(Node): # lidar pare
     '''Stores lidar specific information'''
-    def __init__(self,ip, location="front"):
-
+    def __init__(self,location="front"):
+        super().__init__('node') # Initialise Node class first
         # Save arguments
-        self.ip = ip
         self.active = False # Lidar turn on/off 
         self.enabled_in_costmap = True # default True
         self.launch = None
         self.location = location
-        self.type = ""
 
-        self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
+
 
         
         ## Client for controlling lidar input to the costmap node
-        self.costmapToggleClient = self.create_client(costmapToggleObservation,'/costmap_node/costmap/toggle_observation')
+        self.costmapToggleClient = self.create_client(CostmapToggleObservation,'/costmap_node/costmap/toggle_observation')
            
 
 
@@ -84,9 +77,8 @@ class lidar(Node): # lidar pare
 #################################################
 
     def createLauncher(self):
-        '''Starts a camera by calling the c16 launch file'''
-
-        # pass # To be implemented in the child class
+        pass
+        # To be implemented in the child class
         
 #################################################
 
@@ -110,11 +102,14 @@ class lidar(Node): # lidar pare
     
     def disableInCostmap(self):
         # disable this input from the costmap
-        return_msg = lidarManagerResponse()
+        return_msg = LidarManager.Response()
         if self.active and self.enabled_in_costmap:
             topic_name = "/lidar_"+self.location+"/lslidar_point_cloud"
-            req = costmapToggleObservationRequest(observation_source = topic_name,command = False)
-            response = self.costmapToggleClient.call(req) # Always return true 
+            req = CostmapToggleObservation.Request()
+            req.observation_source = topic_name
+            req.command = False
+        
+            self.costmapToggleClient.call(req) # Always return true 
             return_msg.responseCode = True
             return_msg.responseString = topic_name + " disabled in the costmap"
             self.enabled_in_costmap = False
@@ -135,11 +130,13 @@ class lidar(Node): # lidar pare
 #################################################
 
     def enableInCostmap(self):
-        return_msg = lidarManagerResponse()
+        return_msg = LidarManager.Response()
         if self.active and not self.enabled_in_costmap:
             topic_name = "/lidar_"+self.location+"/lslidar_point_cloud"
-            req = costmapToggleObservationRequest(observation_source = topic_name,command = True)
-            response = self.costmapToggleClient.call(req) # Always return true 
+            req = CostmapToggleObservation.Request()
+            req.observation_source = topic_name
+            req.command = True
+            self.costmapToggleClient.call(req) # Always return true 
             return_msg.responseCode = True
             return_msg.responseString = topic_name + " enabled in the costmap"
             self.enabled_in_costmap = True
@@ -156,39 +153,44 @@ class lidar(Node): # lidar pare
 
         return return_msg
 
-class lidar_c16(lidar):
+class lidar_cx(lidar):
     '''Stores lidar specific information'''
-    def __init__(self,name ="c16",ip="",m_port="",d_port="",frame_id="",location="front"):
-        super().__init__(ip, frame_id, location)
-        self.type = 'cx' # Can support C16, C32
+    def __init__(self,name ="cx",ip="",m_port="",d_port="",frame_id="",location="front"):
+        super().__init__(location)
+        self.type = 'cx' # Can support any Cx lidar (C16, C32, etc)
         # Save arguments
         self.m_port = str(m_port)
         self.d_port = str(d_port)
         self.frame_id = frame_id
         self.name_space = name
+        self.device_ip = ip
 
         super().run() # run the lidar (create launcher and start if not simulation)
 #################################################
 
     def createLauncher(self):
-        '''Starts a camera by calling the c16 launch file'''
+        '''Starts cx launch file'''
 
-        # Generate a unique id for the node
-        uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-        roslaunch.configure_logging(uuid)
-        
+        self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
 
-        self.get_logger().info("SW2320: Lidar Manager: Creating launcher for front lidar")
-        cli_args = ['antobot_devices_lidar', 'lslidar_config_launch_updated.launch', 'name_space:='+self.name_space, 'frame_id:='+self.frame_id,  'device_ip:='+self.ip, 'msop_port:='+self.m_port, 'difop_port:='+self.d_port]
+        included_launch = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(self.launch_file_path),
+            launch_arguments={
+                'name_space': self.name_space,
+                'frame_id': self.frame_id,
+                'device_ip': self.device_ip,
+                'msop_port': self.m_port,
+                'difop_port': self.d_port
+            }.items()
+        )
 
-        roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
-        #print(roslaunch_file)
-        roslaunch_args = cli_args[2:]
+        ld = LaunchDescription()
+        ld.add_action(included_launch)
 
-        launch_files = [(roslaunch_file, roslaunch_args)]
+        ls = LaunchService()
+        ls.include_launch_description(ld)
 
-        self.launch = RoslaunchWrapperObject(run_id = uuid, roslaunch_files = launch_files)
-    
+        return ls.run()
 
 ###################################################################################################################################################
 
@@ -196,7 +198,7 @@ class lidar_c16(lidar):
 class lidar_mid360(lidar):
     '''Stores lidar specific information'''
     def __init__(self,name ="mid360",ip="",frame_id="",location="front"):
-        super().__init__(ip, location)
+        super().__init__(location)
         self.type = 'mid360'
 
         # Save arguments
@@ -208,21 +210,21 @@ class lidar_mid360(lidar):
 #################################################
 
     def createLauncher(self):
-        '''Starts a camera by calling the c16 launch file'''
+        '''Starts mid360 launch file'''
 
-        # Generate a unique id for the node
-        uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-        roslaunch.configure_logging(uuid)
+        # # Generate a unique id for the node
+        # uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
+        # roslaunch.configure_logging(uuid)
 
-        cli_args = ['antobot_devices_lidar', 'mid360_config_launch.launch', 'frame_id:='+self.frame_id]
+        # cli_args = ['antobot_devices_lidar', 'mid360_config_launch.launch', 'frame_id:='+self.frame_id]
 
-        roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
+        # roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
 
-        roslaunch_args = cli_args[2:]
+        # roslaunch_args = cli_args[2:]
 
-        launch_files = [(roslaunch_file, roslaunch_args)]
+        # launch_files = [(roslaunch_file, roslaunch_args)]
 
-        self.launch = RoslaunchWrapperObject(run_id = uuid, roslaunch_files = launch_files)
+        # self.launch = RoslaunchWrapperObject(run_id = uuid, roslaunch_files = launch_files)
     
 
 ###################################################################################################################################################
@@ -266,17 +268,12 @@ class lidarManagerClass(Node):
         rospack = rospkg.RosPack()
 
         try:
-            path = rospack.get_path('antobot_description')
-            with open(path+'/config/platform_config.yaml','r') as file:
+            package_path = get_package_share_directory('antobot_description')
+            config_file = os.path.join(package_path, 'config', 'platform_config.yaml')
+
+            with open(config_file, 'r') as file:
                 params = yaml.safe_load(file)
 
-            # Check if imu compensated frame is used - default true
-            if "imu_compensated_frame" in params:
-                self.imu_frame = params["imu_compensated_frame"]
-            else:
-                self.imu_frame = True
-            print('test')
-            print(f'imu_frame: {self.imu_frame}')
             self.lidars = {}
             
             for lidar_type in params["lidar"]:
@@ -294,7 +291,7 @@ class lidarManagerClass(Node):
                     print(frame_id)
                     self.lidars[lidar_type] = lidar_mid360('lidar_'+params["lidar"][lidar_type]["location"], ip, frame_id, location=params["lidar"][lidar_type]["location"])
 
-                else: # c16
+                else: # cx
                     ip = params["lidar"][lidar_type]["device_ip"]
                     m_port = params["lidar"][lidar_type]["msop_port"]
                     d_port = params["lidar"][lidar_type]["difop_port"]
@@ -306,9 +303,9 @@ class lidarManagerClass(Node):
                     else:
                         frame_id = "laser_link_" + params["lidar"][lidar_type]["location"] + "_static"
 
-                    self.lidars[lidar_type] = lidar_c16('lidar_'+params["lidar"][lidar_type]["location"], ip, m_port, d_port, frame_id, location=params["lidar"][lidar_type]["location"])
+                    self.lidars[lidar_type] = lidar_cx('lidar_'+params["lidar"][lidar_type]["location"], ip, m_port, d_port, frame_id, location=params["lidar"][lidar_type]["location"])
         except Exception as e:
-            self.get_logger().err(f"SW2320: Lidar Manager: Failed to read robot config file. Error: {e}")
+            self.get_logger().error(f"SW2320: Lidar Manager: Failed to read robot config file. Error: {e}")
 
 
 
@@ -440,7 +437,7 @@ class lidarManagerClass(Node):
 ## Main
 ######################################################################################################
 
-def main(args):
+def main(args=None):
     
     rclpy.init()
     try:
@@ -455,5 +452,5 @@ def main(args):
         lm.destroy_node()
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main()
 
