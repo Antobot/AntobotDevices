@@ -23,12 +23,14 @@ from builtin_interfaces.msg import Time
 #import roslaunch
 from ament_index_python.packages import get_package_share_directory
 
-from antobot_urcu.launchManager import AntobotSWNode, Launchfile
+from antobot_urcu.launchManager import AntobotSWNode, Launchfile, RoslaunchWrapperObject
 from antobot_devices_gps.gps_f9p import F9P_GPS
 #from antobot_devices_gps.gps_movingbase import MovingBase_Ros
 from antobot_devices_gps.gps_corrections import gpsCorrections
 import importlib
 import Jetson.GPIO as GPIO
+
+import ros2launch
 
 
 class gpsManager(Node):
@@ -112,12 +114,12 @@ class gpsManager(Node):
     def createLauncher(self, exec_name, node_name):
 
         # Generate a unique id for the node
-        uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-        roslaunch.configure_logging(uuid)
+        uuid = ros2launch.rlutil.get_or_generate_uuid(None, False)
+        ros2launch.configure_logging(uuid)
 
         cli_args = ['antobot_devices_gps', 'gps_config_launch.launch', 'exec_name:='+exec_name, 'node_name:='+node_name, 'dual_gps:='+self.dual_gps]
 
-        roslaunch_file = roslaunch.rlutil.resolve_launch_arguments(cli_args)[0]
+        roslaunch_file = ros2launch.rlutil.resolve_launch_arguments(cli_args)[0]
         print(roslaunch_file)
         roslaunch_args = cli_args[2:]
 
