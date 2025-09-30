@@ -9,11 +9,6 @@
 # the uRCU. It then receives correction messages from the u-blox F9P chip inside the uRCU and forwards them to another 
 # u-blox F9P chip located externally.
 # This script is intended for use with a dual GPS antenna setup, where a base station provides correction messages via MQTT.
-    
-# This script reports the following on GPS status:
-# GPS status : Critical ; GPS status = 0
-# GPS status : Warning ; GPS status = 1 - Float
-# GPS status : Good ; GPS status = 3 - Fix
 
 # Contact: Huaide Wang
 # email: huaide.wang@antobot.ai
@@ -24,37 +19,19 @@ import os
 import time
 import yaml
 import asyncio
-import serial
 import serial_asyncio # sudo pip install pyserial-asyncio
 import struct
-
 import traceback
-from io import BytesIO
 
 from dataclasses import dataclass
-from pyrtcm import RTCMReader
 from paho.mqtt import client as mqtt_client
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Int32, Float64
+from std_msgs.msg import Int32, Float64, Header
 from geometry_msgs.msg import Vector3
 
 from antobot_devices_msgs.msg import GpsHeading
-
-buffer = b""
-GPS_Epoch_Time = None
-
-@dataclass
-class PVTFrame:
-    iTOW: int                 # GPS time of week of the navigation epoch. (ms)
-    fixType: int              # 0 = no fix; 1 = dead reckoning only; 2 = 2D-fix; 3 = 3D-fix; 4 = GNSS + dead reckoning combined; 5 = time only fix 
-    flag_carrSoln: int        # 0 = no carrier phase range solution; 1 = carrier phase range solution with floating ambiguities; 2 = carrier phase range solution with fixed ambiguities
-    lon: float                # Longitude (1e-7 deg)
-    lat: float                # Latitude (1e-7 deg)
-    height: float             # Height above ellipsoid (mm)
-    hAcc: int                 # Horizontal accuracy estimat(mm)
-    status_fix: int           # fix type: 0, 1, 3
 
 @dataclass
 class RELPOSNEDFrame:
@@ -116,12 +93,13 @@ class RTCMFramer(asyncio.Protocol):
         self.transport = transport
 
         # Tips: if want to read from UART, must write first.
-        self.transport.write(b'0')
+        # 20250939: Comment this out, because URCU 1.5 doesn't need it.
+        # self.transport.write(b'0')
 
     def data_received(self, data):
         if self.transport_rover:
-            self.transport_rover.write(data)
-	
+              self.transport_rover.write(data)
+              
         if self.buffer:
             self.buffer.add_data(data)
             #print(f"RTCMFramer received data: {data}")
@@ -168,7 +146,7 @@ class RELPOSNEDFramer(asyncio.Protocol):
         self.buffer = bytearray()
         self.max_size = max_size
 
-        self.frames = asyncio.Queue()
+        self.frames = asyncio.Queue(maxsize=1)
 
     def connection_made(self, transport):
         self.transport = transport
@@ -206,6 +184,7 @@ class RELPOSNEDFramer(asyncio.Protocol):
             frame = bytes(self.buffer[j : j + total])
             #print(f"frame: {frame}")
             cls_id_len_payload = frame[2 : 6 + length]
+            
             ck_a = 0
             ck_b = 0
             for b in cls_id_len_payload:
@@ -223,6 +202,7 @@ class RELPOSNEDFramer(asyncio.Protocol):
                 relposned = self.parse_nav_relposned(payload)
                 try:
                     self.frames.put_nowait(relposned)
+                    #print(f"frame size: {self.frames.qsize()}")
                 except asyncio.QueueFull:
                     _ = self.frames.get_nowait()
                     self.frames.task_done()
@@ -236,20 +216,20 @@ class RELPOSNEDFramer(asyncio.Protocol):
     @staticmethod
     def parse_nav_relposned(payload: bytes):
         #print(payload)
-        iTOW         = struct.unpack_from('<i', payload, 0x04)[0] # ms
+        iTOW = struct.unpack_from('<I', payload, 0x04)[0] # ms
         
-        relPosN      = struct.unpack_from('<i', payload, 0x08)[0]
-        relPosE      = struct.unpack_from('<i', payload, 0x0C)[0]
-        relPosD      = struct.unpack_from('<i', payload, 0x10)[0]
+        relPosN = struct.unpack_from('<i', payload, 0x08)[0]
+        relPosE = struct.unpack_from('<i', payload, 0x0C)[0]
+        relPosD = struct.unpack_from('<i', payload, 0x10)[0]
         
         relPosLength = struct.unpack_from('<i', payload, 0x14)[0] # cm
-        relPosHeading= struct.unpack_from('<i', payload, 0x18)[0] # deg, 1e-5
+        relPosHeading = struct.unpack_from('<i', payload, 0x18)[0] # deg, 1e-5
         
-        accLength    = struct.unpack_from('<I', payload, 0x30)[0] # mm
-        accHeading   = struct.unpack_from('<I', payload, 0x34)[0] # deg, 1e-5
+        accLength = struct.unpack_from('<I', payload, 0x30)[0] # mm
+        accHeading = struct.unpack_from('<I', payload, 0x34)[0] # deg, 1e-5
         
-        flags        = struct.unpack_from('<I', payload, 0x3C)[0]
-        #print(f"relPosLength: {relPosLength}")
+        flags = struct.unpack_from('<I', payload, 0x3C)[0]
+
         return RELPOSNEDFrame(
             iTOW, relPosN, relPosE, relPosD, relPosLength, relPosHeading,
             accLength, accHeading,
@@ -394,12 +374,11 @@ class RTCMBuffer:
 
             # read head：DF002(12) DF003(12) DF004(30)
             msgnum = self.read_bits(payload, 0, 12)
-            #print(f"msgnum: {msgnum}")
+            #print(f"msgnum: {msgnum}; payload: {payload}")
             if msgnum == 1074:
-                tow_ms = self.read_bits(payload, 24, 30)
-                self.itow_1077 = tow_ms
-                #print(f" tow_ms: { tow_ms}")
-
+                itow_ms = self.read_bits(payload, 24, 30)
+                self.itow_1077 = itow_ms
+                #print(f"itow_1074: {itow_ms}")
             i = end
             self._need_len = 0
             frames += 1
@@ -508,10 +487,8 @@ class ACMQTT:
     
     def on_message(self, client, userdata, msg):
         self.msg_rec_time.time  = time.time()
-        #print(f"mqtt_time: {self.msg_rec_time.time }")
-        # print(f"topic: {msg.topic}; msg: {msg.payload}")
         self.transport.write(msg.payload)
-
+        
     def set_transport(self, transport_):
         self.transport = transport_
 
@@ -522,13 +499,6 @@ class ROS2Interface(Node):
         
         # publish
         self.pub_heading = self.create_publisher(GpsHeading, '/antobot_gps/heading', 10)
-        
-        self.pub_heading_urcu = self.create_publisher(Float64, '/antobot_gps/heading/urcu', 10) # the heading got form dual GPS directly
-        self.pub_heading_robot = self.create_publisher(Float64, '/antobot_gps/heading/robot', 10) # the heading got form dual GPS directly
-        self.pub_relposned = self.create_publisher(Vector3, '/antobot_gps/relposned', 10) # the heading got form dual GPS directly
-        
-        
-        self.pub_delay = self.create_publisher(Int32, '/antobot_gps/delay', 10) # the delay between Relpos message and RTCM message
 
         # subscribe
         
@@ -642,6 +612,9 @@ class MovingBase:
     async def run(self):
         try:           
             print("MovingBase started successfully")
+            msg_heading = GpsHeading()
+            msg_heading.header= Header()
+            msg_heading.header.frame_id = 'gps_frame'  # FRAME_ID
             
             # Keep the event loop running
             while True:
@@ -651,31 +624,33 @@ class MovingBase:
                     #print(frame)
                     
                     if frame:
-                        # Process frame if needed
-                        itow = self.rtcm_buffer.get_itow_1077()
-                        #print(f"itow: {itow}")
-                        #print(f"mqtt: {self.msg_rec_mqtt_time.time }; gps: {itow}; heading: {frame.iTOW}; diff: {itow-frame.iTOW}ms")
-                    	
-                        msg_heading = GpsHeading()
-                        msg_heading.heading = frame.relPosHeading * 1e-5
+                        msg_heading.header.stamp = self.ros_node.get_clock().now().to_msg() 
+                        msg_heading.heading = (450 - frame.relPosHeading * 1e-5) % 360
                         msg_heading.length = frame.relPosLength * 1e-2
                         msg_heading.rel_pos_n = frame.relPosN * 1e-2
                         msg_heading.rel_pos_e = frame.relPosE * 1e-2
                         msg_heading.rel_pos_d = frame.relPosD * 1e-2
                         msg_heading.acc_heading = frame.accHeading * 1e-5
+                        msg_heading.acc_length = frame.accLength * 1e-4
                         msg_heading.gnss_fix_ok = frame.flag_gnssFixOK
                         msg_heading.rel_pos_valid = frame.flag_relPosValid
                         msg_heading.carr_soln = frame.flag_diffSoln
                         msg_heading.is_moving = frame.flag_isMoving
                         msg_heading.heading_valid = frame.relPosHeadingValid
                         
-    
+                        rtcm_itow = self.rtcm_buffer.get_itow_1077()
+                        if rtcm_itow:
+                            msg_heading.time_diff = rtcm_itow - frame.iTOW
+                        else:
+                            msg_heading.time_diff = 999
+    			
                         self.ros_node.pub_heading.publish(msg_heading)
                         
-                        
+                        """
                         delay = Int32()
                         delay.data = itow-frame.iTOW
                         self.ros_node.pub_delay.publish(delay)
+                        """
                         
                     # # Check connection health
                     # await self._check_connection_health()
@@ -703,8 +678,7 @@ async def spin_ros(node, period=0.005):
 async def main():
     
     F9P1_UART = "/dev/ttyTHS1" # The f9p is in the uRCU
-    F9P2_UART = "/dev/ttyCH341USB0" # The f9p is out of the uRCU
-    # movebase = await MovingBase.create(F9P1_UART, F9P2_UART)
+    F9P2_UART = "/dev/anto_gps" # The f9p is out of the uRCU
     
     rclpy.init()
     ros_node = ROS2Interface()
@@ -720,7 +694,6 @@ async def main():
         
         # Create tasks
         tasks = [moving_base.run(), rtcm_buffer.run(), spin_ros(ros_node)]
-        # tasks = [moving_base.run(), spin_ros(ros_node)]
 
         # Run main loop
         await asyncio.gather(*tasks)
