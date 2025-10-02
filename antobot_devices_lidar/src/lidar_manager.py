@@ -154,7 +154,7 @@ class costmapManager:
 ###################################################################################################################################################
 class lidar: # lidar pare
     '''Stores lidar specific information'''
-    def __init__(self,ip, location="front"):
+    def __init__(self,ip, location="front", lidar_type=""):
 
         # Save arguments
         self.ip = ip
@@ -162,6 +162,7 @@ class lidar: # lidar pare
         self.enabled_in_costmap = True # default True
         self.launch = None
         self.location = location
+        self.lidar_type = lidar_type
 
         
         ## Client for controlling lidar input to the costmap node
@@ -219,6 +220,8 @@ class lidar: # lidar pare
         return_msg = lidarManagerResponse()
         if self.active and self.enabled_in_costmap:
             topic_name = "/lidar_"+self.location+"/lslidar_point_cloud"
+            if self.lidar_type == "mid360": # quick fix for ROS1 testing - ROS2 should be different
+                topic_name = "/livox/lidar"
             req = costmapToggleObservationRequest(observation_source = topic_name,command = False)
             response = self.costmapToggleClient.call(req) # Always return true 
             return_msg.responseCode = True
@@ -244,6 +247,8 @@ class lidar: # lidar pare
         return_msg = lidarManagerResponse()
         if self.active and not self.enabled_in_costmap:
             topic_name = "/lidar_"+self.location+"/lslidar_point_cloud"
+            if self.lidar_type == "mid360": # quick fix for ROS1 testing - ROS2 should be different
+                topic_name = "/livox/lidar"
             req = costmapToggleObservationRequest(observation_source = topic_name,command = True)
             response = self.costmapToggleClient.call(req) # Always return true 
             return_msg.responseCode = True
@@ -270,7 +275,7 @@ class lidar: # lidar pare
 class lidar_c16(lidar): # Currently for C16 lidar
     '''Stores lidar specific information'''
     def __init__(self,name ="c16",ip="",m_port="",d_port="",frame_id="",location="front"):
-        super().__init__(ip, frame_id, location)
+        super().__init__(ip, frame_id, location,lidar_type="c16")
 
         # Save arguments
         self.m_port = str(m_port)
@@ -307,7 +312,7 @@ class lidar_c16(lidar): # Currently for C16 lidar
 class lidar_mid360(lidar): # Currently for C16 lidar
     '''Stores lidar specific information'''
     def __init__(self,name ="mid360",ip="",frame_id="",location="front"):
-        super().__init__(ip, location)
+        super().__init__(ip, location, lidar_type="mid360")
 
         # Save arguments
         # TODO: mid360 port settings
