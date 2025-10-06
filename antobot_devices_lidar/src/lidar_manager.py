@@ -275,7 +275,7 @@ class lidar: # lidar pare
 class lidar_c16(lidar): # Currently for C16 lidar
     '''Stores lidar specific information'''
     def __init__(self,name ="c16",ip="",m_port="",d_port="",frame_id="",location="front"):
-        super().__init__(ip, frame_id, location,lidar_type="c16")
+        super().__init__(ip, location,lidar_type="c16")
 
         # Save arguments
         self.m_port = str(m_port)
