@@ -102,19 +102,17 @@ class RTCMFramer(asyncio.Protocol):
         # self.transport.write(b'0')
 
     def data_received(self, data):
-        if self.transport_rover:
+        if self.transport_rover and not self.transport_rover.is_closing():
             try:
                 self.transport_rover.write(data)
             except Exception as e:
-                print(f"RTCMFramer - transport: Write failed: {e}")
-
-              
+                pass
         if self.buffer:
             self.buffer.add_data(data)
             #print(f"RTCMFramer received data: {data}")
             
     def connection_lost(self, exc):
-        #logger.error('Moving Base: Connection lost, attempting to reconnect...')
+        print(f'Moving Base: Connection lost, attempting to reconnect... {exc}')
         asyncio.get_event_loop().create_task(self.reconnect())
         #asyncio.get_event_loop().stop()
 
@@ -131,7 +129,7 @@ class RTCMFramer(asyncio.Protocol):
             if self.movebase._protocol_base:
                 self.movebase._protocol_base.transport_rover = self.movebase._transport_rover
                     
-                self.movebase.MyMQTT.set_transport(self.movebase._transport_base)
+                self.movebase.mqtt_client.set_transport(self.movebase._transport_base)
                 #logger.info(f'Moving Base: Reconnection succeeded')
                 
         except Exception as e:
@@ -248,7 +246,7 @@ class RELPOSNEDFramer(asyncio.Protocol):
         )
 
     def connection_lost(self, exc):
-        #logger.error('Moving Rover: Connection lost, attempting to reconnect...')
+        print(f'Moving Rover: Connection lost, attempting to reconnect... {exc}')
         asyncio.get_event_loop().create_task(self.reconnect())
         #asyncio.get_event_loop().stop()
 
@@ -291,7 +289,7 @@ class RTCMBuffer:
         self.TIME_BUDGET_NS = 2_000_000 # 2ms
 
     	    	
-    def add_data(self, data: bytes) -> None:
+    def add_data(self, data: bytes):
 
         self.buffer.extend(data)
         #print(f"RTCMBuffer: {len(self.buffer)}")
@@ -420,6 +418,8 @@ class ACMQTT:
         self.transport = transport
         self.mode = mode
         self.msg_rec_time = time
+        # Capture the running event loop for thread-safe scheduling
+        self.loop = asyncio.get_running_loop()
         if self.mode == 1:
             #logger.info(f'nRTK Mode: base station')     
             parent_directory = os.path.dirname(os.path.abspath(__file__))
@@ -427,7 +427,7 @@ class ACMQTT:
             
             with open(yaml_file_path, 'r') as file:
                 config = yaml.safe_load(file)
-                self.client_id = 'Anto_MQTT_F9P_Sub_' + config['mqtt']['device_ID']
+                self.client_id = 'anto_rtk_' + config['mqtt']['device_ID']
                 self.topics_sub = "AntoCom/02/" + config['mqtt']['baseStation_ID'] + "/00"
                 self.broker = config['mqtt']['mqtt_Broker']
                 self.port = config['mqtt']['mqtt_Port']
@@ -439,8 +439,7 @@ class ACMQTT:
             #self.client = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION1, self.client_id) # for paho-mqtt 2.0
 
             self.client.username_pw_set(self.mqtt_username, self.mqtt_password)
-
-        elif self.mode == 2:     
+        elif self.mode == 2:
             #logger.info(f'nRTK Mode: ppp')
             parent_directory = os.path.dirname(os.path.abspath(__file__))
             yaml_file_path = os.path.join(parent_directory, "../../config/ppp_config.yaml")
@@ -469,8 +468,8 @@ class ACMQTT:
                 self.client.connect(self.broker, self.port)
 
         except Exception as e:
-            #logger.error(f"MQTT: Connection failed: {e}")
             pass
+            
         self.client.loop_start() 
 
     def disconnect_broker(self):
@@ -479,9 +478,9 @@ class ACMQTT:
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
-            #logger.info(f"MQTT: Connected to MQTT Broker successfully!")
-            print(self.topics_sub)
-            self.client.subscribe(self.topics_sub)
+            #print(f"MQTT: Connected to MQTT Broker successfully!")
+            #print(self.topics_sub)
+            self.client.subscribe(self.topics_sub, qos=0)
         else:
             #logger.error("MQTT: Failed to connect, return code {0}".format(rc))
             pass
@@ -492,34 +491,34 @@ class ACMQTT:
         if result[0] == 0:
             return True
         else:
-            #logger.error("MQTT: Failed to send message {0} to topic {1}".format(msg, self.topic))
+            #print("MQTT: Failed to send message {0} to topic {1}".format(msg, self.topic))
             return False
     
     def on_message(self, client, userdata, msg):
         self.msg_rec_time.time = time.time()
-        #self.msg_rec_time.add_time_queue(time.time()) # for test
-
-        try:
-            self.transport.write(msg.payload)
-        except Exception as e:
-            print(f"MQTT - transport:  Write failed: {e}")
         
+        if self.transport and not self.transport.is_closing():
+            try:
+                self.loop.call_soon_threadsafe(self.transport.write, msg.payload)
+            except Exception:
+                pass
+             
     def set_transport(self, transport_):
         self.transport = transport_
 
 
 class ROS2Interface(Node):
     def __init__(self):
-        super().__init__('ROS2')
+        super().__init__('gps_movingbase')
         
         self.msg_rec_mqtt_time = None
         self.msg_rec_heading_time = None
 
-        self.timer_period_mqtt = 3
+        self.timer_period_mqtt = 5
         self.timer_period_heading = 1
         
         # mqtt status
-        self.mqtt_status = 0 # 0: No data; 1: Nomarl
+        self.mqtt_status = 0 # 0: No data; 1: Nomarl; 2: Timeout
         self.mqtt_status_last = -1
 
         # heading status
@@ -534,15 +533,19 @@ class ROS2Interface(Node):
         self.timer_heading = self.create_timer(self.timer_period_heading, self.frequency_heading)
 
     def frequency_mqtt(self):
-        if self.msg_rec_mqtt_time:
-            if not self.mqtt_status:
+        if self.msg_rec_mqtt_time and self.msg_rec_mqtt_time.time:
+            if time.time() - self.msg_rec_mqtt_time.time > self.timer_period_mqtt:
+                self.get_logger().warn(f"SN4500: RTCM message update timeout (from MQTT): {time.time() - self.msg_rec_mqtt_time.time} > {self.timer_period_mqtt}")
+                self.mqtt_status = 2
+            elif self.mqtt_status == 0 and self.mqtt_status_last != self.mqtt_status:
+                self.get_logger().info("SN4500: RTCM message received (from MQTT)")
                 self.mqtt_status = 1
-
-            if time.time - self.msg_rec_mqtt_time.time > self.timer_period_mqtt:
-                self.get_logger().error(f"SN4500: The RTCM message update timeout : {time.time() - self.msg_rec_mqtt_time.time} > {self.timer_period_mqtt}")
-
-        elif not self.mqtt_status and self.mqtt_status_last != self.mqtt_status:
-            self.get_logger().error("SN4500: No RTCM message received")
+            elif self.mqtt_status == 2:
+                self.get_logger().info(f"SN4500: RTCM message status returned to normal (from MQTT)")
+                self.mqtt_status = 1
+                		
+        elif self.mqtt_status == 0 and self.mqtt_status_last != self.mqtt_status:
+            self.get_logger().error("SN4500: No RTCM message received (from MQTT)")
 
         if self.mqtt_status_last != self.mqtt_status:
             self.mqtt_status_last = self.mqtt_status
@@ -721,11 +724,19 @@ class MovingBase:
                         msg_heading.heading_valid = frame.relPosHeadingValid
                         
                         rtcm_itow = self.rtcm_buffer.get_itow_1077()
+                        #print(rtcm_itow)
                         if rtcm_itow:
-                            msg_heading.time_diff = rtcm_itow - frame.iTOW
+                            time_diff = rtcm_itow - frame.iTOW
+                            if time_diff < 0:
+                                time_diff += 200
+                            elif time_diff > 999:
+                                time_diff = 999
+                            msg_heading.time_diff = time_diff
                         else:
                             msg_heading.time_diff = 999 # 999 means no message received
     			
+                        #print(msg_heading.time_diff)
+                        #print(msg_heading)
                         self.ros_node.pub_heading.publish(msg_heading)
                         
                     await asyncio.sleep(0.2)
