@@ -22,6 +22,7 @@ import asyncio
 import serial_asyncio # sudo pip install pyserial-asyncio
 import struct
 import traceback
+import queue
 
 from dataclasses import dataclass
 from paho.mqtt import client as mqtt_client
@@ -54,20 +55,10 @@ class RELPOSNEDFrame:
 
 # Shared time
 class SharedTime:
-    """Thread-safe  container for MQTT message timing."""
-    
     def __init__(self):
-        self._time = None
-        self._lock = asyncio.Lock()
-    
-    async def set_time(self, time_value):
-        async with self._lock:
-            self._time = time_value
-    
-    async def get_time(self):
-        async with self._lock:
-            return self._time
-    
+        self._time = 0
+        self._time_queue = queue.Queue(maxsize=5)
+
     @property
     def time(self):
         return self._time
@@ -76,6 +67,21 @@ class SharedTime:
     def time(self, value):
         self._time = value
 
+    def add_time_queue(self, value):
+        if self._time_queue.full():
+            _ = self._time_queue.get()
+        self._time_queue.put(value)
+    
+    def get_latest_time_queue(self):
+        if self._time_queue.empty():
+            return None
+        return list(self._time_queue.queue)[-1]
+
+    def get_earliest_time_queue(self):
+        if not self._time_queue.full():
+            return None
+        return list(self._time_queue.queue)[0]
+    
 # read rtcm message from base and write it to rover
 class RTCMFramer(asyncio.Protocol):
     def __init__(self, movebase, port, rtcm_buff=None):
@@ -88,7 +94,6 @@ class RTCMFramer(asyncio.Protocol):
         self.transport_rover = None
         self.buffer = rtcm_buff
 
-
     def connection_made(self, transport):
         self.transport = transport
 
@@ -98,7 +103,11 @@ class RTCMFramer(asyncio.Protocol):
 
     def data_received(self, data):
         if self.transport_rover:
-              self.transport_rover.write(data)
+            try:
+                self.transport_rover.write(data)
+            except Exception as e:
+                print(f"RTCMFramer - transport: Write failed: {e}")
+
               
         if self.buffer:
             self.buffer.add_data(data)
@@ -402,7 +411,8 @@ class RTCMBuffer:
             r = 7 - ((bitpos + k) % 8)
             v = (v << 1) | ((mv[b] >> r) & 1)
         return v
-            
+
+
 # mqtt class: receive the rtcm message from fixed base and write it to base
 class ACMQTT:
     def __init__(self, transport, mode, time):
@@ -486,8 +496,13 @@ class ACMQTT:
             return False
     
     def on_message(self, client, userdata, msg):
-        self.msg_rec_time.time  = time.time()
-        self.transport.write(msg.payload)
+        self.msg_rec_time.time = time.time()
+        #self.msg_rec_time.add_time_queue(time.time()) # for test
+
+        try:
+            self.transport.write(msg.payload)
+        except Exception as e:
+            print(f"MQTT - transport:  Write failed: {e}")
         
     def set_transport(self, transport_):
         self.transport = transport_
@@ -497,20 +512,79 @@ class ROS2Interface(Node):
     def __init__(self):
         super().__init__('ROS2')
         
+        self.msg_rec_mqtt_time = None
+        self.msg_rec_heading_time = None
+
+        self.timer_period_mqtt = 3
+        self.timer_period_heading = 1
+        
+        # mqtt status
+        self.mqtt_status = 0 # 0: No data; 1: Nomarl
+        self.mqtt_status_last = -1
+
+        # heading status
+        self.heading_status = 0 # 0: No data; 1: frequency < 1; 2: frequency: 1 ~ 3; 3: requency > 3
+        self.heading_status_last = -1
+
         # publish
         self.pub_heading = self.create_publisher(GpsHeading, '/antobot_gps/heading', 10)
-
-        # subscribe
         
+        # timer
+        self.timer_mqtt = self.create_timer(self.timer_period_mqtt, self.frequency_mqtt)
+        self.timer_heading = self.create_timer(self.timer_period_heading, self.frequency_heading)
 
-    def costmapCallBack(self, msg):
-        print(msg)
+    def frequency_mqtt(self):
+        if self.msg_rec_mqtt_time:
+            if not self.mqtt_status:
+                self.mqtt_status = 1
+
+            if time.time - self.msg_rec_mqtt_time.time > self.timer_period_mqtt:
+                self.get_logger().error(f"SN4500: The RTCM message update timeout : {time.time() - self.msg_rec_mqtt_time.time} > {self.timer_period_mqtt}")
+
+        elif not self.mqtt_status and self.mqtt_status_last != self.mqtt_status:
+            self.get_logger().error("SN4500: No RTCM message received")
+
+        if self.mqtt_status_last != self.mqtt_status:
+            self.mqtt_status_last = self.mqtt_status
+
+    def set_mqtt_time(self, msg_rec_mqtt_time):
+        self.msg_rec_mqtt_time = msg_rec_mqtt_time
+
+    def frequency_heading(self):
+        if self.msg_rec_heading_time:
+            time_earliest = self.msg_rec_heading_time.get_earliest_time_queue()
+            if time_earliest:
+                fre = 5 / (time.time() - time_earliest)
+                if fre < 1 and self.heading_status != 1:
+                    self.heading_status = 1
+                    self.get_logger().error("SN4112: Heading Frequency status: Critical (<1 hz)")
+                    
+                elif fre > 1 and fre <= 3 and self.heading_status != 2:
+                    self.heading_status = 2
+                    self.get_logger().warn("SN4112: Heading Frequency status: warning (1 ~ 3 hz)")
+
+                elif fre > 3 and self.heading_status != 3:
+                    self.heading_status = 3
+                    self.get_logger().info("SN4112: Heading Frequency status: good (>3 hz)")
+
+            elif self.heading_status_last != self.heading_status:
+                self.heading_status = 0
+                self.get_logger().error("SN4100: No Heading message received")
 
 
+        elif self.heading_status_last != self.heading_status:
+            self.heading_status = 0
+            self.get_logger().error("SN4100: No Heading message received")
+
+        if self.heading_status_last != self.heading_status:
+            self.heading_status_last = self.heading_status
+          
+    def set_heading_time(self, msg_rec_heading_time):
+        self.msg_rec_heading_time = msg_rec_heading_time
 
 class MovingBase:
 
-    def __init__(self, port1 = 'port_movingbase', port2 = 'port_movingrover', mode = 1, msg_rec_mqtt_time = None, rtcm_buffer = None, ros_node = None):
+    def __init__(self, port1 = 'port_movingbase', port2 = 'port_movingrover', rtcm_buffer = None, ros_node = None, mode = 1):
         
         # port
         self.port1 = port1
@@ -528,7 +602,8 @@ class MovingBase:
         self._protocol_rover = None
     
         # Performance monitoring
-        self.msg_rec_mqtt_time = msg_rec_mqtt_time
+        self.msg_rec_mqtt_time = SharedTime()
+        self.msg_rec_heading_time = SharedTime()
         self.time_limit = 0.25
         
         self.rtcm_buffer = rtcm_buffer
@@ -541,7 +616,12 @@ class MovingBase:
             
             # Setup MQTT client
             self.mqtt_client = ACMQTT(self._transport_base, self.mode, self.msg_rec_mqtt_time)
-            
+
+            # Setup ROS
+            self.ros_node.set_mqtt_time(self.msg_rec_mqtt_time)
+            self.ros_node.set_heading_time(self.msg_rec_heading_time)
+
+
             print("MovingBase initialization completed successfully")
             return True
             
@@ -624,6 +704,8 @@ class MovingBase:
                     #print(frame)
                     
                     if frame:
+                        self.msg_rec_heading_time.add_time_queue(time.time())
+
                         msg_heading.header.stamp = self.ros_node.get_clock().now().to_msg() 
                         msg_heading.heading = (450 - frame.relPosHeading * 1e-5) % 360
                         msg_heading.length = frame.relPosLength * 1e-2
@@ -642,19 +724,10 @@ class MovingBase:
                         if rtcm_itow:
                             msg_heading.time_diff = rtcm_itow - frame.iTOW
                         else:
-                            msg_heading.time_diff = 999
+                            msg_heading.time_diff = 999 # 999 means no message received
     			
                         self.ros_node.pub_heading.publish(msg_heading)
                         
-                        """
-                        delay = Int32()
-                        delay.data = itow-frame.iTOW
-                        self.ros_node.pub_delay.publish(delay)
-                        """
-                        
-                    # # Check connection health
-                    # await self._check_connection_health()
-                    #print(f"mqtt: {self.msg_rec_mqtt_time.time }; gps: {}; heading: {frame.}")
                     await asyncio.sleep(0.2)
                 except asyncio.TimeoutError:
                     # Normal timeout, continue
@@ -677,16 +750,15 @@ async def spin_ros(node, period=0.005):
         
 async def main():
     
-    F9P1_UART = "/dev/ttyTHS1" # The f9p is in the uRCU
-    F9P2_UART = "/dev/anto_gps" # The f9p is out of the uRCU
+    F9P1_UART = "/dev/ttyTHS1" # '/dev/ttyTHS1' is UART2 for F9P inside uRCU
+    F9P2_UART = "/dev/anto_gps" # '/dev/anto_gps' is UART1 for F9P outside uRCU
     
     rclpy.init()
     ros_node = ROS2Interface()
 
-    msg_rec_mqtt_time = SharedTime()
     rtcm_buffer = RTCMBuffer()
     try:
-        moving_base = MovingBase(F9P1_UART, F9P2_UART, 1, msg_rec_mqtt_time, rtcm_buffer, ros_node)
+        moving_base = MovingBase(F9P1_UART, F9P2_UART, rtcm_buffer, ros_node)
 
         if not await moving_base.initialize():
             print("Failed to initialize MovingBase")
