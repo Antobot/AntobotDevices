@@ -33,38 +33,22 @@ from antobot_devices_msgs.srv import CostmapToggleObservation
 ###################################################################################################################################################
 class lidar(Node): # lidar pare
     '''Stores lidar specific information'''
-    def __init__(self,location="front"):
-        super().__init__(location) # Initialise Node class first
+    def __init__(self,location="front",sim=False, type=""):
+        print(location+type)
+        super().__init__(location+type) # Initialise Node class first
         # Save arguments
         self.active = False # Lidar turn on/off 
         self.enabled_in_costmap = True # default True
         self.launch = None
         self.location = location
-
-
-
+        self.sim = sim
         
         ## Client for controlling lidar input to the costmap node
         self.costmapToggleClient = self.create_client(CostmapToggleObservation,'/costmap_node/costmap/toggle_observation')
            
 
-
 #################################################
     def run(self):
-        ##############################################################################
-        ## Check for the /ros_gz_bridge node to check whether we need to launch lidar driver node    
-        ##############################################################################
-
-        services = self.get_service_names_and_types()
-        #print(services)
-        self.sim = False
-        for srv_name, _ in services:
-            print(f"[{srv_name}]") 
-            if srv_name.startswith(f'/{"ros_gz_bridge"}'):
-                self.get_logger().info('SW2320: Lidar Manager: Simulation - robot lidar launched with Gazebo')
-                self.sim = True
-                return
-
         if self.sim:
             
             self.active = True
@@ -154,8 +138,9 @@ class lidar(Node): # lidar pare
 
 class lidar_cx(lidar):
     '''Stores lidar specific information'''
-    def __init__(self,name ="cx",ip="",m_port="",d_port="",frame_id="",location="front"):
-        super().__init__(location)
+    def __init__(self,name ="cx",ip="",m_port="",d_port="",frame_id="",location="front",sim=False):
+        print('cx'+location)
+        super().__init__(location,sim,type="cx")
         self.type = 'cx' # Can support any Cx lidar (C16, C32, etc)
         # Save arguments
         self.m_port = str(m_port)
@@ -196,10 +181,10 @@ class lidar_cx(lidar):
 
 class lidar_mid360(lidar):
     '''Stores lidar specific information'''
-    def __init__(self,name ="mid360",ip="",frame_id="",location="front"):
-        super().__init__(location)
+    def __init__(self,name ="mid360",ip="",frame_id="",location="front",sim=False):
+        print('mid360'+location)
+        super().__init__(location,sim,type="mid360")
         self.type = 'mid360'
-        print('hello')
         # Save arguments
         # TODO: mid360 port settings
         self.frame_id = frame_id
@@ -240,22 +225,11 @@ class lidarManagerClass(Node):
     # # # and monitors the software for each individual lidar.
 
     def __init__(self):
-
+        super().__init__("lidarManager") # Initialise Node class first
         # Read robot_config file
+        self.sim = False
         self.for_navigation = False
         self.read_config_file()
-
-        ##############################################################################
-        ## Check for the simulation parameter which should be set by am_sim     
-        ##############################################################################
-        self.sim = False
-        services = self.get_service_names_and_types()
-        for srv_name, _ in services:
-            print(f"[{srv_name}]") 
-            if srv_name.startswith(f'/{"ros_gz_bridge"}'):
-                self.get_logger().info('SW2320: Lidar Manager: Simulation - robot lidar launched with Gazebo')
-                self.sim = True
-                return
 
         ##############################################################################
         ## Run either real or simulated manager    
@@ -280,6 +254,12 @@ class lidarManagerClass(Node):
             with open(config_file, 'r') as file:
                 params = yaml.safe_load(file)
 
+            robot_hardware = params["robot_hardware"]
+            if robot_hardware:
+                self.sim = False
+            else:
+                self.sim = True
+
             self.lidars = {}
             
             for lidar_type in params["lidar"]:
@@ -289,11 +269,9 @@ class lidarManagerClass(Node):
                     if params["lidar"][lidar_type]["mode"] == "navigation":
                         frame_id = "laser_link_" + params["lidar"][lidar_type]["location"]
                         self.for_navigation = True
-                        print('navigation')
                     else:
                         frame_id = "laser_link_" + params["lidar"][lidar_type]["location"] + "_static"
-                    print(frame_id)
-                    self.lidars[lidar_type] = lidar_mid360('lidar_'+params["lidar"][lidar_type]["location"], ip, frame_id, location=params["lidar"][lidar_type]["location"])
+                    self.lidars[lidar_type] = lidar_mid360('lidar_'+params["lidar"][lidar_type]["location"], ip, frame_id, location=params["lidar"][lidar_type]["location"], sim=self.sim)
 
                 else: # cx
                     ip = params["lidar"][lidar_type]["device_ip"]
@@ -303,11 +281,10 @@ class lidarManagerClass(Node):
                     if params["lidar"][lidar_type]["mode"] == "navigation":
                         frame_id = "laser_link_" + params["lidar"][lidar_type]["location"]
                         self.for_navigation = True
-                        print('navigation')
                     else:
                         frame_id = "laser_link_" + params["lidar"][lidar_type]["location"] + "_static"
 
-                    self.lidars[lidar_type] = lidar_cx('lidar_'+params["lidar"][lidar_type]["location"], ip, m_port, d_port, frame_id, location=params["lidar"][lidar_type]["location"])
+                    self.lidars[lidar_type] = lidar_cx('lidar_'+params["lidar"][lidar_type]["location"], ip, m_port, d_port, frame_id, location=params["lidar"][lidar_type]["location"], sim=self.sim)
         except Exception as e:
             self.get_logger().error(f"SW2320: Lidar Manager: Failed to read robot config file. Error: {e}")
 
