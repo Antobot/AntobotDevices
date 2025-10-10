@@ -1,7 +1,7 @@
 ### YAML file for the MQTT configuration
 
-ant_mqtt:
-  robot_ID: 'xxx'
+mqtt:
+  device_ID: 'xxx'
   baseStation_ID: 'xxx' #
 
   mqtt_Broker: 'xxx'  

@@ -1,34 +1,22 @@
 #!/bin/bash
 
-sudo rm -rf /etc/udev/rules.d/usb.rules
+Device_Name="/dev/ttyUSB0" # ttyCH341USB0 / ttyUSB0
+LINK_NAME="anto_gps" # anto_gps / anto_joy
+RULE_FILE="/etc/udev/rules.d/99-usb_$LINK_NAME.rules"
 
-device=ttyUSB0
+sudo rm -rf $RULE_FILE
 
-cd ~/
-script -c "udevadm info --attribute-walk --name=/dev/$device" serial_info.log
+BUSHNUM=$(udevadm info -a -n "$Device_Name" | grep 'ATTRS{busnum}' | head -n1 | sed -E 's/.*"([^"]+).*/\1/') 
+echo "busnum:$BUSHNUM"
 
-logfile="$HOME/serial_info.log"
-count=0
-kernel_value=""
-while IFS= read -r line; do
-	if [[ $line =~ KERNELS==\"([^\"]+)\" ]];then
-		((count++))
-		if [ $count -eq 2 ]; then
-			kernel_value="${BASH_REMATCH[1]}"
-			break
-		fi
-	fi
-done < "$logfile" 
+DEVPATH=$(udevadm info -a -n "$Device_Name" | grep 'ATTRS{devpath}' | head -n1 | sed -E 's/.*"([^"]+).*/\1/') 
+echo "devpath:$DEVPATH"
 
-RULE="KERNELS==\"$kernel_value\", MODE:=\"0777\", GROUP:=\"dialout\", SYMLINK+=\"anto_joy\""
+RULE="SUBSYSTEM==\"tty\", ATTRS{busnum}==\"$BUSHNUM\", ATTRS{devpath}==\"$DEVPATH\", MODE=\"0777\", SYMLINK+=\"$LINK_NAME\", GROUP=\"dialout\""
 
-echo "$RULE" | sudo tee -a /etc/udev/rules.d/usb.rules > /dev/null
+echo "$RULE" | sudo tee $RULE_FILE > /dev/null
 
+sudo udevadm control --reload-rules
 sudo udevadm trigger
-	
-rm "$logfile"
 
-echo '=================================================='
-ls -l /dev | grep ttyUSB
 
-exit 0

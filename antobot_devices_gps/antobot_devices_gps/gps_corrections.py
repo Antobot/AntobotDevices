@@ -71,7 +71,7 @@ class gpsCorrections(Node):
         elif "rasPi" in dev_type:
             print("import rasPi specific packages!")
 
-            
+
         packagePath = get_package_share_directory('antobot_devices_gps')
         print("packagePath: {}".format(packagePath))
         yaml_file_path = packagePath + "/config/corrections_config.yaml"
@@ -80,14 +80,14 @@ class gpsCorrections(Node):
             if self.corr_type == "ppp":
                 self.ppp_client_id = config['ppp']['device_ID']
                 self.ppp_server = 'pp.services.u-blox.com'
-            elif self.corr_type == "ant_mqtt":
-                self.ant_client_id = "anto_rtk_" + config['ant_mqtt']['robot_ID']
-                self.ant_mqtt_topic_sub = "AntoCom/02/" + config['ant_mqtt']['baseStation_ID'] + "/00"
-                self.ant_broker = config['ant_mqtt']['mqtt_Broker']
-                self.ant_mqtt_port = config['ant_mqtt']['mqtt_Port']
-                self.mqtt_keepalive = config['ant_mqtt']['mqtt_keepalive']
-                mqtt_username = config['ant_mqtt']['mqtt_UserName']
-                mqtt_password = config['ant_mqtt']['mqtt_PassWord']
+            elif self.corr_type == "mqtt":
+                self.mqtt_client_id = "anto_rtk_" + config['mqtt']['device_ID']
+                self.mqtt_topic_sub = "AntoCom/02/" + config['mqtt']['baseStation_ID'] + "/00"
+                self.mqtt_broker = config['mqtt']['mqtt_Broker']
+                self.mqtt_port = config['mqtt']['mqtt_Port']
+                self.mqtt_keepalive = config['mqtt']['mqtt_keepalive']
+                mqtt_username = config['mqtt']['mqtt_UserName']
+                mqtt_password = config['mqtt']['mqtt_PassWord']
             elif self.corr_type == "ntrip":
                 self.ntrip_server = config['ntrip']['address']
                 self.ntrip_port = config['ntrip']['port']
@@ -99,7 +99,7 @@ class gpsCorrections(Node):
 
 
         # Configuring method-specific parameters (MQTT)
-        if self.corr_type == "ant_mqtt":
+        if self.corr_type == "mqtt":
             self.connect = False
         elif self.corr_type == "ppp":
             dev_port = self.get_parameter_or("/gps/urcu/device_port",Parameter("/gps/urcu/device_port",value="/dev/ttyUSB0")).value
@@ -126,9 +126,10 @@ class gpsCorrections(Node):
                 self.certfile=os.path.join(packagePath,"config/")+f'device-{self.ppp_client_id}-pp-cert.crt'
                 self.keyfile=os.path.join(packagePath,"config/")+f'device-{self.ppp_client_id}-pp-key.pem'
                 self.client.tls_set(certfile=self.certfile,keyfile=self.keyfile)
-            elif self.corr_type == "ant_mqtt":
-                self.client = mqtt.Client(self.ant_client_id)
+            elif self.corr_type == "mqtt":
+                self.client = mqtt.Client(self.mqtt_client_id)
                 self.client.username_pw_set(mqtt_username, mqtt_password)
+             
             self.client.on_connect = self.on_connect
             self.client.on_message = self.on_message
 
@@ -144,8 +145,8 @@ class gpsCorrections(Node):
         try:
             if self.corr_type == "ppp":
                 self.client.connect(self.ppp_server, port=8883)
-            elif self.corr_type == "ant_mqtt":
-                self.client.connect(self.ant_broker, self.ant_mqtt_port, self.mqtt_keepalive)
+            elif self.corr_type == "mqtt":
+                self.client.connect(self.mqtt_broker, self.mqtt_port, self.mqtt_keepalive)
             # rospy.loginfo("SN4500: Connected to MQTT broker successfully.")
         except Exception as e:
             self.get_logger().error("SN4500: Connected to MQTT broker failed. ({e})")
@@ -159,8 +160,8 @@ class gpsCorrections(Node):
             self.connect = True
             if self.corr_type == "ppp":
                 self.client.subscribe(userdata['topics'])
-            elif self.corr_type == "ant_mqtt":
-                self.client.subscribe(self.ant_mqtt_topic_sub)
+            elif self.corr_type == "mqtt":
+                self.client.subscribe(self.mqtt_topic_sub)
             self.get_logger().info("SN4500: Connected to broker successfully")
         else: 
             self.get_logger().error("SN4500: Connected to broker failed. (rc = {rc})")
@@ -171,8 +172,9 @@ class gpsCorrections(Node):
         try:
             if self.corr_type == "ppp":
                 data = userdata['gnss'].write(msg.payload)
-            elif self.corr_type == "ant_mqtt":
+            elif self.corr_type == "mqtt":
                 data = self.serial_port.write(msg.payload)
+                #print(msg.payload)
             self.last_receive_time = time.time()
         except Exception as e:
             self.get_logger().error(f"SN4500: Write the corrections failed. ({e})")
@@ -268,7 +270,7 @@ def main(args=None):
             gps_corr.create_timer(5, gps_corr.send_gga)
             gps_corr.create_timer(0.1, gps_corr.stream_corrections) 
             rclpy.spin(gps_corr) 
-        if gps_corr.corr_type == "ppp" or "ant_mqtt":
+        if gps_corr.corr_type == "ppp" or "mqtt":
             gps_corr.client.loop_start()
             gps_corr.create_timer(1,lambda:None)
             rclpy.spin(gps_corr)

@@ -1,0 +1,9 @@
+[Unit]
+Description=Enable UART '/dev/ttyTHS1'
+After=network.target
+
+[Service]
+ExecStart=/home/cart/ros2_ws/src/acDevices/antobot_devices_gps/script/enable_UART.sh
+
+[Install]
+WantedBy=multi-user.target

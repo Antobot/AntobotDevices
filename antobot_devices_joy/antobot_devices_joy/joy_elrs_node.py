@@ -29,7 +29,7 @@ class Joystick_ELRS(Node):
     def __init__(self, frequency=30):
 
         super().__init__('joystick_ELRS')
-        self.declare_parameter('device_port', '/dev/ttyUSB0')
+        self.declare_parameter('device_port', '/dev/anto_joy')
 
         self.device_port = self.get_parameter('device_port').get_parameter_value().string_value
 
@@ -135,19 +135,19 @@ class Joystick_ELRS(Node):
                 self.RB = 1
 
 
-        axes = [self.translate_axes(left_rocker_LR), self.translate_axes(left_rocker_FB), self.translate_axes(right_rocker_LR, -1), self.translate_axes(right_rocker_FB)]
+        axes = [self.translate_axes(left_rocker_LR), self.translate_axes(left_rocker_FB), self.translate_axes(right_rocker_LR), self.translate_axes(right_rocker_FB)]
 
         # update the axes and buttons
         self.axes = [0, axes[1], 0, axes[2], axes[3], self.RT, 0, axes[0]]
         self.buttons = [self.A, self.B, self.X, self.Y, self.LB, self.RB, self.BACK, 0, 0, 0, 0]
 
         # print(self.axes != self.axes_pre)
-        # if self.axes != self.axes_pre or self.buttons != self.buttons_pre or abs(self.axes[1]) > 0.9 or abs(self.axes[3]) > 0.9 or (self.LB == 1 and self.RB == 1):
-
-        self.joy_msg.axes = array.array('f', self.axes)
-        self.joy_msg.buttons = self.buttons   
-        self.joy_msg.header.stamp = self.get_clock().now().to_msg() 
-        self.joy_pub.publish(self.joy_msg)
+        if self.axes != self.axes_pre or self.buttons != self.buttons_pre or abs(self.axes[1]) > 0.9 or abs(self.axes[3]) > 0.9:
+	
+            self.joy_msg.axes = array.array('f', self.axes)
+            self.joy_msg.buttons = self.buttons   
+            self.joy_msg.header.stamp = self.get_clock().now().to_msg() 
+            self.joy_pub.publish(self.joy_msg)
 
         self.axes_pre = self.axes
         self.buttons_pre = self.buttons
