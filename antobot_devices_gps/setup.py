@@ -25,7 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             'gps_manager = antobot_devices_gps.gpsManager:main',
-            'gps_corrections= antobot_devices_gps.gps_corrections:main'
+            'gps_corrections= antobot_devices_gps.gps_corrections:main',
+            'gps_movingbase= antobot_devices_gps.gps_movingbase:main'
         ],
     },
 )

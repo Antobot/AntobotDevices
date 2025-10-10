@@ -29,6 +29,8 @@ from paho.mqtt import client as mqtt_client
 
 import rclpy
 from rclpy.node import Node
+from ament_index_python.packages import get_package_share_directory
+
 from std_msgs.msg import Int32, Float64, Header
 from geometry_msgs.msg import Vector3
 
@@ -421,9 +423,9 @@ class ACMQTT:
         # Capture the running event loop for thread-safe scheduling
         self.loop = asyncio.get_running_loop()
         if self.mode == 1:
-            #logger.info(f'nRTK Mode: base station')     
-            parent_directory = os.path.dirname(os.path.abspath(__file__))
-            yaml_file_path = os.path.join(parent_directory, "../config/corrections_config.yaml")
+            packagePath = get_package_share_directory('antobot_devices_gps')
+            #print("packagePath: {}".format(packagePath))
+            yaml_file_path = packagePath + "/config/corrections_config.yaml"
             
             with open(yaml_file_path, 'r') as file:
                 config = yaml.safe_load(file)
@@ -699,6 +701,9 @@ class MovingBase:
             msg_heading.header= Header()
             msg_heading.header.frame_id = 'gps_frame'  # FRAME_ID
             
+            heading_valid = True
+            heading_valid_last = False
+            
             # Keep the event loop running
             while True:
                 try:
@@ -723,8 +728,8 @@ class MovingBase:
                         msg_heading.is_moving = frame.flag_isMoving
                         msg_heading.heading_valid = frame.relPosHeadingValid
                         
+                        
                         rtcm_itow = self.rtcm_buffer.get_itow_1077()
-                        #print(rtcm_itow)
                         if rtcm_itow:
                             time_diff = rtcm_itow - frame.iTOW
                             if time_diff < 0:
@@ -735,9 +740,20 @@ class MovingBase:
                         else:
                             msg_heading.time_diff = 999 # 999 means no message received
     			
-                        #print(msg_heading.time_diff)
-                        #print(msg_heading)
+    			# TODO: add base length to determine whether the heading is valid
+                        heading_valid_ = frame.flag_gnssFixOK and frame.flag_isMoving and frame.relPosHeadingValid and frame.flag_diffSoln > 0
+                        if heading_valid != heading_valid_:
+                            if heading_valid_:
+                                self.ros_node.get_logger().info("SN4110: Heading message status: valid")
+                            else:
+                                self.ros_node.get_logger().error("SN4110: Heading message status: invalid")
+                            heading_valid = heading_valid_
+    			    
+    			    
                         self.ros_node.pub_heading.publish(msg_heading)
+                    elif heading_valid and heading_valid != heading_valid_last:
+                        heading_valid = heading_valid_last
+                        self.ros_node.get_logger().error("SN4110: Heading message status: invalid")
                         
                     await asyncio.sleep(0.2)
                 except asyncio.TimeoutError:
@@ -759,7 +775,7 @@ async def spin_ros(node, period=0.005):
         rclpy.spin_once(node, timeout_sec=0.0)
         await asyncio.sleep(period)
         
-async def main():
+async def async_main():
     
     F9P1_UART = "/dev/ttyTHS1" # '/dev/ttyTHS1' is UART2 for F9P inside uRCU
     F9P2_UART = "/dev/anto_gps" # '/dev/anto_gps' is UART1 for F9P outside uRCU
@@ -789,11 +805,14 @@ async def main():
         ros_node.destroy_node()
         rclpy.shutdown()
         
-
-if __name__ == '__main__':
+def main():
     try:
-        asyncio.run(main())
+        asyncio.run(async_main())
     except KeyboardInterrupt:
         print("Application terminated by user")
     except Exception as e:
         print(f"Fatal error: {e}")
+        
+        
+if __name__ == '__main__':
+    main()
