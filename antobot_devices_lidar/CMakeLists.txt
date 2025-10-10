@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(antobot_devices_lidar_convert)
+project(antobot_devices_lidar)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -23,5 +23,9 @@ target_link_libraries(antobot_devices_lidar_convert
         yaml-cpp
 )
 
+# === Python integration ===
+ament_python_install_package(${PROJECT_NAME})  # calls setup.py 
+
+ament_package()
 
 
