@@ -181,7 +181,7 @@ class gpsManager(Node):
     async def check_gps_async(self):
 
         MB = await self.create_MovingBase()
-        while not rospy.is_shutdown():
+        while not rclpy.is_shutdown():
             try:
 
                 self.check_gps_node(self.urcu_gps_node)
@@ -190,7 +190,7 @@ class gpsManager(Node):
                 self.pub_head(headFrame)
 
             except:
-                rospy.logerr(f"MovingBase: Close the MovingBase node")
+                rclpy.logerr(f"MovingBase: Close the MovingBase node")
                 break
         return
     

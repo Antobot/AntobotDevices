@@ -198,7 +198,7 @@ class F9P_GPS(Node):
             self.fix_status = self.geo.fixType #3: 3Dfix, 2:2Dfix
 
             if self.fix_status == 3 and self.gps_status != 'Good':
-                rospy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
                 self.gps_status = 'Good'
 
         elif self.geo.flags.carrSoln == 1: #float conditions

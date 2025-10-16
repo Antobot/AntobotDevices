@@ -102,7 +102,8 @@ class gpsCorrections(Node):
         if self.corr_type == "mqtt":
             self.connect = False
         elif self.corr_type == "ppp":
-            dev_port = self.get_parameter_or("/gps/urcu/device_port",Parameter("/gps/urcu/device_port",value="/dev/ttyUSB0")).value
+            # dev_port = self.get_parameter_or("/gps/urcu/device_port",Parameter("/gps/urcu/device_port",value="/dev/ttyUSB0")).value
+            dev_port = self.declare_parameter('gps.urcu.device_port', '/dev/ttyUSB0').value
             self.mqtt_topics = [(f"/pp/ip/eu", 0), ("/pp/ubx/mga", 0), ("/pp/ubx/0236/ip", 0)]
             self.userdata = { 'gnss': self.serial_port, 'topics': self.mqtt_topics } 
         
@@ -258,28 +259,56 @@ class gpsCorrections(Node):
 
 
 
+# def main(args=None):
+#     rclpy.init(args=args)
+#     gps_corr = gpsCorrections()
+#
+#     #gps_corr.client.loop_start()
+#
+#     try:
+#         if gps_corr.corr_type == "ntrip":
+#             gps_corr.connect_ntrip()
+#             gps_corr.create_timer(5, gps_corr.send_gga)
+#             gps_corr.create_timer(0.1, gps_corr.stream_corrections)
+#             rclpy.spin(gps_corr)
+#         if gps_corr.corr_type == "ppp" or "mqtt":
+#             gps_corr.client.loop_start()
+#             gps_corr.create_timer(1,lambda:None)
+#             rclpy.spin(gps_corr)
+#             #rate = rospy.Rate(1) # 1hz
+#             #while not rospy.is_shutdown():
+#                 #print("gpsCorrections is running") # for test
+#             #    rate.sleep()
+#             #gps_corr.client.loop_stop()
+#         rclpy.spin(node)
+#     except KeyboardInterrupt:
+#         print("[INFO] Interrupted by user")
+#     except Exception as e:
+#         print(f"[ERROR] {e}")
+#     finally:
+#         if gps_corr.corr_type == "ntrip":
+#             gps_corr.close()
+#         rclpy.shutdown()
+
 def main(args=None):
+    import rclpy
+
     rclpy.init(args=args)
     gps_corr = gpsCorrections()
-    
-    #gps_corr.client.loop_start()
-    
+
     try:
         if gps_corr.corr_type == "ntrip":
             gps_corr.connect_ntrip()
-            gps_corr.create_timer(5, gps_corr.send_gga)
-            gps_corr.create_timer(0.1, gps_corr.stream_corrections) 
-            rclpy.spin(gps_corr) 
-        if gps_corr.corr_type == "ppp" or "mqtt":
+            gps_corr.create_timer(5.0, gps_corr.send_gga)
+            gps_corr.create_timer(0.1, gps_corr.stream_corrections)
+        elif gps_corr.corr_type in ["ppp", "mqtt"]:
             gps_corr.client.loop_start()
-            gps_corr.create_timer(1,lambda:None)
-            rclpy.spin(gps_corr)
-            #rate = rospy.Rate(1) # 1hz
-            #while not rospy.is_shutdown():
-                #print("gpsCorrections is running") # for test
-            #    rate.sleep()
-            #gps_corr.client.loop_stop()
-        rclpy.spin(node)
+            gps_corr.create_timer(1.0, lambda: None)
+        else:
+            print(f"[WARN] Unknown correction type: {gps_corr.corr_type}")
+
+        rclpy.spin(gps_corr)
+
     except KeyboardInterrupt:
         print("[INFO] Interrupted by user")
     except Exception as e:
