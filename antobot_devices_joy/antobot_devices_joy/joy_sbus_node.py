@@ -35,7 +35,8 @@ class JoystickSbus(Node):
 
         # 按钮
         self.A = self.B = self.X = self.Y = 0
-        self.LB = self.RB = self.BACK = self.RT = 0.0
+        self.LB = self.RB = self.BACK =  0
+        self.RT = 0.0
 
         self.get_logger().info(f"Joystick SBUS 7C node started on port {self.device_port}")
 
