@@ -16,13 +16,14 @@ public:
         this->get_parameter<std::string>("config_path", config_path);
         YAML::Node config = YAML::LoadFile(config_path);
 
-        lidar_topic = config["lidar_topic"].as<std::string>();
-        frame_id = config["frame_id"].as<std::string>();
+        input_lidar_topic = config["input_lidar_topic"].as<std::string>();
+        output_lidar_topic = config["output_lidar_topic"].as<std::string>();
+        output_lidar_frame = config["output_lidar_frame"].as<std::string>();
         filter_num = config["filter_num"].as<int>();
         lidar_max_range = config["lidar_max_range"].as<double>();
         lidar_min_range = config["lidar_min_range"].as<double>();
 
-        m_lidar_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("livox/pointcloud2", 10000);
+        m_lidar_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_lidar_topic, 10000);
 
 
 
@@ -42,7 +43,7 @@ private:
         sensor_msgs::msg::PointCloud2 cloud_msg;
         pcl::toROSMsg(*cloud, cloud_msg);
         cloud_msg.header.stamp = msg->header.stamp;
-        cloud_msg.header.frame_id = frame_id;
+        cloud_msg.header.frame_id = output_lidar_frame;
         m_lidar_pub->publish(cloud_msg);
 
 
@@ -80,8 +81,8 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_lidar_pub;
 
 
-    std::string lidar_topic = "livox/lidar_192_168_1_200";
-    std::string frame_id = "livox_frame_pointcloud2";
+    std::string input_lidar_topic = "livox/lidar_192_168_1_200";
+    std::string output_lidar_frame = "livox_frame_pointcloud2";
     int filter_num = 3;
     double lidar_max_range = 20.0;
     double lidar_min_range = 0.0;
