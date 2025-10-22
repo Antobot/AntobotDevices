@@ -23,6 +23,11 @@ target_link_libraries(antobot_devices_lidar_convert
         yaml-cpp
 )
 
+install(TARGETS
+        antobot_devices_lidar_convert
+        DESTINATION lib/${PROJECT_NAME}
+)
+
 # === Python integration ===
 ament_python_install_package(${PROJECT_NAME})  # calls setup.py 
 

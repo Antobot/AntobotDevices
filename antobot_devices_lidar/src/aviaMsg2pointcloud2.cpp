@@ -35,10 +35,8 @@ public:
         }
 
 
-
         m_lidar_pub_1 = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_lidar_topic1, 10000);
         m_lidar_pub_2 = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_lidar_topic2, 10000);
-
 
 
     }
@@ -120,3 +118,12 @@ private:
     double lidar_min_range = 0.0;
 
 };
+
+int main(int argc, char **argv)
+{
+    rclcpp::init(argc, argv);
+    auto node = std::make_shared<aviaMsgNode>();
+    rclcpp::spin(node);
+    rclcpp::shutdown();
+    return 0;
+}
