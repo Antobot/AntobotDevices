@@ -1,8 +1,12 @@
+lidar_num: 1
 ## subscribe livox topic name
-input_lidar_topic: /livox/lidar_192_168_1_200
+input_lidar_topic1: /livox/lidar_192_168_1_200
+input_lidar_topic2: /livox/lidar_192_168_1_201
 ## output pt2 frame and name
-output_lidar_frame: laser_link_front
-output_lidar_topic: /livox/pointcloud2
+output_lidar_frame1: laser_link_front
+output_lidar_frame2: laser_link_back
+output_lidar_topic1: /livox/pointcloud2_192_168_1_200
+output_lidar_topic2: /livox/pointcloud2_192_168_1_201
 filter_num: 3
 lidar_max_range: 20.0
 lidar_min_range: 0.0
