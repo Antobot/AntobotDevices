@@ -21,7 +21,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'joy_elrs_node = antobot_devices_joy.joy_elrs_node:main'
+            'joy_elrs_node = antobot_devices_joy.joy_elrs_node:main',
+            'joy_sbus_node = antobot_devices_joy.joy_sbus_node:main',
         ],
     },
 )

@@ -29,7 +29,12 @@ install(TARGETS
 )
 
 # === Python integration ===
-ament_python_install_package(${PROJECT_NAME})  # calls setup.py 
+ament_python_install_package(${PROJECT_NAME})  # calls setup.py
+
+install(PROGRAMS
+        antobot_devices_lidar/lidar_manager.py
+        antobot_devices_lidar/lidarManagerClient.py
+        DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
 
