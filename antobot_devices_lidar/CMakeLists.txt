@@ -40,7 +40,7 @@ install(PROGRAMS
         antobot_devices_lidar/lidar_manager.py
         antobot_devices_lidar/lidarManagerClient.py
         DESTINATION lib/${PROJECT_NAME}
-        DESTINATION share/${PROJECT_NAME}
+
 )
 
 
