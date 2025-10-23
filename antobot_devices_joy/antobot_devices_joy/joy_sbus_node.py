@@ -2,12 +2,13 @@
 import asyncio
 import time
 import rclpy
+from collections import deque
 from rclpy.node import Node
 
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
 
-from sbus_received import SBUSReceiver
+from .sbus_received import SBUSReceiver
 class JoystickSbus(Node):
     def __init__(self):
         super().__init__('joy_sbus_node')
@@ -38,6 +39,11 @@ class JoystickSbus(Node):
         self.LB = self.RB = self.BACK =  0
         self.RT = 0.0
 
+        self.buffer_size = 100
+        self.data_buffer = deque(maxlen=self.buffer_size)
+        self.flag = 0
+        self.stable_value = None
+
         self.get_logger().info(f"Joystick SBUS 7C node started on port {self.device_port}")
 
     def translate_buttons(self, num):
@@ -63,6 +69,21 @@ class JoystickSbus(Node):
         self.LB = self.RB = self.BACK = 0
         self.RT = 0.0
 
+    def filterStable(self, val):
+        self.data_buffer.append(val)
+        if len(self.data_buffer) < self.buffer_size:
+            self.flag = 0
+            return
+        # 使用集合检查所有元素是否相同
+        unique_values = set(self.data_buffer)
+
+        if len(unique_values) == 1:
+            self.flag = 1
+            self.stable_value = self.data_buffer[0]
+        else:
+            self.flag = 0
+            self.stable_value = None
+
     def create_joy_msg(self, SbusFrame):
         ch = SbusFrame.sbusChannels
 
@@ -74,6 +95,8 @@ class JoystickSbus(Node):
         channel6 = ch[5]
         knob1 = ch[6] # CH7/CH8: 两个旋钮（200~1800）
         knob2 = ch[7]
+
+        self.filterStable(ch[1])
 
 
         left_LR = self.normalize_axis(left_rocker_LR)
@@ -212,7 +235,7 @@ class JoystickSbus(Node):
             0.0, left_FB, 0.0, right_LR, right_FB, self.RT, 0.0, left_LR
         ]
         self.buttons = [self.A, self.B, self.X, self.Y,
-                        self.LB, self.RB, self.BACK, 0, 0, 0, 0]
+                        self.LB, self.RB, self.BACK, 0, 0, 0, self.flag]
 
         print(f'axes: {self.axes}')
         print(f'buttons: {self.buttons}')
