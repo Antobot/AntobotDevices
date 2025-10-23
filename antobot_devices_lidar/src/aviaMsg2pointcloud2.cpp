@@ -9,7 +9,7 @@ class aviaMsgNode : public rclcpp::Node
 {
 public:
     aviaMsgNode() : Node("aviaMsgNode") {
-        this->declare_parameter("config_path", "");
+        this->declare_parameter("config_path", "/home/yu/antobot/install/antobot_devices_lidar/share/antobot_devices_lidar/config/aviaMsgConvert.yaml");
         std::string config_path;
         this->get_parameter<std::string>("config_path", config_path);
         YAML::Node config = YAML::LoadFile(config_path);

@@ -27,14 +27,22 @@ install(TARGETS
         antobot_devices_lidar_convert
         DESTINATION lib/${PROJECT_NAME}
 )
+install(
+        DIRECTORY launch config
+        DESTINATION share/${PROJECT_NAME}/
+)
 
 # === Python integration ===
+find_package(ament_cmake_python REQUIRED)
 ament_python_install_package(${PROJECT_NAME})  # calls setup.py
 
 install(PROGRAMS
         antobot_devices_lidar/lidar_manager.py
         antobot_devices_lidar/lidarManagerClient.py
-        DESTINATION lib/${PROJECT_NAME})
+        DESTINATION lib/${PROJECT_NAME}
+        DESTINATION share/${PROJECT_NAME}
+)
+
 
 ament_package()
 
