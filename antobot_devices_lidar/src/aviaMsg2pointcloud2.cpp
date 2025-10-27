@@ -54,7 +54,10 @@ private:
 
         sensor_msgs::msg::PointCloud2 cloud_msg;
         pcl::toROSMsg(*cloud, cloud_msg);
-        cloud_msg.header.stamp = msg->header.stamp;
+        rclcpp::Time start_time = msg->header.stamp;
+        rclcpp::Duration avg_offset = rclcpp::Duration::from_seconds(cloud->points.back().curvature);
+        cloud_msg.header.stamp = start_time + avg_offset;
+        //cloud_msg.header.stamp = msg->header.stamp;
         cloud_msg.header.frame_id = output_lidar_frame1;
         m_lidar_pub_1->publish(cloud_msg);
     }
@@ -67,7 +70,10 @@ private:
 
         sensor_msgs::msg::PointCloud2 cloud_msg;
         pcl::toROSMsg(*cloud, cloud_msg);
-        cloud_msg.header.stamp = msg->header.stamp;
+        rclcpp::Time start_time = msg->header.stamp;
+        rclcpp::Duration avg_offset = rclcpp::Duration::from_seconds(cloud->points.back().curvature);
+        cloud_msg.header.stamp = start_time + avg_offset;
+        //cloud_msg.header.stamp = msg->header.stamp;
         cloud_msg.header.frame_id = output_lidar_frame2;
         m_lidar_pub_2->publish(cloud_msg);
     }
