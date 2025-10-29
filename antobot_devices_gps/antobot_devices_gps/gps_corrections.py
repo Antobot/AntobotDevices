@@ -184,7 +184,7 @@ class gpsCorrections(Node):
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
 
 
-    def check_RTCM_timeout(self, event):
+    def check_RTCM_timeout(self):
         if time.time() - self.last_receive_time > 30: # 30s
             self.get_logger().error("SN4500: The RTCM message update timeout ({} > 30s).".format(time.time() - self.last_receive_time))
             #self.last_receive_time = time.time()

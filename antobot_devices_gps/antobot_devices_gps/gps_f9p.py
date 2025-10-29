@@ -183,7 +183,7 @@ class F9P_GPS(Node):
                 if self.gps_status != 'Warning':
                     self.get_logger().warn("SN4010: GPS Fix Status: Float Mode")
                     self.gps_status = 'Warning'
-        else:
+        elif self.geo.gps_qual < 2:
             self.fix_status = 0 #no fix
             if self.gps_status != 'Critical':
                 self.get_logger().error("SN4010: GPS Fix Status: Critical")
