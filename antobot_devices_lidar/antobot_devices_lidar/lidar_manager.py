@@ -113,20 +113,20 @@ class lidar(Node): # lidar pare
             req.command = False
         
             self.costmapToggleClient.call(req) # Always return true 
-            return_msg.responseCode = True
-            return_msg.responseString = topic_name + " disabled in the costmap"
+            return_msg.response_code = True
+            return_msg.response_string = topic_name + " disabled in the costmap"
             self.enabled_in_costmap = False
         elif not self.active:
-            return_msg.responseCode = False
-            return_msg.responseString = "lidar not turned off - no disabling the topic in the costmap"
+            return_msg.response_code = False
+            return_msg.response_string = "lidar not turned off - no disabling the topic in the costmap"
         elif not self.enabled_in_costmap:
-            return_msg.responseCode = True # True since it's already disabled
-            return_msg.responseString = "topic already disabled in the costmap"
+            return_msg.response_code = True # True since it's already disabled
+            return_msg.response_string = "topic already disabled in the costmap"
         else:
             # This Shouldn't happen
             self.get_logger().info("SW2320: Lidar Manager: Lidar topic is neither active nor enabled in costmap - failed to disable the topic")
-            return_msg.responseCode = False
-            return_msg.responseString = "Failed to disable the topic"
+            return_msg.response_code = False
+            return_msg.response_string = "Failed to disable the topic"
         
         return return_msg
     
@@ -140,19 +140,19 @@ class lidar(Node): # lidar pare
             req.observation_source = topic_name
             req.command = True
             self.costmapToggleClient.call(req) # Always return true 
-            return_msg.responseCode = True
-            return_msg.responseString = topic_name + " enabled in the costmap"
+            return_msg.response_code = True
+            return_msg.response_string = topic_name + " enabled in the costmap"
             self.enabled_in_costmap = True
         elif not self.active:
-            return_msg.responseCode = False
-            return_msg.responseString = "lidar not turned off - no enabling the topic in the costmap"
+            return_msg.response_code = False
+            return_msg.response_string = "lidar not turned off - no enabling the topic in the costmap"
         elif self.enabled_in_costmap:
-            return_msg.responseCode = True # True since it's already enabled
-            return_msg.responseString = "topic already enabled in the costmap"
+            return_msg.response_code = True # True since it's already enabled
+            return_msg.response_string = "topic already enabled in the costmap"
         else:
             self.get_logger().info("SW2320: Lidar Manager: Lidar topic is alrady active and enabled in costmap")
-            return_msg.responseCode = False
-            return_msg.responseString = "Failed to enable the topic"
+            return_msg.response_code = False
+            return_msg.response_string = "Failed to enable the topic"
 
         return return_msg
 
