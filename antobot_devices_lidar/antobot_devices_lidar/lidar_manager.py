@@ -328,7 +328,7 @@ class lidarManagerClass(Node):
                 ip = lidar_cfg.get("device_ip", None)
 
                 if mode == "navigation":
-                    frame_id = f"laser_link_{location}"
+                    frame_id = f"laser_link_{location}_frame"
                     self.for_navigation = True
                 else:
                     frame_id = f"laser_link_{location}_static"
