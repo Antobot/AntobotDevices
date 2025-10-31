@@ -8,7 +8,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
 
-from .sbus_received import SBUSReceiver
+from sbus_received import SBUSReceiver
 class JoystickSbus(Node):
     def __init__(self):
         super().__init__('joy_sbus_node')
@@ -39,7 +39,7 @@ class JoystickSbus(Node):
         self.LB = self.RB = self.BACK =  0
         self.RT = 0.0
 
-        self.buffer_size = 100
+        self.buffer_size = 30
         self.data_buffer = deque(maxlen=self.buffer_size)
         self.flag = 0
         self.stable_value = None
@@ -58,6 +58,8 @@ class JoystickSbus(Node):
 
     def normalize_axis(self, val):
         """ 200~1800 映射 [-1.0, 1.0]"""
+        if val < 100 or val > 1900:
+            return 0.0
         norm = (val - 1000) / 800.0
         norm = max(min(norm, 1.0), -1.0)
         if abs(norm) < 0.05:
@@ -88,8 +90,10 @@ class JoystickSbus(Node):
         ch = SbusFrame.sbusChannels
 
         right_rocker_LR = ch[0] # CH1: 右摇杆左右
-        right_rocker_FB = ch[1] # CH2: 右摇杆上下
+        right_rocker_FB = ch[1] # CH2: 右摇杆上下 只有右遥感前后能设置教练锁死
+        print(f"channel1 {ch[1]}")
         left_rocker_FB = ch[2] # CH3: 左摇杆前后
+        print(f"channel2 {ch[2]}")
         left_rocker_LR = ch[3] # CH4: 左摇杆左右
         channel5 = ch[4] # CH5/CH6: 三挡开关
         channel6 = ch[5]
@@ -131,26 +135,11 @@ class JoystickSbus(Node):
         # task
         if self.buttons_reset:
             # Manual / Standalone for UV treatment / Standalone for Scouting
-            if ch5_val == 1 and ch6_val != 1:
-                self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
-                print("abs leftLR: ",abs(left_LR) )
-                if abs(left_LR) > 0.45:
-                    self.RT = -1.0
-                    print("self.RT: " , self.RT)
-                    if left_LR < -0.45:
-                        left_LR = -1.0
-                        if self.debug_:
-                            print('Standalone for UV treatment, backward')
-                    else:
-                        left_LR = 1.0
-                        if self.debug_:
-                            print('Standalone for UV treatment, forward')
-                else:
-                    self.LB = 1
-                    self.RB = 1
-                    if self.debug_:
-                        print('Manual')
+            if self.flag == 1:
+                self.LB = 1
+                self.RB = 1
+                if self.debug_:
+                    print('Manual')
                 self.buttons_reset = True
 
             # Indoor demo - temporary code
