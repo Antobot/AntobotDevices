@@ -214,13 +214,15 @@ class gpsCorrections(Node):
     def stream_corrections(self,event=None):
         try:
             print("[INFO] Streaming corrections...")
+            self.sock.settimeout(3)
             data = self.sock.recv(1024)
             if not data:
                 print("[WARN] NTRIP server closed connection")
                 self.connect_ntrip()
-            print(data)
-            self.serial_port.write(data)
-            print(self.serial_port)
+            else:
+                print(data)
+                self.serial_port.write(data)
+                print(self.serial_port)
         except:
             print("[ERROR] NTRIP server break, reconnecting")
             self.connect_ntrip()
