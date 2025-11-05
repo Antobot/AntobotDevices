@@ -34,14 +34,14 @@ from antobot_devices_msgs.srv import CostmapToggleObservation
 ###################################################################################################################################################
 class lidar(Node): # lidar pare
     '''Stores lidar specific information'''
-    def __init__(self,location="front",sim=False, type=""):
-        print(location+type)
-        super().__init__(location+type) # Initialise Node class first
+    def __init__(self,id=200,sim=False, type=""):
+        
+        super().__init__(f"{type}_{id}") # Initialise Node class first
         # Save arguments
         self.active = False # Lidar turn on/off 
         self.enabled_in_costmap = True # default True
         self.launch = None
-        self.location = location
+        self.id = id
         self.sim = sim
         self.p = None
         
@@ -77,7 +77,7 @@ class lidar(Node): # lidar pare
                 self.p = multiprocessing.Process(target=self.createLauncher, daemon=True)
             self.p.start()
         else:
-            print(f"[{self.location}] already active.")
+            print(f"[{self.id}] already active.")
 
 #################################################
 
@@ -87,19 +87,19 @@ class lidar(Node): # lidar pare
         if self.active:
             self.active = False
             if self.p and self.p.is_alive():
-                print(f"[{self.location}] terminating process PID={self.p.pid}")
+                print(f"[{self.id}] terminating process PID={self.p.pid}")
                 self.p.terminate()
                 self.p.join(timeout=5.0)  # wait for clean shutdown
                 if self.p.is_alive():
                     os.kill(self.p.pid, signal.SIGTERM)
-                    print(f"[{self.location}] WARNING: process did not die cleanly.")
+                    print(f"[{self.id}] WARNING: process did not die cleanly.")
                 else:
-                    print(f"[{self.location}] process terminated.")
+                    print(f"[{self.id}] process terminated.")
             else:
-                print(f"[{self.location}] no running process.")
+                print(f"[{self.id}] no running process.")
             self.p = None  # <-- reset process object for next start()
         else:
-            print(f"[{self.location}] shutdown requested but lidar not active.")
+            print(f"[{self.id}] shutdown requested but lidar not active.")
 
 #################################################
     
@@ -107,7 +107,7 @@ class lidar(Node): # lidar pare
         # disable this input from the costmap
         return_msg = LidarManager.Response()
         if self.active and self.enabled_in_costmap:
-            topic_name = "/lidar_"+self.location+"/lslidar_point_cloud"
+            topic_name = "/lidar_"+self.id+"/pointcloud"
             req = CostmapToggleObservation.Request()
             req.observation_source = topic_name
             req.command = False
@@ -135,7 +135,7 @@ class lidar(Node): # lidar pare
     def enableInCostmap(self):
         return_msg = LidarManager.Response()
         if self.active and not self.enabled_in_costmap:
-            topic_name = "/lidar_"+self.location+"/lslidar_point_cloud"
+            topic_name = "/lidar_"+self.id+"/pointcloud"
             req = CostmapToggleObservation.Request()
             req.observation_source = topic_name
             req.command = True
@@ -158,15 +158,15 @@ class lidar(Node): # lidar pare
 
 class lidar_cx(lidar):
     '''Stores lidar specific information'''
-    def __init__(self, ip="",m_port="",d_port="",frame_id="",location="front",sim=False):
-        print('cx'+location)
-        super().__init__(location,sim,type="cx")
+    def __init__(self, ip="",m_port="",d_port="",frame_id="",id=200,sim=False):
+
+        super().__init__(id, sim, type="cx")
         self.type = 'cx' # Can support any Cx lidar (C16, C32, etc)
         # Save arguments
         self.m_port = str(m_port)
         self.d_port = str(d_port)
         self.frame_id = frame_id
-        self.name_space = 'lidar_'+location
+        self.name_space = f'lidar_{id}'
         self.device_ip = ip
 
         super().run() # run the lidar (create launcher and start if not simulation)
@@ -220,14 +220,14 @@ class lidar_cx(lidar):
 
 class lidar_mid360(lidar):
     '''Stores lidar specific information'''
-    def __init__(self, ip="",frame_id="",location="front",sim=False):
-        print('mid360'+location)
-        super().__init__(location,sim,type="mid360")
+    def __init__(self, ip="",frame_id="",id=200,sim=False):
+
+        super().__init__(id, sim,type="mid360")
         self.type = 'mid360'
         # Save arguments
         # TODO: mid360 port settings
         self.frame_id = frame_id
-        self.name_space = 'lidar_'+location
+        self.name_space = f'lidar_{id}'
         self.ip = ip
 
         super().run() # run the lidar (create launcher and start if not simulation)
@@ -323,40 +323,39 @@ class lidarManagerClass(Node):
 
             for lidar_id, lidar_cfg in params["lidar"].items():
                 lidar_type = lidar_cfg["type"]
-                location = lidar_cfg["location"]
                 mode = lidar_cfg.get("mode", "navigation")
                 ip = lidar_cfg.get("device_ip", None)
-
+                id = ip.split('.')[-1]
                 if mode == "navigation":
-                    frame_id = f"laser_link_{location}_frame"
+                    frame_id = f"lidar_{id}_frame"
                     self.for_navigation = True
                 else:
-                    frame_id = f"laser_link_{location}_static"
+                    frame_id = f"lidar_{id}_link"
 
                 # Instantiate based on type
                 if lidar_type == "mid360":
-                    # Example: lidar_mid360(ip, frame_id, location, sim)
+                    # Example: lidar_mid360(ip, frame_id, id, sim)
                     self.lidars[f"mid360{lidar_id}"] = lidar_mid360(
                         ip,
                         frame_id,
-                        location=location,
+                        id=id,
                         sim=self.sim
                     )
-                    print(f"Started mid360 lidar {lidar_id} at {ip} ({location})")
+                    print(f"Started mid360 lidar {lidar_id} at {ip} ({id})")
 
                 elif lidar_type == "cx":
                     m_port = lidar_cfg.get("msop_port", 2368)
                     d_port = lidar_cfg.get("difop_port", 2369)
-                    # Example: lidar_cx(ip, m_port, d_port, frame_id, location, sim)
+                    # Example: lidar_cx(ip, m_port, d_port, frame_id, id, sim)
                     self.lidars[f"cx{lidar_id}"] = lidar_cx(
                         ip,
                         m_port,
                         d_port,
                         frame_id,
-                        location=location,
+                        id=id,
                         sim=self.sim
                     )
-                    print(f"Started cx lidar {lidar_id} at {ip}:{m_port}/{d_port} ({location})")
+                    print(f"Started cx lidar {lidar_id} at {ip}:{m_port}/{d_port} ({id})")
 
                 else:
                     print(f"Unknown lidar type '{lidar_type}' for ID {lidar_id} — skipping.")
@@ -395,7 +394,7 @@ class lidarManagerClass(Node):
             print(lidar_i.type)
             #################################################################################
 
-            if lidar_i.location == 'front':
+            if lidar_i.device_id == 200:
 
                 frontLidarAvailable=True
                 response.response_code = True  # True when lidar is found
@@ -436,7 +435,7 @@ class lidarManagerClass(Node):
             
             #######################################################################################
             
-            elif lidar_i.location == 'rear':
+            elif lidar_i.device_id == 201:
 
                 rearLidarAvailable=True
                 response.response_code = True  # True when lidar is found
