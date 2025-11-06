@@ -12,38 +12,50 @@ import subprocess
 
 
 def generate_launch_description():
-    driver_dir = os.path.join(get_package_share_directory('lslidar_driver'), 'params', 'lslidar_cx.yaml')
+    driver_dir = os.path.join(get_package_share_directory('antobot_devices_lidar'), 'config', 'lslidar_cx.yaml')
 
-    p = subprocess.Popen("echo $ROS_DISTRO", stdout=subprocess.PIPE, shell=True)
-    driver_node = ""
+    # --- Declare all expected launch arguments ---
+    declare_namespace = DeclareLaunchArgument(
+        'name_space', default_value='cx', description='Namespace of the lidar driver'
+    )
 
-    ros_version = p.communicate()[0]
-    #print(ros_version)
-    if ros_version == b'dashing\n' or ros_version == b'eloquent\n':
-        print("ROS VERSION: dashing/eloquent")
-        driver_node = LifecycleNode(package='lslidar_driver',
-                                    node_namespace='cx',
-                                    node_executable='lslidar_driver_node',
-                                    node_name='lslidar_driver_node',
-                                    output='screen',
-                                    parameters=[driver_dir],
-                                    )
+    declare_frame_id = DeclareLaunchArgument(
+        'frame_id', default_value='livox_frame', description='Frame ID for pointcloud'
+    )
 
-    elif ros_version == b'foxy\n' or ros_version == b'galactic\n' or ros_version == b'humble\n':
-        print("ROS VERSION: foxy/galactic/humble")
-        driver_node = LifecycleNode(package='lslidar_driver',
-                                    namespace='cx',
-                                    executable='lslidar_driver_node',
-                                    name='lslidar_driver_node',
-                                    output='screen',
-                                    emulate_tty=True,
-                                    parameters=[driver_dir],
-                                    )
+    declare_device_ip = DeclareLaunchArgument(
+        'device_ip', default_value='192.168.1.200', description='Device IP of lidar'
+    )
+
+    declare_msop_port = DeclareLaunchArgument(
+        'msop_port', default_value='2368', description='MSOP port'
+    )
+
+    declare_difop_port = DeclareLaunchArgument(
+        'difop_port', default_value='2369', description='DIFOP port'
+    )
+
+    # --- Get LaunchConfiguration values ---
+    name_space = LaunchConfiguration('name_space')
+    frame_id = LaunchConfiguration('frame_id')
+    device_ip = LaunchConfiguration('device_ip')
+    msop_port = LaunchConfiguration('msop_port')
+    difop_port = LaunchConfiguration('difop_port')
+
+    driver_node = LifecycleNode(package='lslidar_driver',
+                                namespace=name_space,
+                                executable='lslidar_driver_node',
+                                name='lslidar_driver_node',
+                                output='screen',
+                                emulate_tty=True,
+                                parameters=[driver_dir,{
+                                    'frame_id': frame_id,
+                                    'device_ip': device_ip,
+                                    'msop_port': msop_port,
+                                    'difop_port': difop_port
+                                }],
+                                )
         
-    else:
-        print("Please configure the ros environment")
-        exit()
-
     return LaunchDescription([
         driver_node
     ])
