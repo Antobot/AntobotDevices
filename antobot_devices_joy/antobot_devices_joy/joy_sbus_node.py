@@ -44,6 +44,8 @@ class JoystickSbus(Node):
         self.flag = 0
         self.stable_value = None
 
+        self.blockOut = 0
+
         self.get_logger().info(f"Joystick SBUS 7C node started on port {self.device_port}")
 
     def translate_buttons(self, num):
@@ -89,12 +91,14 @@ class JoystickSbus(Node):
     def create_joy_msg(self, SbusFrame):
         ch = SbusFrame.sbusChannels
 
-        right_rocker_LR = ch[0] # CH1: 右摇杆左右
-        right_rocker_FB = ch[1] # CH2: 右摇杆上下 只有右遥感前后能设置教练锁死
-        print(f"channel1 {ch[1]}")
-        left_rocker_FB = ch[2] # CH3: 左摇杆前后
-        print(f"channel2 {ch[2]}")
-        left_rocker_LR = ch[3] # CH4: 左摇杆左右
+        right_rocker_LR = ch[0] #  右摇杆左右
+        print(f"channel1 {ch[0]}")
+        right_rocker_FB = ch[2] #  右摇杆上下 只有右遥感前后能设置教练锁死
+        print(f"channel3 {ch[2]}")
+        left_rocker_FB = ch[1] #  左摇杆前后
+        print(f"channel2 {ch[1]}")
+        left_rocker_LR = ch[3] #  左摇杆左右
+        print(f"channel4 {ch[3]}")
         channel5 = ch[4] # CH5/CH6: 三挡开关
         channel6 = ch[5]
         knob1 = ch[6] # CH7/CH8: 两个旋钮（200~1800）
@@ -106,7 +110,7 @@ class JoystickSbus(Node):
         left_LR = self.normalize_axis(left_rocker_LR)
         left_FB = self.normalize_axis(left_rocker_FB)
         right_LR = self.normalize_axis(right_rocker_LR)
-        # right_FB = self.normalize_axis(right_rocker_FB)
+        right_FB = self.normalize_axis(right_rocker_FB)
         knob1_norm = self.normalize_axis(knob1)
         knob2_norm = self.normalize_axis(knob2)
 
@@ -116,14 +120,16 @@ class JoystickSbus(Node):
             self.buttons = [0] * 11
             return
 
-        right_FB = right_rocker_FB
-        if right_FB >= 1750:
-            right_FB = 1.0
-        elif right_FB < 250:
-            right_FB = -1.0
-        else:
-            right_FB = 0.0
+        # right_FB = right_rocker_FB
+        # if right_FB >= 1750:
+        #     right_FB = 1.0
+        # elif right_FB < 250:
+        #     right_FB = -1.0
+        # else:
+        #     right_FB = 0.0
 
+        if(right_rocker_FB < 50):
+            self.blockOut = 1
 
 
         ch5_val = self.translate_buttons(channel5)
@@ -135,13 +141,15 @@ class JoystickSbus(Node):
         # task
         if self.buttons_reset:
             # Manual / Standalone for UV treatment / Standalone for Scouting
-            if self.flag == 1:
+            if self.flag == 1  :
                 self.LB = 1
                 self.RB = 1
                 if self.debug_:
                     print('Manual')
                 self.buttons_reset = True
-
+            elif self.blockOut == 1:
+                self.LB = 0
+                self.RB = 0
             # Indoor demo - temporary code
             elif ch5_val == 2 and ch6_val == 2 and right_FB == 0.0:
                 self.channel5_pre = ch5_val
@@ -232,6 +240,8 @@ class JoystickSbus(Node):
         # 数据变化时发布
         if (self.axes != self.axes_pre or self.buttons != self.buttons_pre
                 or abs(self.axes[1]) > 0.9 or abs(self.axes[3]) > 0.9):
+            print(f'axes: {self.axes}')
+            print(f'buttons: {self.buttons}')
             self.joy_msg.axes = self.axes
             self.joy_msg.buttons = self.buttons
             self.joy_msg.header.stamp = self.get_clock().now().to_msg()
