@@ -259,7 +259,7 @@ class lidar_mid360(lidar):
             launch_arguments={
                 'name_space': self.name_space,
                 'frame_id': self.frame_id,
-                'id': self.id
+                'id': str(self.device_id)
             }.items()
         )
 

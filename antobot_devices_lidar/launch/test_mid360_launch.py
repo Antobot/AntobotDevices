@@ -16,7 +16,7 @@ cmdline_bd_code = 'livox0000000001'
 
 cur_path = os.path.split(os.path.realpath(__file__))[0] + '/'
 cur_config_path = cur_path + '../config'
-# user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
+user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
 ################### user configure parameters for ros2 end #####################
 
 
@@ -30,16 +30,10 @@ def generate_launch_description():
 
     declare_id = DeclareLaunchArgument(
         name='id',
-        default_value='201',
+        default_value='200',
         description='The sensor id used to select the config file (e.g., 1 → MID360_config_200.json)'
     )
 
-    id_param = LaunchConfiguration('id')
-
-    user_config_path = PathJoinSubstitution([
-        cur_config_path,
-        PythonExpression(["'MID360_config_' + str(", id_param, ") + '.json'"])
-    ])
 
     frame_id_param = LaunchConfiguration('frame_id')
 
@@ -66,7 +60,6 @@ def generate_launch_description():
 
 
     return LaunchDescription([
-        declare_id,
         declare_frame_id,
         livox_driver
     ])
