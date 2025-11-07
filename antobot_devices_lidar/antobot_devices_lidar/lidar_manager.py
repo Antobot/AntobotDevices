@@ -258,7 +258,8 @@ class lidar_mid360(lidar):
             PythonLaunchDescriptionSource(self.launch_file_path),
             launch_arguments={
                 'name_space': self.name_space,
-                'frame_id': self.frame_id
+                'frame_id': self.frame_id,
+                'id': self.id
             }.items()
         )
 

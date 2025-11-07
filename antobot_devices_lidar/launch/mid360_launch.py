@@ -1,8 +1,7 @@
 import os
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.substitutions import LaunchConfiguration
 from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, TextSubstitution, PathJoinSubstitution
 from launch_ros.actions import Node
 
 ################### user configure parameters for ros2 start ###################
@@ -16,7 +15,7 @@ cmdline_bd_code = 'livox0000000001'
 
 cur_path = os.path.split(os.path.realpath(__file__))[0] + '/'
 cur_config_path = cur_path + '../config'
-user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
+# user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
 ################### user configure parameters for ros2 end #####################
 
 
@@ -27,6 +26,21 @@ def generate_launch_description():
         default_value='livox_frame',
         description='The frame_id for the lidar point cloud'
     )
+
+    declare_id = DeclareLaunchArgument(
+        name='id',
+        default_value='200',
+        description='The sensor id used to select the config file (e.g., 1 → MID360_config_200.json)'
+    )
+
+    id_param = LaunchConfiguration('id')
+
+    user_config_path = PathJoinSubstitution([
+        cur_config_path,
+        TextSubstitution(text='MID360_config_'),
+        id_param,
+        TextSubstitution(text='.json')
+    ])
 
     frame_id_param = LaunchConfiguration('frame_id')
 
@@ -39,7 +53,8 @@ def generate_launch_description():
         {"frame_id": frame_id_param},
         {"lvx_file_path": lvx_file_path},
         {"user_config_path": user_config_path},
-        {"cmdline_input_bd_code": cmdline_bd_code}
+        {"cmdline_input_bd_code": cmdline_bd_code},
+
     ]
 
     livox_driver = Node(
@@ -53,5 +68,6 @@ def generate_launch_description():
 
     return LaunchDescription([
         declare_frame_id,
-        livox_driver
+        livox_driver,
+        declare_id,
     ])
