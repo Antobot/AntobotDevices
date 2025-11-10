@@ -255,7 +255,7 @@ class lidar_mid360(lidar):
         if(self.num == 1):
             self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
         elif(self.num == 2):
-            self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',"multi"+self.type+"_launch_2.py")
+            self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',"multi_"+self.type+"_launch.py")
         included_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(self.launch_file_path),
             launch_arguments={
@@ -360,6 +360,7 @@ class lidarManagerClass(Node):
                     self.lidars[f"mid360{lidar_id}"] = lidar_mid360(
                         ip,
                         frame_id,
+                        mid360_count,
                         id=int(id),
                         sim=self.sim
                     )
