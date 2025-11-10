@@ -233,7 +233,7 @@ class lidar_cx(lidar):
 
 class lidar_mid360(lidar):
     '''Stores lidar specific information'''
-    def __init__(self, ip="",frame_id="",id=200,sim=False):
+    def __init__(self, ip="",frame_id="",num=1,id=200,sim=False):
 
         super().__init__(id, sim,type="mid360")
         self.type = 'mid360'
@@ -243,6 +243,7 @@ class lidar_mid360(lidar):
         self.name_space = f'lidar_{id}'
         self.ip = ip
         self.device_id = id
+        self.num = num
 
 
         super().run() # run the lidar (create launcher and start if not simulation)
@@ -251,9 +252,10 @@ class lidar_mid360(lidar):
     def createLauncher(self):
         '''Starts mid360 launch file'''
 
-
-        self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
-
+        if(self.num == 1):
+            self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
+        elif(self.num == 2):
+            self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',"multi"+self.type+"_launch_2.py")
         included_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(self.launch_file_path),
             launch_arguments={
@@ -337,6 +339,9 @@ class lidarManagerClass(Node):
                 self.sim = True
 
             self.lidars = {}
+
+            mid360_count = sum(1 for cfg in params["lidar"].values() if cfg["type"] == "mid360")
+            print("SW2320: Lidar Manager: Found {} mid360 lidars".format(mid360_count))
 
             for lidar_id, lidar_cfg in params["lidar"].items():
                 lidar_type = lidar_cfg["type"]
