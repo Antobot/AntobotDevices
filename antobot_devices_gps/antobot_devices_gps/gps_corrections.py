@@ -26,7 +26,8 @@ import socket
 import base64
 import threading
 import serial
-from std_msgs.msg import  String
+from std_msgs.msg import String
+from mavros_msgs.msg import RTCM
 from antobot_devices_msgs.msg import GpsQual
 
 
@@ -121,7 +122,8 @@ class gpsCorrections(Node):
 ###added for check
 
  # Setting up the MQTT Client
-        if self.corr_type != "ntrip":
+        if self.corr_type != "ntrip" and self.corr_type != "mqtt":
+
             if self.corr_type == "ppp":
                 self.client = mqtt.Client(client_id=self.ppp_client_id, userdata=self.userdata)
                 self.certfile=os.path.join(packagePath,"config/")+f'device-{self.ppp_client_id}-pp-cert.crt'
@@ -130,7 +132,7 @@ class gpsCorrections(Node):
             elif self.corr_type == "mqtt":
                 self.client = mqtt.Client(self.mqtt_client_id)
                 self.client.username_pw_set(mqtt_username, mqtt_password)
-             
+
             self.client.on_connect = self.on_connect
             self.client.on_message = self.on_message
 
@@ -138,8 +140,10 @@ class gpsCorrections(Node):
 
             self.last_receive_time = time.time()
             self.timer = self.create_timer(30.0, self.check_RTCM_timeout) 
-            
 
+        # Adding the subscribles:
+        ## RTCM
+        self.rtcm_sub = self.create_subscription(RTCM, '/antobot_gps/rtcm', self.rtcm_callback, 10)
 
     # Attempts to connect to the broker
     def connect_broker(self):
@@ -182,6 +186,17 @@ class gpsCorrections(Node):
             dev_port = "/dev/ttyTHS1"
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
+
+    def rtcm_callback(self, data):
+        try:
+            data = self.serial_port.write(data.data)
+            self.last_receive_time = time.time()
+        except Exception as e:
+            self.get_logger().error(f"SN4500: Write the corrections failed. ({e})")
+            dev_port = "/dev/ttyTHS1"
+            baud = 460800
+            self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
+
 
 
     def check_RTCM_timeout(self):
