@@ -22,11 +22,11 @@ user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config.json')
 
 def generate_launch_description():
 
-    declare_frame_id = DeclareLaunchArgument(
-        name='frame_id',
-        default_value='livox_frame',
-        description='The frame_id for the lidar point cloud'
-    )
+    # declare_frame_id = DeclareLaunchArgument(
+    #     name='frame_id',
+    #     default_value='livox_frame',
+    #     description='The frame_id for the lidar point cloud'
+    # )
 
     declare_id = DeclareLaunchArgument(
         name='id',
