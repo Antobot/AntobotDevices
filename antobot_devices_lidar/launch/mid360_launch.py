@@ -41,7 +41,7 @@ def generate_launch_description():
     #     PythonExpression(["'MID360_config_' + str(", id_param, ") + '.json'"])
     # ])
 
-    frame_id_param = LaunchConfiguration('frame_id')
+    # frame_id_param = LaunchConfiguration('frame_id')
 
     livox_ros2_params = [
         {"xfer_format": xfer_format},
@@ -49,7 +49,7 @@ def generate_launch_description():
         {"data_src": data_src},
         {"publish_freq": publish_freq},
         {"output_data_type": output_type},
-        {"frame_id": frame_id_param},
+        # {"frame_id": frame_id_param},
         {"lvx_file_path": lvx_file_path},
         {"user_config_path": user_config_path},
         {"cmdline_input_bd_code": cmdline_bd_code},
@@ -67,6 +67,6 @@ def generate_launch_description():
 
     return LaunchDescription([
         declare_id,
-        declare_frame_id,
+        # declare_frame_id,
         livox_driver
     ])
