@@ -184,7 +184,7 @@ class gpsCorrections(Node):
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
 
 
-    def check_RTCM_timeout(self, event):
+    def check_RTCM_timeout(self):
         if time.time() - self.last_receive_time > 30: # 30s
             self.get_logger().error("SN4500: The RTCM message update timeout ({} > 30s).".format(time.time() - self.last_receive_time))
             #self.last_receive_time = time.time()
@@ -214,13 +214,15 @@ class gpsCorrections(Node):
     def stream_corrections(self,event=None):
         try:
             print("[INFO] Streaming corrections...")
+            self.sock.settimeout(3)
             data = self.sock.recv(1024)
             if not data:
                 print("[WARN] NTRIP server closed connection")
                 self.connect_ntrip()
-            print(data)
-            self.serial_port.write(data)
-            print(self.serial_port)
+            else:
+                print(data)
+                self.serial_port.write(data)
+                print(self.serial_port)
         except:
             print("[ERROR] NTRIP server break, reconnecting")
             self.connect_ntrip()

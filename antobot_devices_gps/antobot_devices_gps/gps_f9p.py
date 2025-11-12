@@ -183,7 +183,7 @@ class F9P_GPS(Node):
                 if self.gps_status != 'Warning':
                     self.get_logger().warn("SN4010: GPS Fix Status: Float Mode")
                     self.gps_status = 'Warning'
-        else:
+        elif self.geo.gps_qual < 2:
             self.fix_status = 0 #no fix
             if self.gps_status != 'Critical':
                 self.get_logger().error("SN4010: GPS Fix Status: Critical")
@@ -285,7 +285,7 @@ class F9P_GPS(Node):
             rostimestamp_tosec = rostimestamp.sec + rostimestamp.nanosec / 1e9  # Convert to seconds
             self.gps_time_i = dt0.timestamp() - rostimestamp_tosec
             current_time_to_sec=current_time.sec +current_time.nanosec/1e9
-            self.gps_time_offset = current_time_to_sec - dt0.timestamp()-3600      # Calculating offset between current time and GPS timestamp
+            self.gps_time_offset = current_time_to_sec - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
         
             # # Assigning timestamp part of NavSatFix message
             sec=int(dt0.timestamp())

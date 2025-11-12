@@ -16,6 +16,7 @@ import os, signal
 import sys
 import yaml
 import multiprocessing
+import asyncio
 
 import rclpy
 from rclpy.node import Node
@@ -34,14 +35,14 @@ from antobot_devices_msgs.srv import CostmapToggleObservation
 ###################################################################################################################################################
 class lidar(Node): # lidar pare
     '''Stores lidar specific information'''
-    def __init__(self,location="front",sim=False, type=""):
-        print(location+type)
-        super().__init__(location+type) # Initialise Node class first
+    def __init__(self,id=200,sim=False, type=""):
+        
+        super().__init__(f"{type}_{id}_object", namespace='internal') # Initialise Node class first
         # Save arguments
         self.active = False # Lidar turn on/off 
         self.enabled_in_costmap = True # default True
         self.launch = None
-        self.location = location
+        self.id = id
         self.sim = sim
         self.p = None
         
@@ -74,10 +75,15 @@ class lidar(Node): # lidar pare
             self.active = True
             # If process was already used, recreate it
             if self.p is None or not self.p.is_alive():
-                self.p = multiprocessing.Process(target=self.createLauncher, daemon=True)
+                def launcher_wrapper():
+                    # Create a new process group for this subprocess
+                    os.setpgrp()
+                    self.createLauncher()
+
+                self.p = multiprocessing.Process(target=launcher_wrapper)
             self.p.start()
         else:
-            print(f"[{self.location}] already active.")
+            print(f"[{self.id}] already active.")
 
 #################################################
 
@@ -87,19 +93,24 @@ class lidar(Node): # lidar pare
         if self.active:
             self.active = False
             if self.p and self.p.is_alive():
-                print(f"[{self.location}] terminating process PID={self.p.pid}")
-                self.p.terminate()
-                self.p.join(timeout=5.0)  # wait for clean shutdown
+                print(f"[{self.id}] terminating process PID={self.p.pid}")
+                try:
+                    # Send SIGTERM to the whole process group
+                    os.killpg(os.getpgid(self.p.pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+
+                self.p.join(timeout=5.0)
                 if self.p.is_alive():
-                    os.kill(self.p.pid, signal.SIGTERM)
-                    print(f"[{self.location}] WARNING: process did not die cleanly.")
+                    print(f"[{self.id}] forcing kill...")
+                    os.killpg(os.getpgid(self.p.pid), signal.SIGKILL)
                 else:
-                    print(f"[{self.location}] process terminated.")
+                    print(f"[{self.id}] process group terminated.")
             else:
-                print(f"[{self.location}] no running process.")
-            self.p = None  # <-- reset process object for next start()
+                print(f"[{self.id}] no running process.")
+            self.p = None
         else:
-            print(f"[{self.location}] shutdown requested but lidar not active.")
+            print(f"[{self.id}] shutdown requested but lidar not active.")
 
 #################################################
     
@@ -107,7 +118,7 @@ class lidar(Node): # lidar pare
         # disable this input from the costmap
         return_msg = LidarManager.Response()
         if self.active and self.enabled_in_costmap:
-            topic_name = "/lidar_"+self.location+"/lslidar_point_cloud"
+            topic_name = "/lidar_"+self.id+"/pointcloud"
             req = CostmapToggleObservation.Request()
             req.observation_source = topic_name
             req.command = False
@@ -135,7 +146,7 @@ class lidar(Node): # lidar pare
     def enableInCostmap(self):
         return_msg = LidarManager.Response()
         if self.active and not self.enabled_in_costmap:
-            topic_name = "/lidar_"+self.location+"/lslidar_point_cloud"
+            topic_name = "/lidar_"+self.id+"/pointcloud"
             req = CostmapToggleObservation.Request()
             req.observation_source = topic_name
             req.command = True
@@ -158,16 +169,17 @@ class lidar(Node): # lidar pare
 
 class lidar_cx(lidar):
     '''Stores lidar specific information'''
-    def __init__(self, ip="",m_port="",d_port="",frame_id="",location="front",sim=False):
-        print('cx'+location)
-        super().__init__(location,sim,type="cx")
+    def __init__(self, ip="",m_port="",d_port="",frame_id="",id=200,sim=False):
+
+        super().__init__(id, sim, type="cx")
         self.type = 'cx' # Can support any Cx lidar (C16, C32, etc)
         # Save arguments
         self.m_port = str(m_port)
         self.d_port = str(d_port)
         self.frame_id = frame_id
-        self.name_space = 'lidar_'+location
+        self.name_space = f'lidar_{id}'
         self.device_ip = ip
+        self.device_id = id
 
         super().run() # run the lidar (create launcher and start if not simulation)
 #################################################
@@ -196,12 +208,13 @@ class lidar_cx(lidar):
 
         # === Handle termination signals gracefully ===
         def shutdown_handler(signum, frame):
-            print(f"[{self.type}] Received signal {signum}, shutting down launch...")
-            # Emit a shutdown event to terminate all launched nodes cleanly
-            #ls.emit_event_sync(Shutdown(reason="Manager requested shutdown"))
-            # Allow ls.run() to return
-            ls.shutdown()
-            print(f"[{self.type}] LaunchService shutdown initiated.")
+            print(f"[{self.type}] Immediate kill requested (signal {signum})")
+            try:
+                # kill this whole process group: launch_ros + lidar_driver_node
+                os.killpg(os.getpgid(os.getpid()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            sys.exit(0)
 
         # Register signal handlers
         signal.signal(signal.SIGINT, shutdown_handler)
@@ -220,15 +233,18 @@ class lidar_cx(lidar):
 
 class lidar_mid360(lidar):
     '''Stores lidar specific information'''
-    def __init__(self, ip="",frame_id="",location="front",sim=False):
-        print('mid360'+location)
-        super().__init__(location,sim,type="mid360")
+    def __init__(self, ip="",frame_id="",num=1,id=200,sim=False):
+
+        super().__init__(id, sim,type="mid360")
         self.type = 'mid360'
         # Save arguments
         # TODO: mid360 port settings
         self.frame_id = frame_id
-        self.name_space = 'lidar_'+location
+        self.name_space = f'lidar_{id}'
         self.ip = ip
+        self.device_id = id
+        self.num = num
+
 
         super().run() # run the lidar (create launcher and start if not simulation)
 #################################################
@@ -236,14 +252,16 @@ class lidar_mid360(lidar):
     def createLauncher(self):
         '''Starts mid360 launch file'''
 
-
-        self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
-
+        if(self.num == 1):
+            self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
+        elif(self.num == 2):
+            self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',"multi_"+self.type+"_launch.py")
         included_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(self.launch_file_path),
             launch_arguments={
                 'name_space': self.name_space,
-                'frame_id': self.frame_id
+                'frame_id': self.frame_id,
+                'id': str(self.device_id)
             }.items()
         )
 
@@ -256,12 +274,13 @@ class lidar_mid360(lidar):
 
         # === Handle termination signals gracefully ===
         def shutdown_handler(signum, frame):
-            print(f"[{self.type}] Received signal {signum}, shutting down launch...")
-            # Emit a shutdown event to terminate all launched nodes cleanly
-            #ls.emit_event_sync(Shutdown(reason="Manager requested shutdown"))
-            # Allow ls.run() to return
-            ls.shutdown()
-            print(f"[{self.type}] LaunchService shutdown initiated.")
+            print(f"[{self.type}] Immediate kill requested (signal {signum})")
+            try:
+                # kill this whole process group: launch_ros + lidar_driver_node
+                os.killpg(os.getpgid(os.getpid()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            sys.exit(0)
 
         # Register signal handlers
         signal.signal(signal.SIGINT, shutdown_handler)
@@ -321,42 +340,45 @@ class lidarManagerClass(Node):
 
             self.lidars = {}
 
+            mid360_count = sum(1 for cfg in params["lidar"].values() if cfg["type"] == "mid360")
+            print("SW2320: Lidar Manager: Found {} mid360 lidars".format(mid360_count))
+
             for lidar_id, lidar_cfg in params["lidar"].items():
                 lidar_type = lidar_cfg["type"]
-                location = lidar_cfg["location"]
                 mode = lidar_cfg.get("mode", "navigation")
                 ip = lidar_cfg.get("device_ip", None)
-
+                id = ip.split('.')[-1]
                 if mode == "navigation":
-                    frame_id = f"laser_link_{location}"
+                    frame_id = f"lidar_{id}_frame"
                     self.for_navigation = True
                 else:
-                    frame_id = f"laser_link_{location}_static"
+                    frame_id = f"lidar_{id}_link"
 
                 # Instantiate based on type
                 if lidar_type == "mid360":
-                    # Example: lidar_mid360(ip, frame_id, location, sim)
+                    # Example: lidar_mid360(ip, frame_id, id, sim)
                     self.lidars[f"mid360{lidar_id}"] = lidar_mid360(
                         ip,
                         frame_id,
-                        location=location,
+                        mid360_count,
+                        id=int(id),
                         sim=self.sim
                     )
-                    print(f"Started mid360 lidar {lidar_id} at {ip} ({location})")
+                    print(f"Started mid360 lidar {lidar_id} at {ip} ({id})")
 
                 elif lidar_type == "cx":
                     m_port = lidar_cfg.get("msop_port", 2368)
                     d_port = lidar_cfg.get("difop_port", 2369)
-                    # Example: lidar_cx(ip, m_port, d_port, frame_id, location, sim)
+                    # Example: lidar_cx(ip, m_port, d_port, frame_id, id, sim)
                     self.lidars[f"cx{lidar_id}"] = lidar_cx(
                         ip,
                         m_port,
                         d_port,
                         frame_id,
-                        location=location,
+                        id=int(id),
                         sim=self.sim
                     )
-                    print(f"Started cx lidar {lidar_id} at {ip}:{m_port}/{d_port} ({location})")
+                    print(f"Started cx lidar {lidar_id} at {ip}:{m_port}/{d_port} ({id})")
 
                 else:
                     print(f"Unknown lidar type '{lidar_type}' for ID {lidar_id} — skipping.")
@@ -365,12 +387,18 @@ class lidarManagerClass(Node):
             self.get_logger().error(f"SW2320: Lidar Manager: Failed to read robot config file. Error: {e}")
 
 
-
+    def terminate(self):
+        self.get_logger().info("SW2320: Lidar Manager: Terminating lidar")
+        for lidar_i in self.lidars.values():
+            print(lidar_i.type)
+            #################################################################################
+            if lidar_i.active:
+                lidar_i.shutdown()
 
     ############################################################################################
     ## RosService callback - This is the main method of interaction (also works with simulation)
     ############################################################################################
-
+    
     def _serviceCallbackLidarMgr(self, request, response):
        
         ## ROS service input:
@@ -392,10 +420,10 @@ class lidarManagerClass(Node):
         print(self.lidars.values())
 
         for lidar_i in self.lidars.values():
-            print(lidar_i.type)
+            print(lidar_i.type, lidar_i.device_id)
             #################################################################################
 
-            if lidar_i.location == 'front':
+            if lidar_i.device_id == 200:
 
                 frontLidarAvailable=True
                 response.response_code = True  # True when lidar is found
@@ -436,7 +464,7 @@ class lidarManagerClass(Node):
             
             #######################################################################################
             
-            elif lidar_i.location == 'rear':
+            elif lidar_i.device_id == 201:
 
                 rearLidarAvailable=True
                 response.response_code = True  # True when lidar is found
@@ -500,6 +528,7 @@ def main(args=None):
         lm = lidarManagerClass()
         rclpy.spin(lm)
     except KeyboardInterrupt:
+        lm.terminate()
         sys.exit(1)
     except ExternalShutdownException:
         sys.exit(1)
