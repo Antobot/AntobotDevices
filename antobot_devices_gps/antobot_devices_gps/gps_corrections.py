@@ -197,8 +197,6 @@ class gpsCorrections(Node):
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
 
-
-
     def check_RTCM_timeout(self):
         if time.time() - self.last_receive_time > 30: # 30s
             self.get_logger().error("SN4500: The RTCM message update timeout ({} > 30s).".format(time.time() - self.last_receive_time))
@@ -226,6 +224,7 @@ class gpsCorrections(Node):
             print("[INFO] Connected to NTRIP server") 
         except:
             print("[ERROR] can't connect to NTRIP server")
+    
     def stream_corrections(self,event=None):
         try:
             print("[INFO] Streaming corrections...")
@@ -318,9 +317,11 @@ def main(args=None):
             gps_corr.connect_ntrip()
             gps_corr.create_timer(5.0, gps_corr.send_gga)
             gps_corr.create_timer(0.1, gps_corr.stream_corrections)
-        elif gps_corr.corr_type in ["ppp", "mqtt"]:
+        elif gps_corr.corr_type == "ppp":
             gps_corr.client.loop_start()
             gps_corr.create_timer(1.0, lambda: None)
+        elif gps_corr.corr_type == "mqtt":
+            pass
         else:
             print(f"[WARN] Unknown correction type: {gps_corr.corr_type}")
 
@@ -334,9 +335,6 @@ def main(args=None):
         if gps_corr.corr_type == "ntrip":
             gps_corr.close()
         rclpy.shutdown()
-
-
-
 
 
 if __name__ == '__main__':
