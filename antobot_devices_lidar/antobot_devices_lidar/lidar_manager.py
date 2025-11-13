@@ -77,7 +77,7 @@ class lidar(Node): # lidar pare
             if self.p is None or not self.p.is_alive():
                 def launcher_wrapper():
                     # Create a new process group for this subprocess
-                    os.setpgrp()
+                    #os.setpgrp()
                     self.createLauncher()
 
                 self.p = multiprocessing.Process(target=launcher_wrapper)
