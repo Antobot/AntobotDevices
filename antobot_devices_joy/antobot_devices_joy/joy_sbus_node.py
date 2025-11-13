@@ -8,7 +8,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
 
-from .sbus_received import SBUSReceiver
+from sbus_received import SBUSReceiver
 class JoystickSbus(Node):
     def __init__(self):
         super().__init__('joy_sbus_node')
@@ -114,6 +114,16 @@ class JoystickSbus(Node):
         knob1_norm = self.normalize_axis(knob1)
         knob2_norm = self.normalize_axis(knob2)
 
+        if knob1_norm >= 0:
+            knob1_norm = 1
+        elif knob1_norm < 0:
+            knob1_norm = -1
+
+        if knob2_norm >= 0:
+            knob2_norm = 1
+        elif knob2_norm < 0:
+            knob2_norm = -1
+
         if right_rocker_FB < 50:
             # rocker set ->0
             self.axes = [0.0] * 8
@@ -203,9 +213,7 @@ class JoystickSbus(Node):
                     print('Abort Job')
 
             # UV Switch
-            elif ch5_val == 2 and ch6_val == 1 and right_FB == -1.0:
-                self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
+            elif knob1_norm > 0.0 and knob2_norm > 0.0:
 
                 self.X = 1
                 self.BACK = 1
@@ -228,11 +236,14 @@ class JoystickSbus(Node):
         #     self.RT, knob1_norm, knob2_norm, 0.0
         # ]
         # 映射到 Joy 消息,axes共8通道, 无旋钮消息
+        print(f'knob1_norm: {knob1_norm}')
+        print(f'knob2_norm: {knob2_norm}')
+
         self.axes = [
             0.0, left_FB, 0.0, right_LR, right_FB, self.RT, 0.0, left_LR
         ]
         self.buttons = [self.A, self.B, self.X, self.Y,
-                        self.LB, self.RB, self.BACK, 0, 0, 0, self.flag]
+                        self.LB, self.RB, self.BACK, 0, knob1_norm, knob2_norm, self.flag]
 
         print(f'axes: {self.axes}')
         print(f'buttons: {self.buttons}')
