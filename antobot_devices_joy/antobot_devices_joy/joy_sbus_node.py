@@ -8,7 +8,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
 
-from sbus_received import SBUSReceiver
+from .sbus_received import SBUSReceiver
 class JoystickSbus(Node):
     def __init__(self):
         super().__init__('joy_sbus_node')
