@@ -194,7 +194,26 @@ class F9P_config:
         packet = self.calculate_checksum(packet, length)
         
         return packet
+
+    def get_uart2_baudrate(self):
         
+        # prepare packet
+        length = 8
+        packet = self.prepare_cfg_packet(length)
+        #keyid
+        packet[10] = 0x01
+        packet[11] = 0x00
+        packet[12] = 0x53
+        packet[13] = 0x40
+        #value
+        packet[14] = 0x00
+        packet[15] = 0x08
+        packet[16] = 0x07
+        packet[17] = 0x00
+
+        packet = self.calculate_checksum(packet, length)
+        
+        return packet        
     def cfg_valset_NAVSPG_INFIL_MINELEV(self):
         
         # prepare packet
@@ -416,15 +435,63 @@ class F9P_config:
                 
             print("GPS Config: UART2 RTCM" + msg + " Message " + enable_text + "\n")
         
+    def set_rtcm_uart2_messages(self, type = 'uart2'):
+        all_messages = ['1074','1084','1094','1124','1230','4072']
+        
+        key_id_ = 0x02
+        for msg in all_messages:
+            if type == 'uart2':
+                if msg == '1074':
+                    key_id = 0xce
+                    key_id_ = 0x02
+                elif msg == '1084':
+                    key_id = 0xd3
+                    key_id_ = 0x02
+                elif msg == '1094':
+                    key_id = 0x1a
+                    key_id_ = 0x03
+                elif msg == '1124':
+                    key_id = 0xd8
+                    key_id_ = 0x02
+                elif msg == '1230':
+                    key_id = 0x05
+                    key_id_ = 0x03
+                elif msg == '4072':
+                    key_id = 0x00
+                    key_id_ = 0x03
+            elif type == 'usb':
+                if msg == '1074':
+                    key_id = 0x61
+                elif msg == '1084':
+                    key_id = 0x66
+                elif msg == '1094':
+                    key_id = 0x6b
+                elif msg == '1124':
+                    key_id = 0x70
+                elif msg == '1230':
+                    key_id = 0x06
+                elif msg == '4072':
+                    key_id = 0x01
 
-    def config_rtcm_msg(self, key_id, enable):
+            enable = True
+
+            packet = self.config_rtcm_msg(key_id, key_id_, enable)
+            self.write_new(packet)
+
+            enable_text = "Disabled"
+            if enable:
+                enable_text = "Enabled"
+                
+            print("GPS Config: UART2 RTCM" + msg + " Message " + enable_text + "\n")
+            
+    def config_rtcm_msg(self, key_id_1, key_id_2, enable):
         # prepare packet
         length = 18
         packet = self.prepare_cfg_packet(length)
 
         #keyid
-        packet[10] = key_id
-        packet[11] = 0x03
+        packet[10] = key_id_1
+        packet[11] = key_id_2
         packet[12] = 0x91
         packet[13] = 0x20
         #value
@@ -516,17 +583,22 @@ class F9P_config:
             elif msg == 'GNS':
                 key_id = 0xb9
             elif msg == 'RTCM_1074': # this is for UART2
-                key_id = 0x60
+                # key_id = 0x60 # MS4
+                key_id = 0xce
             elif msg == 'RTCM_1084':
-                key_id = 0x65
+                #key_id = 0x65
+                key_id = 0xd3
             elif msg == 'RTCM_1094':
-                key_id = 0x6a
+                #key_id = 0x6a
+                key_id = 0x1a
             elif msg == 'RTCM_1124':
-                key_id = 0x6f
+                #key_id = 0x6f
+                key_id = 0xd8
             elif msg == 'RTCM_1230':
                 key_id = 0x05
             elif msg == 'RTCM_4072':
                 key_id = 0x00
+            return key_id
         elif self.config_mode[0] == "2":
             pass
         elif self.config_mode[0] == "3":
@@ -678,6 +750,20 @@ class F9P_config:
 
         return packet
 
+    def get_fre(self):
+        length = 8
+        packet = bytearray(length)
+        # prepare packet
+        packet[0] = 0xb5
+        packet[1] = 0x62
+        packet[2] = 0x06
+        packet[3] = 0x00
+        packet[4] = 0
+        packet[5] = 0
+        packet = self.calculate_checksum(packet, length)
+
+        return packet
+        
 
     def config_moving_base(self):
         # step1: get version 
@@ -722,27 +808,11 @@ class F9P_config:
         # step5: disable NMEA
         self.set_gx_messages()
 
-    def disable_NMEA_message(self):
-        length = 18
-        packet = self.prepare_cfg_packet(length)
-
-        #key id
-        packet[10] = 0x02
-        packet[11] = 0x00
-        packet[12] = 0x78
-        packet[13] = 0x10
-        #value
-        packet[14] = 0x00 # 0:disable, 1:enable
-        packet[15] = 0x00
-        packet = self.calculate_checksum(packet, length)
-
-        return packet
-
-
     def set_out_message(self):
-        all_messages = ['GSV', 'RMC', 'GSA', 'VTG', 'GLL', 'GST', 'GNS', 'GGA', 'RELPOSNED', 
+        all_messages = ['GSV', 'RMC', 'GSA', 'VTG', 'GLL', 'GST', 'GNS', 
                         'RTCM_1074','RTCM_1084','RTCM_1094','RTCM_1124','RTCM_1230','RTCM_4072']
-
+        #all_messages = ['GSV', 'RMC', 'GSA', 'VTG', 'GLL', 'GST', 'GNS', 'GGA', 'RELPOSNED', 
+        #                'RTCM_1074','RTCM_1084','RTCM_1094','RTCM_1124','RTCM_1230','RTCM_4072']
         print("    Out message setting: ")  
         for msg in all_messages:
 
@@ -755,10 +825,10 @@ class F9P_config:
 
             packet = self.config_out_message(key_id_1, key_id_2, enable)
 
-            if self.config_mode[0] in ["1", "2", "5"]:
+            if self.config_mode[0] in ["2", "5"]:
                 self.port.write(packet)
                 received_bytes = self.receive_feedback_from_F9P()
-            else:
+            elif self.config_mode[0] == '1':
                 self.port.writebytes(packet)
                 received_bytes = self.receive_feedback_from_F9P()
 
@@ -769,10 +839,23 @@ class F9P_config:
                 enable_text = "Enabled"
             print(f"        Set {msg} Message {enable_text}")        
 
+    def get_baud(self):
+        length = 8
+        packet = bytearray(length)
+        packet[0] = 0xB5
+        packet[1] = 0x62
+        packet[2] = 0x06  # CFG
+        packet[3] = 0x00  # PRT
+        packet[4] = 0x00  # length low
+        packet[5] = 0x00  # length high
+        packet = self.calculate_checksum(packet, length)
+
+        return packet
+        
 
     def config(self):
         print('Ublox F9P:')
-
+        
         # step1: reset
         packet = self.cfg_reset()
         self.write_new(packet)
@@ -818,23 +901,50 @@ class F9P_config:
         # step4: set out message
         if config_mode[1] == "3":
             self.desired_messages = ['RELPOSNED']
-        elif config_mode[1] in ["2", "4"]:
-            self.desired_messages.extend(['RTCM_1074','RTCM_1084','RTCM_1094','RTCM_1124','RTCM_1230','RTCM_4072'])
+        #elif config_mode[1] in ["2", "4"]:
+        #    self.desired_messages.extend(['RTCM_1074','RTCM_1084','RTCM_1094','RTCM_1124','RTCM_1230','RTCM_4072'])
 
         self.set_out_message()
 
-        # # step5: set 
-        # # set uart_2 baud 460800 
-        # # TODO 
-        # packet = self.cfg_valget_uart2_baudrate()
-        # self.write_new(packet)
-        # received_bytes = self.receive_feedback_from_F9P()
-        # print('set uart2 baud 460800')
-
-        # disable NMEA
-        packet = self.disable_NMEA_message()
+        # step5: set 
+        # set uart_2 baud 460800 
+        # TODO 
+        packet = self.cfg_valget_uart2_baudrate()
         self.write_new(packet)
+        print('set uart2 baud 460800')
         received_bytes = self.receive_feedback_from_F9P()
+        
+        self.set_rtcm_uart2_messages()
+        """
+        packet = self.get_baud()
+        self.write_new(packet)
+        print(packet)
+        resp_bytes = self.receive_feedback_from_F9P()
+        # print(received_bytes)
+        uart_info = {}
+        i = 0
+        while i < len(resp_bytes) - 8:
+            if resp_bytes[i] == 0xB5 and resp_bytes[i+1] == 0x62:
+                cls_id = resp_bytes[i+2]
+                msg_id = resp_bytes[i+3]
+                length = resp_bytes[i+4] + (resp_bytes[i+5] << 8)
+                if cls_id == 0x06 and msg_id == 0x00:  # CFG-PRT
+                    payload_start = i + 6
+                    payload_end = payload_start + length
+                    payload = resp_bytes[payload_start:payload_end]
+                    j = 0
+                    while j + 12 <= len(payload):
+                        portID = payload[j]
+                        baud_bytes = payload[j+8:j+12]
+                        baud = int.from_bytes(baud_bytes, 'little')
+                        uart_info[portID] = baud
+                        j += 20  # 每个端口固定 20 字节
+                    i = payload_end + 2
+                    continue
+            i += 1
+        print(uart_info)
+        """
+
 
 if __name__ == '__main__':
     
@@ -866,13 +976,13 @@ if __name__ == '__main__':
     # xx4: moving base;
 
 
-    config_mode = '53'
+    config_mode = '14'
     device_name = '/dev/ttyUSB0'
     device_baudrate=38400
 
     desired_messages = ['GST', 'VTG']
     meas_rate = 8
-
+    print("1111111111111")
     if config_mode[0] == "0":
         pass
     elif config_mode[0] == "1":
