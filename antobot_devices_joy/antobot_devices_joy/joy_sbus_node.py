@@ -2,9 +2,10 @@
 import asyncio
 import time
 import rclpy
+import psutil
 from collections import deque
 from rclpy.node import Node
-
+from datetime import datetime
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
 
@@ -279,6 +280,15 @@ class JoystickSbus(Node):
 
 
 def main(args=None):
+    while True:
+        cpu_usage = psutil.cpu_percent(interval=0.5)
+
+        if cpu_usage < 90:
+            print(f"[INFO] CPU OK ({cpu_usage}%). Starting node.")
+            break
+        now = datetime.now().strftime("%H:%M:%S")
+        print(f"[WARN] {now} CPU too high ({cpu_usage}%). Delaying node startup...")
+        time.sleep(1)
     rclpy.init(args=args)
     node = JoystickSbus()
     loop = asyncio.get_event_loop()
