@@ -606,7 +606,7 @@ class MovingBase:
                         msg_heading.rel_pos_valid = frame.flag_relPosValid
                         msg_heading.carr_soln = frame.flag_carrSoln
                         msg_heading.is_moving = frame.flag_isMoving
-                        msg_heading.heading_valid = frame.relPosHeadingValid
+                        # msg_heading.heading_valid = frame.relPosHeadingValid
                         
                         
                         rtcm_itow = self.rtcm_buffer.get_itow_1077()
@@ -632,8 +632,9 @@ class MovingBase:
                                 self.ros_node.get_logger().error("SN4110: Heading message status: invalid")
                             heading_valid = heading_valid_
     			    
-    			    
+                        msg_heading.heading_valid = heading_valid_
                         self.ros_node.pub_heading.publish(msg_heading)
+                        
                     elif heading_valid and heading_valid != heading_valid_last:
                         heading_valid = heading_valid_last
                         self.ros_node.get_logger().error("SN4110: Heading message status: invalid")
