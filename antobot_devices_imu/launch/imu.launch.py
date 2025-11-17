@@ -69,6 +69,24 @@ def generate_launch_description():
                         tm_node=Node(package='tm_imu',namespace='/imu', executable='transducer_m_imu',)
                     nodelist.append(TimerAction(period=waittime,actions=[tm_node]))  
                     waittime=waittime+1.0
+    
+    # Add kalman filter node
+    kalman_node = Node(
+        package='antobot_devices_imu',
+        executable='imu_kalman_filter',
+        name='imu_kalman_filter',
+        namespace='/icm',
+        parameters=[{
+            'Q_angle': 0.001,
+            'Q_bias': 0.003,
+            'R_measure': 0.03,
+            'gyro_still_thresh': 0.05,
+            'acc_still_thresh': 0.1,
+            'bias_update_alpha': 0.01
+        }]
+    )
+    nodelist.append(TimerAction(period=waittime,actions=[kalman_node]))
+    waittime=waittime+1.0
                     
     return LaunchDescription(nodelist)
     

@@ -110,7 +110,8 @@ class IMUKalmanFilterNode(Node):
                 ('R_measure', 0.03),
                 ('gyro_still_thresh', 0.02),
                 ('acc_still_thresh', 0.3),
-                ('bias_update_alpha', 0.001)
+                ('bias_update_alpha', 0.001),
+                ('debug', False)  # Add debug parameter
             ])
         
         # Kalman filters
@@ -154,6 +155,7 @@ class IMUKalmanFilterNode(Node):
             10)
         
         self.get_logger().info("IMU Kalman filter node started")
+        self.debug_count = 0  # Counter for debug output
 
     def imu_callback(self, msg: Imu) -> None:
         # Timestamp and dt
@@ -223,6 +225,23 @@ class IMUKalmanFilterNode(Node):
         euler.z = self.yaw
         self.euler_pub.publish(euler)
         self.quat_pub.publish(euler_to_quaternion(self.roll, self.pitch, self.yaw))
+
+        # Debug output
+        if self.get_parameter('debug').value and self.debug_count % 10 == 0:
+            self.get_logger().info(
+                f"IMU Data - Acc: X={ax:.2f}, Y={ay:.2f}, Z={az:.2f} | "
+                f"Gyro: X={gx:.2f}, Y={gy:.2f}, Z={gz:.2f} rad/s"
+            )
+            self.get_logger().info(
+                f"Filtered Angles - Roll: {math.degrees(self.roll):.1f}°, "
+                f"Pitch: {math.degrees(self.pitch):.1f}°, "
+                f"Yaw: {math.degrees(self.yaw):.1f}°"
+            )
+            self.get_logger().info(
+                f"Kalman States - X: angle={self.kalman_x.angle:.3f}, bias={self.kalman_x.bias:.3f} | "
+                f"Y: angle={self.kalman_y.angle:.3f}, bias={self.kalman_y.bias:.3f}"
+            )
+        self.debug_count += 1
 
 
 def main(args=None):
