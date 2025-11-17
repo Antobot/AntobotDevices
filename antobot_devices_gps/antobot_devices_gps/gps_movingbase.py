@@ -411,8 +411,8 @@ class ROS2Interface(Node):
         self.declare_parameter('rtcm_topic', '/antobot_gps/rtcm')
         self.declare_parameter('port_movingbase', '/dev/ttyTHS1')
         self.declare_parameter('port_movingrover', '/dev/anto_gps')
-        self.declare_parameter('baseline_min_m', 1.3)
-        self.baseline_min_m = self.get_parameter('baseline_min_m').get_parameter_value().double_value
+        self.declare_parameter('antenna_baseline', 1.3)
+        self.antenna_baseline = self.get_parameter('antenna_baseline').get_parameter_value().double_value
         
         self.loop = asyncio.get_running_loop()
         self.rtcm_last_time = 0
@@ -621,9 +621,9 @@ class MovingBase:
                             msg_heading.time_diff = 999 # 999 means no message received
 
 
-                        heading_valid_ = (frame.flag_gnssFixOK and frame.flag_isMoving and frame.relPosHeadingValid and (abs(frame.relPosLength * 1e-2 - self.ros_node.baseline_min_m) < 0.1 ) and (frame.flag_carrSoln == 2))
+                        heading_valid_ = (frame.flag_gnssFixOK and frame.flag_isMoving and frame.relPosHeadingValid and (abs(frame.relPosLength * 1e-2 - self.ros_node.antenna_baseline) < 0.1 ) and (frame.flag_carrSoln == 2))
                         print(f"heading_valid_: {heading_valid_}; flag_gnssFixOK:{frame.flag_gnssFixOK}; flag_isMoving: {frame.flag_isMoving}; relPosHeadingValid: {frame.relPosHeadingValid};  \
-                              flag_carrSoln: {frame.flag_carrSoln == 2}; relPosLength: {frame.relPosLength * 1e-2}; {abs(frame.relPosLength * 1e-2 - self.ros_node.baseline_min_m) < 0.1}  ")
+                              flag_carrSoln: {frame.flag_carrSoln == 2}; relPosLength: {frame.relPosLength * 1e-2}; {abs(frame.relPosLength * 1e-2 - self.ros_node.antenna_baseline) < 0.1}  ")
                         
                         if heading_valid != heading_valid_:
                             if heading_valid_:
