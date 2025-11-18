@@ -2,9 +2,10 @@
 import asyncio
 import time
 import rclpy
+import psutil
 from collections import deque
 from rclpy.node import Node
-
+from datetime import datetime
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
 
@@ -42,6 +43,7 @@ class JoystickSbus(Node):
         self.buffer_size = 30
         self.data_buffer = deque(maxlen=self.buffer_size)
         self.flag = 0
+        self.flag_pre = 0
         self.stable_value = None
 
         self.blockOut = 0
@@ -114,6 +116,16 @@ class JoystickSbus(Node):
         knob1_norm = self.normalize_axis(knob1)
         knob2_norm = self.normalize_axis(knob2)
 
+        if knob1_norm >= 0:
+            knob1_norm = 1
+        elif knob1_norm < 0:
+            knob1_norm = -1
+
+        if knob2_norm >= 0:
+            knob2_norm = 1
+        elif knob2_norm < 0:
+            knob2_norm = -1
+
         if right_rocker_FB < 50:
             # rocker set ->0
             self.axes = [0.0] * 8
@@ -137,89 +149,94 @@ class JoystickSbus(Node):
         print("ch5_val: ", ch5_val)
         print("ch6_val: ", ch6_val)
         print("right_FB: ", right_FB)
+        print("self.flag: ", self.flag)
+        print("self.flag_pre: ", self.flag_pre)
 
         # task
         if self.buttons_reset:
             # Manual / Standalone for UV treatment / Standalone for Scouting
-            if self.flag == 1  :
+            if self.flag == 1 and self.flag_pre == 0 :
                 self.LB = 1
                 self.RB = 1
+                self.flag_pre = 1
                 if self.debug_:
                     print('Manual')
                 self.buttons_reset = True
-            elif self.blockOut == 1:
+            elif self.flag == 1 and self.flag_pre == 1 :
                 self.LB = 0
                 self.RB = 0
+            else :
+                self.LB = 0
+                self.RB = 0
+                self.flag_pre = 0
             # Indoor demo - temporary code
-            elif ch5_val == 2 and ch6_val == 2 and right_FB == 0.0:
-                self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
-
-                self.indoor_demo_pub.publish(Empty())
-                self.buttons_reset = True
-                if self.debug_:
-                    print('Start indoor demo - Place the robot in the row entry before trigger')
-
-            # Pause Job
-            elif ch5_val == 0 and ch6_val == 1 and right_FB == 0.0:
-                self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
-
-                self.Y = 1
-                self.buttons_reset = True
-                if self.debug_:
-                    print('Pause Job')
-
-            # Resume Job
-            elif ch5_val == 2 and ch6_val == 1 and right_FB == 0.0:
-                self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
-
-                self.A = 1
-                self.buttons_reset = True
-                if self.debug_:
-                    print('Resume Job')
-
-            # Standalone for Scouting
-            elif ch5_val == 0 and ch6_val == 1 and right_FB == 1.0:
-                self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
-
-                self.A = 1
-                self.RT = -1.0
-                self.buttons_reset = True
-                if self.debug_:
-                    print('Standalone for Scouting')
-
-            # Abort Job
-            elif ch5_val == 0 and ch6_val == 1 and right_FB == -1.0:
-                self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
-
-                self.B = 1
-                self.RT = -1.0
-                self.buttons_reset = True
-                if self.debug_:
-                    print('Abort Job')
-
-            # UV Switch
-            elif ch5_val == 2 and ch6_val == 1 and right_FB == -1.0:
-                self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
-
-                self.X = 1
-                self.BACK = 1
-                self.buttons_reset = True
-                if self.debug_:
-                    print('UV Switch')
-
-        elif ch5_val == 1 and ch6_val == 1:
-            if self.channel5_pre is None or self.channel6_pre is None:
-                self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
-                self.buttons_reset = True
-            elif ch5_val != self.channel5_pre or ch6_val != self.channel6_pre:
-                self.buttons_reset = True
+        #     elif ch5_val == 2 and ch6_val == 2 and right_FB == 0.0:
+        #         self.channel5_pre = ch5_val
+        #         self.channel6_pre = ch6_val
+        #
+        #         self.indoor_demo_pub.publish(Empty())
+        #         self.buttons_reset = True
+        #         if self.debug_:
+        #             print('Start indoor demo - Place the robot in the row entry before trigger')
+        #
+        #     # Pause Job
+        #     elif ch5_val == 0 and ch6_val == 1 and right_FB == 0.0:
+        #         self.channel5_pre = ch5_val
+        #         self.channel6_pre = ch6_val
+        #
+        #         self.Y = 1
+        #         self.buttons_reset = True
+        #         if self.debug_:
+        #             print('Pause Job')
+        #
+        #     # Resume Job
+        #     elif ch5_val == 2 and ch6_val == 1 and right_FB == 0.0:
+        #         self.channel5_pre = ch5_val
+        #         self.channel6_pre = ch6_val
+        #
+        #         self.A = 1
+        #         self.buttons_reset = True
+        #         if self.debug_:
+        #             print('Resume Job')
+        #
+        #     # Standalone for Scouting
+        #     elif ch5_val == 0 and ch6_val == 1 and right_FB == 1.0:
+        #         self.channel5_pre = ch5_val
+        #         self.channel6_pre = ch6_val
+        #
+        #         self.A = 1
+        #         self.RT = -1.0
+        #         self.buttons_reset = True
+        #         if self.debug_:
+        #             print('Standalone for Scouting')
+        #
+        #     # Abort Job
+        #     elif ch5_val == 0 and ch6_val == 1 and right_FB == -1.0:
+        #         self.channel5_pre = ch5_val
+        #         self.channel6_pre = ch6_val
+        #
+        #         self.B = 1
+        #         self.RT = -1.0
+        #         self.buttons_reset = True
+        #         if self.debug_:
+        #             print('Abort Job')
+        #
+        #     # UV Switch
+        #     elif knob1_norm > 0.0 and knob2_norm > 0.0:
+        #
+        #         self.X = 1
+        #         self.BACK = 1
+        #         self.buttons_reset = True
+        #         if self.debug_:
+        #             print('UV Switch')
+        #
+        # elif ch5_val == 1 and ch6_val == 1:
+        #     if self.channel5_pre is None or self.channel6_pre is None:
+        #         self.channel5_pre = ch5_val
+        #         self.channel6_pre = ch6_val
+        #         self.buttons_reset = True
+        #     elif ch5_val != self.channel5_pre or ch6_val != self.channel6_pre:
+        #         self.buttons_reset = True
 
         # 映射到 Joy 消息,axes共8通道, 有旋钮消息
         # [LX, LY, RX, RY, RT, knob1, knob2, 保留]
@@ -228,18 +245,21 @@ class JoystickSbus(Node):
         #     self.RT, knob1_norm, knob2_norm, 0.0
         # ]
         # 映射到 Joy 消息,axes共8通道, 无旋钮消息
+        print(f'knob1_norm: {knob1_norm}')
+        print(f'knob2_norm: {knob2_norm}')
+
         self.axes = [
             0.0, left_FB, 0.0, right_LR, right_FB, self.RT, 0.0, left_LR
         ]
         self.buttons = [self.A, self.B, self.X, self.Y,
-                        self.LB, self.RB, self.BACK, 0, 0, 0, self.flag]
+                        self.LB, self.RB, self.BACK, 0, knob1_norm, knob2_norm, self.flag]
 
-        print(f'axes: {self.axes}')
-        print(f'buttons: {self.buttons}')
+        # print(f'axes: {self.axes}')
+        # print(f'buttons: {self.buttons}')
 
         # 数据变化时发布
         if (self.axes != self.axes_pre or self.buttons != self.buttons_pre
-                or abs(self.axes[1]) > 0.9 or abs(self.axes[3]) > 0.9):
+                or abs(self.axes[4]) > 0.9 or abs(self.axes[3]) > 0.9):
             print(f'axes: {self.axes}')
             print(f'buttons: {self.buttons}')
             self.joy_msg.axes = self.axes
@@ -268,6 +288,15 @@ class JoystickSbus(Node):
 
 
 def main(args=None):
+    while True:
+        cpu_usage = psutil.cpu_percent(interval=0.5)
+
+        if cpu_usage < 90:
+            print(f"[INFO] CPU OK ({cpu_usage}%). Starting node.")
+            break
+        now = datetime.now().strftime("%H:%M:%S")
+        print(f"[WARN] {now} CPU too high ({cpu_usage}%). Delaying node startup...")
+        time.sleep(1)
     rclpy.init(args=args)
     node = JoystickSbus()
     loop = asyncio.get_event_loop()
