@@ -57,8 +57,9 @@ class gpsCorrections(Node):
             dev_type = data['gps'].keys()
             for key, value in data['gps'].items():
                 #print(key)
-                self.corr_type=value['rtk_type']
-                dev_port = value['device_port']
+                if key == 'urcu':
+                    self.corr_type=value['rtk_type']
+                    dev_port = value['device_port']
         # Importing device-specific packages
         print(dev_type)
         if "urcu" in dev_type :
