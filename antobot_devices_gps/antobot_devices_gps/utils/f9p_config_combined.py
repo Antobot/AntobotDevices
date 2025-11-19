@@ -23,9 +23,6 @@
 
 # ================================================================================
 
-
-
-
 import spidev
 import serial
 import time
@@ -59,6 +56,7 @@ OUT_NONE = 0
 OUT_SPI = 1
 OUT_UART1 = 2
 OUT_UART2 = 3
+OUT_USB = 4  # USB output
 
 # Default RTCM MSM type (4 or 7)
 DEFAULT_RTCM_MSM = 4
@@ -418,6 +416,8 @@ class F9PMessageMap:
             return "UART1"
         if outport == OUT_UART2:
             return "UART2"
+        if outport == OUT_USB:
+            return "USB"
 
         if outport == OUT_NONE:
             if iface == IFACE_SPI:
@@ -694,6 +694,7 @@ def main():
             "1": "SPI output",
             "2": "UART1 output",
             "3": "UART2 output",
+            "4": "USB output",
         },
     )
 
