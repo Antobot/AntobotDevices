@@ -595,7 +595,8 @@ class MovingBase:
                         self.msg_rec_heading_time.add_time_queue(time.time())
 
                         msg_heading.header.stamp = self.ros_node.get_clock().now().to_msg() 
-                        msg_heading.heading = (450 - frame.relPosHeading * 1e-5) % 360
+                        #msg_heading.heading = (450 - frame.relPosHeading * 1e-5) % 360
+                        msg_heading.heading = (630 - frame.relPosHeading * 1e-5) % 360
                         msg_heading.length = frame.relPosLength * 1e-2
                         msg_heading.rel_pos_n = frame.relPosN * 1e-2
                         msg_heading.rel_pos_e = frame.relPosE * 1e-2
