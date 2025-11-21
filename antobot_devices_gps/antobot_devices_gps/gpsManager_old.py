@@ -71,8 +71,7 @@ class gpsManager(Node):
                 print("launching executable {}".format(exec_name))
             elif self.use_class:
                 gps_cls_tmp = self.get_gps_class(k, v)
-                if gps_cls_tmp:
-                    self.gps_nodes.append(gps_cls_tmp)
+                self.gps_nodes.append(gps_cls_tmp)
                 
         self.timer=self.create_timer(0.02, self.check_gps)
         # Launch corrections node - should it be launched directly from SW manager?
@@ -138,7 +137,7 @@ class gpsManager(Node):
     def get_gps_class(self, k, v):
 
         baud=460800
-        gps_cls = None
+
         if k == "urcu":
 
             self.gpio01 = 29
@@ -168,7 +167,6 @@ class gpsManager(Node):
             #gps_cls = F9P_GPS("usb", serial_port=self.f9p_usb_port, method=self.method,pub_name="antobot_" + k)
             gps_cls = F9P_GPS("usb",method=self.method)
             self.urcu_gps_node = gps_cls
-
         return gps_cls
     
     def check_gps(self):
