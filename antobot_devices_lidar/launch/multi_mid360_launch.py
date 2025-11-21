@@ -1,9 +1,11 @@
 import os
+import yaml
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, TextSubstitution, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch.substitutions import PythonExpression
+from ament_index_python.packages import get_package_share_directory
 
 ################### user configure parameters for ros2 start ###################
 xfer_format   = 4    # 0-Pointcloud2(PointXYZRTL), 1-customized pointcloud format
@@ -21,6 +23,22 @@ user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config.json')
 
 
 def generate_launch_description():
+
+    platform_config_file = os.path.join(
+        get_package_share_directory('antobot_description'),
+        'config',
+        'platform_config.yaml'
+    )
+
+    with open(platform_config_file, 'r') as f:
+        platform_config = yaml.safe_load(f)
+
+    aRCU_enable = not platform_config.get('aRCU_enable', False)
+
+    if aRCU_enable:
+        user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config_aRCU.json')
+    else:
+        user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config.json')
 
     livox_ros2_params = [
         {"xfer_format": xfer_format},
