@@ -28,7 +28,7 @@ from rclpy.node import Node
 
 from std_msgs.msg import Header
 
-from antobot_devices_msgs.msg import GpsQual, RTCM
+from antobot_devices_msgs.msg import GpsHeading, RTCM
 
 @dataclass
 class RELPOSNEDFrame:
