@@ -93,7 +93,7 @@ class JoystickSbus(Node):
     def create_joy_msg(self, SbusFrame):
         ch = SbusFrame.sbusChannels
 
-        right_rocker_LR = -ch[0] #  右摇杆左右
+        right_rocker_LR = ch[0] #  右摇杆左右
         print(f"channel1 {ch[0]}")
         right_rocker_FB = ch[2] #  右摇杆上下 只有右遥感前后能设置教练锁死
         print(f"channel3 {ch[2]}")
@@ -249,7 +249,7 @@ class JoystickSbus(Node):
         print(f'knob2_norm: {knob2_norm}')
 
         self.axes = [
-            0.0, left_FB, 0.0, right_LR, right_FB, self.RT, 0.0, left_LR
+            0.0, left_FB, 0.0, -right_LR, right_FB, self.RT, 0.0, left_LR
         ]
         self.buttons = [self.A, self.B, self.X, self.Y,
                         self.LB, self.RB, self.BACK, 0, knob1_norm, knob2_norm, self.flag]
