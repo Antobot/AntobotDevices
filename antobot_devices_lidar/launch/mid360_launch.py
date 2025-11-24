@@ -34,7 +34,7 @@ def generate_launch_description():
     with open(platform_config_file, 'r') as f:
         platform_config = yaml.safe_load(f)
 
-    aRCU_enable = not platform_config.get('aRCU_enable', False)
+    aRCU_enable = platform_config.get('aRCU_enable', False)
 
     if aRCU_enable:
         user_config_path = os.path.join(cur_config_path, 'MID360_config_aRCU.json')
