@@ -53,6 +53,8 @@ class JoystickSbus(Node):
         self.min_knob1 = float('inf')
         self.openUV = None
         self.openUV_pre = None
+        self.releaseStop = None
+        self.kaiqikongzhi = None
 
         self.get_logger().info(f"Joystick SBUS 7C node started on port {self.device_port}")
 
@@ -102,6 +104,16 @@ class JoystickSbus(Node):
         elif self.knob1_norm_orin < -0.3:
             self.openUV = 2
 
+    def velC(self):
+        if self.flag == 1 and self.flag_pre == 0:
+            self.kaiqikongzhi = 1
+            self.flag_pre = 1
+        elif self.flag == 1 and self.flag_pre == 1:
+            self.kaiqikongzhi = 2
+            self.flag_pre = 1
+        elif self.flag == 0 and self.flag_pre == 1:
+            self.kaiqikongzhi = 3
+            self.flag_pre = 0
 
     def create_joy_msg(self, SbusFrame):
         ch = SbusFrame.sbusChannels
@@ -120,6 +132,7 @@ class JoystickSbus(Node):
         knob2 = ch[7]
 
         self.filterStable(ch[1])
+        self.velC()
 
 
         left_LR = self.normalize_axis(left_rocker_LR)
@@ -164,14 +177,14 @@ class JoystickSbus(Node):
         # task
         if self.buttons_reset:
             # Manual / Standalone for UV treatment / Standalone for Scouting
-            if self.flag == 1 and self.flag_pre == 0 :
+            if self.kaiqikongzhi == 1:
                 self.LB = 1
                 self.RB = 1
                 self.flag_pre = 1
                 if self.debug_:
                     print('Manual')
                 self.buttons_reset = True
-            elif self.flag == 1 and self.flag_pre == 1 :
+            elif self.kaiqikongzhi == 2 :
                 self.LB = 0
                 self.RB = 0
 
