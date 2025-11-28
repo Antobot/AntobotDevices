@@ -9,7 +9,7 @@ from datetime import datetime
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
 
-from sbus_received import SBUSReceiver
+from .sbus_received import SBUSReceiver
 class JoystickSbus(Node):
     def __init__(self):
         super().__init__('joy_sbus_node')
@@ -18,7 +18,7 @@ class JoystickSbus(Node):
         self.device_port = self.get_parameter('dev').get_parameter_value().string_value
 
         self.indoor_demo_pub = self.create_publisher(Empty, '/indoor_demo', 10)
-        self.joy_pub = self.create_publisher(Joy, '/joy', 10)
+        self.joy_pub = self.create_publisher(Joy, '/joy_sbus', 10)
         self.joy_msg = Joy()
         self.joy_msg.header.frame_id = self.device_port
 
