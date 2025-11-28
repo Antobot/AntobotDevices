@@ -9,7 +9,7 @@ from datetime import datetime
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
 
-from .sbus_received import SBUSReceiver
+from sbus_received import SBUSReceiver
 class JoystickSbus(Node):
     def __init__(self):
         super().__init__('joy_sbus_node')
@@ -18,7 +18,7 @@ class JoystickSbus(Node):
         self.device_port = self.get_parameter('dev').get_parameter_value().string_value
 
         self.indoor_demo_pub = self.create_publisher(Empty, '/indoor_demo', 10)
-        self.joy_pub = self.create_publisher(Joy, '/joy_sbus', 10)
+        self.joy_pub = self.create_publisher(Joy, '/joy', 10)
         self.joy_msg = Joy()
         self.joy_msg.header.frame_id = self.device_port
 
@@ -55,6 +55,8 @@ class JoystickSbus(Node):
         self.openUV_pre = None
         self.releaseStop = None
         self.kaiqikongzhi = None
+        self.ch2 = None
+        self.ch1 = None
 
         self.get_logger().info(f"Joystick SBUS 7C node started on port {self.device_port}")
 
@@ -105,7 +107,7 @@ class JoystickSbus(Node):
             self.openUV = 2
 
     def velC(self):
-        if self.flag == 1 and self.flag_pre == 0:
+        if self.flag == 1 and self.flag_pre == 0 and self.ch2 > 50 and self.ch1 != 1000:
             self.kaiqikongzhi = 1
             self.flag_pre = 1
         elif self.flag == 1 and self.flag_pre == 1:
@@ -114,17 +116,22 @@ class JoystickSbus(Node):
         elif self.flag == 0 and self.flag_pre == 1:
             self.kaiqikongzhi = 3
             self.flag_pre = 0
+        elif self.flag == 1 and self.flag_pre == 0 and self.ch2 < 50:
+            self.kaiqikongzhi = 4
+            self.flag_pre = 1
 
     def create_joy_msg(self, SbusFrame):
         ch = SbusFrame.sbusChannels
 
-        right_rocker_LR = ch[0] #  右摇杆左右
+        right_rocker_LR = ch[0]
         # print(f"channel1 {ch[0]}")
-        right_rocker_FB = ch[2] #  右摇杆上下 只有右遥感前后能设置教练锁死
+        right_rocker_FB = ch[2]
         # print(f"channel3 {ch[2]}")
-        left_rocker_FB = ch[1] #  左摇杆前后
+        left_rocker_FB = ch[1]
+        self.ch1 = ch[1]
+        self.ch2 = ch[2]
         # print(f"channel2 {ch[1]}")
-        left_rocker_LR = ch[3] #  左摇杆左右
+        left_rocker_LR = ch[3]
         # print(f"channel4 {ch[3]}")
         channel5 = ch[4] # CH5/CH6: 三挡开关
         channel6 = ch[5]
@@ -177,7 +184,7 @@ class JoystickSbus(Node):
         # task
         if self.buttons_reset:
             # Manual / Standalone for UV treatment / Standalone for Scouting
-            if self.kaiqikongzhi == 1:
+            if self.kaiqikongzhi == 1 and self.ch2 > 100 :
                 self.LB = 1
                 self.RB = 1
                 self.flag_pre = 1
@@ -187,6 +194,10 @@ class JoystickSbus(Node):
             elif self.kaiqikongzhi == 2 :
                 self.LB = 0
                 self.RB = 0
+            elif self.kaiqikongzhi == 4 :
+                self.LB = 0
+                self.RB = 0
+                self.flag_pre = 0
 
             # UV Switch
             elif self.openUV == 1 :
