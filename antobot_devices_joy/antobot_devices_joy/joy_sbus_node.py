@@ -143,6 +143,7 @@ class JoystickSbus(Node):
 
 
         left_LR = self.normalize_axis(left_rocker_LR)
+        # print(f"left_LR {left_LR}")
         left_FB = self.normalize_axis(left_rocker_FB)
         right_LR = self.normalize_axis(right_rocker_LR)
         right_FB = self.normalize_axis(right_rocker_FB)
@@ -200,20 +201,41 @@ class JoystickSbus(Node):
                 self.flag_pre = 0
 
             # UV Switch
-            elif self.openUV == 1 :
+            elif self.openUV == 1 and left_LR == 0.0:
                 self.X = 2
                 self.BACK = 2
                 self.buttons_reset = True
                 # self.openUV_pre = 1
                 if self.debug_:
                     print('UV Switch')
-            elif self.openUV == 2 :
+            elif self.openUV == 2 and left_LR == 0.0:
                 self.X = 3
                 self.BACK = 3
                 self.buttons_reset = True
                 # self.openUV_pre = 2
                 if self.debug_:
                     print('UV Switch')
+            elif ch5_val == 0 and ch6_val == 0 and left_LR == 1.0:
+                self.channel5_pre = ch5_val
+                self.channel6_pre = ch6_val
+
+                self.A = 1
+                self.RT = -1.0
+                self.buttons_reset = True
+                if self.debug_:
+                    print('Standalone for Scouting')
+
+            # Abort Job
+            elif ch5_val == 0 and ch6_val == 0 and left_LR == -1.0:
+                self.channel5_pre = ch5_val
+                self.channel6_pre = ch6_val
+
+                self.B = 1
+                self.RT = -1.0
+                self.buttons_reset = True
+                if self.debug_:
+                    print('Abort Job')
+           
 
             else :
                 self.LB = 0
