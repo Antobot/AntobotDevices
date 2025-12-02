@@ -416,8 +416,12 @@ class lidarManagerClass(Node):
         frontLidarAvailable=False
         rearLidarAvailable=False
 
-        response.response_code = False 
-        print(self.lidars.values())
+        # response.response_code = False 
+        # print(self.lidars.values())
+        
+        response.response_code = True
+        return response
+        # print(self.lidars.values())
 
         for lidar_i in self.lidars.values():
             print(lidar_i.type, lidar_i.device_id)
