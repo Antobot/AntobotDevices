@@ -226,15 +226,15 @@ class JoystickSbus(Node):
                 if self.debug_:
                     print('Standalone for Scouting')
             # backward
-            # elif ch5_val == 1 and self.channel5_pre == 0 :
-            #     self.channel5_pre = ch5_val
-            #     # self.channel6_pre = ch6_val
-            #
-            #     self.A = 1
-            #     self.RT = -1.0
-            #     self.buttons_reset = True
-            #     if self.debug_:
-            #         print('Standalone for Scouting')
+            elif ch5_val == 1 and self.channel5_pre == 0 :
+                self.channel5_pre = ch5_val
+                # self.channel6_pre = ch6_val
+
+                self.A = -1.0
+                self.RT = -1.0
+                self.buttons_reset = True
+                if self.debug_:
+                    print('Standalone for Scouting')
 
             # Abort Job
             # elif ch5_val == 1 and ch6_val == 1 and left_LR == -1.0:
