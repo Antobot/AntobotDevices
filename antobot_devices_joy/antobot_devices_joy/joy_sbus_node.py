@@ -226,7 +226,7 @@ class JoystickSbus(Node):
                 if self.debug_:
                     print('Standalone for Scouting')
             # backward
-            elif ch5_val == 1 and self.channel5_pre == 0 :
+            elif ch5_val == 2 and self.channel5_pre == 1 :
                 self.channel5_pre = ch5_val
                 # self.channel6_pre = ch6_val
 
