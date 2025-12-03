@@ -230,7 +230,7 @@ class JoystickSbus(Node):
                 self.channel5_pre = ch5_val
                 # self.channel6_pre = ch6_val
 
-                self.A = -1.0
+                self.A = -1
                 self.RT = -1.0
                 self.buttons_reset = True
                 if self.debug_:
