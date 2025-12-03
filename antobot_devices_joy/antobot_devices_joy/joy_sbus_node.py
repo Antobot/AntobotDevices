@@ -58,6 +58,8 @@ class JoystickSbus(Node):
         self.ch2 = None
         self.ch1 = None
 
+        self.last_print_time = None
+
         self.get_logger().info(f"Joystick SBUS 7C node started on port {self.device_port}")
 
     def translate_buttons(self, num):
@@ -84,6 +86,7 @@ class JoystickSbus(Node):
         self.A = self.B = self.X = self.Y = 0
         self.LB = self.RB = self.BACK = 0
         self.RT = 0.0
+        self.channel5_pre = 1
 
     def filterStable(self, val):
         self.data_buffer.append(val)
@@ -189,53 +192,60 @@ class JoystickSbus(Node):
                 self.LB = 1
                 self.RB = 1
                 self.flag_pre = 1
-                if self.debug_:
-                    print('Manual')
                 self.buttons_reset = True
             elif self.kaiqikongzhi == 2 :
                 self.LB = 0
                 self.RB = 0
+                # self.print_with_interval('kaiqikongzhi 2')
             elif self.kaiqikongzhi == 4 :
                 self.LB = 0
                 self.RB = 0
-                self.flag_pre = 0
+                # self.print_with_interval('kaiqikongzhi 4')
 
             # UV Switch
-            elif self.openUV == 1 and left_LR == 0.0:
+            elif self.openUV == 1 and left_LR == -1.0 and left_FB == 0.0:
                 self.X = 2
                 self.BACK = 2
                 self.buttons_reset = True
                 # self.openUV_pre = 1
                 if self.debug_:
-                    print('UV Switch')
-            elif self.openUV == 2 and left_LR == 0.0:
+                    print('UV Switch 1 ')
+            elif self.openUV == 2 and left_LR == -1.0 and left_FB == 0.0:
                 self.X = 3
                 self.BACK = 3
                 self.buttons_reset = True
                 # self.openUV_pre = 2
                 if self.debug_:
-                    print('UV Switch')
-            elif ch5_val == 0 and ch6_val == 0 and left_LR == 1.0:
+                    print('UV Switch 2')
+            # forward
+            elif ch5_val == 0 and self.channel5_pre == 1 :
                 self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
-
                 self.A = 1
                 self.RT = -1.0
                 self.buttons_reset = True
                 if self.debug_:
                     print('Standalone for Scouting')
+            # backward
+            # elif ch5_val == 1 and self.channel5_pre == 0 :
+            #     self.channel5_pre = ch5_val
+            #     # self.channel6_pre = ch6_val
+            #
+            #     self.A = 1
+            #     self.RT = -1.0
+            #     self.buttons_reset = True
+            #     if self.debug_:
+            #         print('Standalone for Scouting')
 
             # Abort Job
-            elif ch5_val == 0 and ch6_val == 0 and left_LR == -1.0:
-                self.channel5_pre = ch5_val
-                self.channel6_pre = ch6_val
-
-                self.B = 1
-                self.RT = -1.0
-                self.buttons_reset = True
-                if self.debug_:
-                    print('Abort Job')
-           
+            # elif ch5_val == 1 and ch6_val == 1 and left_LR == -1.0:
+            #     self.channel5_pre = ch5_val
+            #     self.channel6_pre = ch6_val
+            #
+            #     self.B = 1
+            #     self.RT = -1.0
+            #     self.buttons_reset = True
+            #     if self.debug_:
+            #         print('Abort Job')
 
             else :
                 self.LB = 0
