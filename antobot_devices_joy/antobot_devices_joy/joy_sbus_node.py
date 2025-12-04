@@ -346,7 +346,7 @@ class JoystickSbus(Node):
 
         # 数据变化时发布
         if (self.axes != self.axes_pre or self.buttons != self.buttons_pre
-                or abs(self.axes[4]) > 0.9 or abs(self.axes[3]) > 0.9):
+                or abs(self.axes[4]) > 0.9 or abs(self.axes[3]) > 0.4):
             print(f'axes: {self.axes}')
             print(f'buttons: {self.buttons}')
             self.joy_msg.axes = self.axes
