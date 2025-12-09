@@ -235,7 +235,7 @@ class lidar_mid360(lidar):
     '''Stores lidar specific information'''
     def __init__(self,num=1,sim=False):
 
-        super().__init__(id, sim,type="mid360")
+        super().__init__(200, sim,type="mid360")
         self.type = 'mid360'
         # Save arguments
         # TODO: mid360 port settings
