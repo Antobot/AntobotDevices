@@ -13,19 +13,19 @@ from .sbus_received import SBUSReceiver
 
 class JoystickSbus(Node):
     def __init__(self):
-        super().__init__('joy_sbus_node')
+        super().__init__('joy_sbus_4ws_node')
 
         self.declare_parameter('dev', '/dev/ttyUSB0')
         self.device_port = self.get_parameter('dev').get_parameter_value().string_value
 
         self.indoor_demo_pub = self.create_publisher(Empty, '/indoor_demo', 10)
-        self.joy_pub = self.create_publisher(Joy, '/joy_sbus', 10)
+        self.joy_pub = self.create_publisher(Joy, '/joy', 10)
         self.joy_msg = Joy()
         self.joy_msg.header.frame_id = self.device_port
 
         # 4WS mode publisher
         self.mode_pub = self.create_publisher(Int32, '/antobot/control/wheelsteer/mode', 10)
-        self.current_mode = None  # track last published mode to avoid spamming
+        self.current_mode = 3
 
         self.device_connect = False
         self.publish_first = True
@@ -38,7 +38,7 @@ class JoystickSbus(Node):
 
         self.channel5_pre = None
         self.channel6_pre = None
-        self.buttons_reset = True  # not really used anymore but kept for compatibility
+        self.buttons_reset = True 
 
         # Buttons
         self.A = self.B = self.X = self.Y = 0
@@ -47,10 +47,10 @@ class JoystickSbus(Node):
 
         self.buffer_size = 30
         self.data_buffer = deque(maxlen=self.buffer_size)
-        self.flag = 0            # stability flag
+        self.flag = 0         
         self.stable_value = None
 
-        self.blockOut = 0        # training / lock flag
+        self.blockOut = 0      
 
         self.get_logger().info(f"Joystick SBUS 7C node started on port {self.device_port}")
 
@@ -120,7 +120,7 @@ class JoystickSbus(Node):
         knob1_norm = self.normalize_axis(knob1)
         knob2_norm = self.normalize_axis(knob2)
 
-        # Training lock: if right stick is in the "lock" region, output zeros
+
         if right_rocker_FB < 50:
             self.axes = [0.0] * 8
             self.buttons = [0] * 11
@@ -180,7 +180,7 @@ class JoystickSbus(Node):
             pass
         # ============================
 
-        # ========= Deadman buttons (LB / RB) based on stability =========
+        # ========= Deactivate buttons (LB / RB) based on stability =========
         # If the signal is stable and not blocked, treat LB/RB as pressed.
         if self.flag == 1 and self.blockOut == 0:
             self.LB = 1
