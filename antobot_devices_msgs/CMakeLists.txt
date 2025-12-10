@@ -16,6 +16,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/GpsQual.msg"
   "msg/GpsHeading.msg"
+  "msg/RTCM.msg"
   "srv/CamManager.srv"
   "srv/AntoRec.srv"
   "srv/CostmapToggleObservation.srv"

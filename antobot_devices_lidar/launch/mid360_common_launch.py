@@ -35,11 +35,18 @@ def generate_launch_description():
         platform_config = yaml.safe_load(f)
 
     aRCU_enable = platform_config.get('aRCU_enable', False)
+    mid360_count = sum(1 for cfg in platform_config["lidar"].values() if cfg["type"] == "mid360")
 
     if aRCU_enable:
-        user_config_path = os.path.join(cur_config_path, 'MID360_config_aRCU.json')
+        if mid360_count == 1:
+            user_config_path = os.path.join(cur_config_path, 'MID360_config_aRCU.json')
+        elif mid360_count == 2:
+            user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config_aRCU.json')
     else:
-        user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
+        if mid360_count == 1:
+            user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
+        elif mid360_count == 2:
+            user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config.json')
 
     livox_ros2_params = [
         {"xfer_format": xfer_format},

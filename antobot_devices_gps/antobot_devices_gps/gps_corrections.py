@@ -27,8 +27,7 @@ import base64
 import threading
 import serial
 from std_msgs.msg import String
-from mavros_msgs.msg import RTCM
-from antobot_devices_msgs.msg import GpsQual
+from antobot_devices_msgs.msg import GpsQual, RTCM
 
 
 class gpsCorrections(Node):
