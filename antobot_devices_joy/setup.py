@@ -23,6 +23,7 @@ setup(
         'console_scripts': [
             'joy_elrs_node = antobot_devices_joy.joy_elrs_node:main',
             'joy_sbus_node = antobot_devices_joy.joy_sbus_node:main',
+            'joy_sbus_4ws_node = antobot_devices_joy.joy_sbus_4ws_node:main',
         ],
     },
 )
