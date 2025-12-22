@@ -94,6 +94,7 @@ class F9P_GPS(Node):
         self.geo_sep = 0
         self.cogt = 0
         self.sogk = 0
+        self.gps_hz = 0
         self.gps_pub = self.create_publisher( NavSatFix,pub_name, 10)
         self.gps_qual_pub = self.create_publisher( GpsQual,"/antobot_gps/quality", 10)
         self.gga_msg_pub=self.create_publisher(String, "/antobot_gps/gga", 10)
@@ -339,7 +340,8 @@ class F9P_GPS(Node):
 
         # Inverted average time to calculate hertz
         gps_hz = len(self.gps_time_buf) / sum(self.gps_time_buf)
-
+        self.gps_hz = gps_hz
+        
         #rospy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
         if gps_hz < 2 and self.gps_freq_status != "Critical":
             self.get_logger().error("SN4012: GPS Frequency status: Critical (<2 hz)")
@@ -411,7 +413,6 @@ class F9P_GPS(Node):
                     #print("VTG information invalid")
                 # TODO: Calculate ENU velocity
             
-
         return
 
     def create_quality_msg(self):
@@ -426,7 +427,7 @@ class F9P_GPS(Node):
         # gpsQualMsg.satInfo = ???
         gpsQualMsg.v_cog = float(self.cogt)
         gpsQualMsg.v_sog = float(self.sogk)
-
+        gpsQualMsg.frequency = self.gps_hz
         self.gps_qual_pub.publish(gpsQualMsg)
      
 def spin_in_background(self):
