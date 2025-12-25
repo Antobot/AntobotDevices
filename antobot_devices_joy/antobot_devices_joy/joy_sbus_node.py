@@ -250,8 +250,8 @@ class JoystickSbus(Node):
             else :
                 self.LB = 0
                 self.RB = 0
-                self.X = 3
-                self.BACK = 3
+                # self.X = 3
+                # self.BACK = 3
                 self.flag_pre = 0
 
 
