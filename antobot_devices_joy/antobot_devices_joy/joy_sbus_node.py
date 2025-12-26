@@ -10,7 +10,7 @@ from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
 from enum import Enum
 
-from sbus_received import SBUSReceiver
+from .sbus_received import SBUSReceiver
 
 
 class RobotState(Enum):
@@ -126,6 +126,30 @@ class JoystickSbus(Node):
                 self.ch6_min_in_activation = float('inf')
                 self.ch6_trigger_2_done = False
                 self.ch6_trigger_3_done = False
+                self.X = 3
+                self.BACK = 3
+
+                # 立即发布这个退出信号
+                self.axes = [0.0] * 8
+                self.buttons = [0, 0, self.X, 0, 0, 0, self.BACK, 0, 0, 0, 0]
+                self.joy_msg.axes = self.axes
+                self.joy_msg.buttons = self.buttons
+                self.joy_msg.header.stamp = self.get_clock().now().to_msg()
+                self.joy_pub.publish(self.joy_msg)
+
+                # 更新前值
+                self.axes_pre = list(self.axes)
+                self.buttons_pre = list(self.buttons)
+
+                # 状态转换
+                self.current_state = RobotState.POWER_ON
+                self.activation_triggered = False
+                self.ch6_min_in_activation = float('inf')
+                self.ch6_trigger_2_done = False
+                self.ch6_trigger_3_done = False
+
+                # 重置按钮
+                self.reset_buttons()
 
         elif all_dynamic:
             # ch[0]-ch[3]都动态 -> 开机状态
@@ -145,14 +169,36 @@ class JoystickSbus(Node):
 
         # 激活状态下，检查是否退出激活状态（取消激活）
         if self.current_state == RobotState.ACTIVATED:
+
             # 如果ch[1]不再稳定或稳定值不再大于100，退出激活状态
             if not ch1_stable or (ch1_stable and ch1_val is not None and ch1_val <= 100):
                 self.get_logger().info("State transition: ACTIVATED -> POWER_ON (deactivation)")
+
+                # 退出激活时触发 X=3, BACK=3
+                self.X = 3
+                self.BACK = 3
+
+                # 立即发布这个退出信号
+                self.axes = [0.0] * 8
+                self.buttons = [0, 0, self.X, 0, 0, 0, self.BACK, 0, 0, 0, 0]
+                self.joy_msg.axes = self.axes
+                self.joy_msg.buttons = self.buttons
+                self.joy_msg.header.stamp = self.get_clock().now().to_msg()
+                self.joy_pub.publish(self.joy_msg)
+
+                # 更新前值
+                self.axes_pre = list(self.axes)
+                self.buttons_pre = list(self.buttons)
+
+                # 状态转换
                 self.current_state = RobotState.POWER_ON
                 self.activation_triggered = False
                 self.ch6_min_in_activation = float('inf')
                 self.ch6_trigger_2_done = False
                 self.ch6_trigger_3_done = False
+
+                # 重置按钮
+                self.reset_buttons()
 
     def reset_buttons(self):
         """重置按钮状态"""
@@ -212,6 +258,13 @@ class JoystickSbus(Node):
 
             # 重置按钮
             self.reset_buttons()
+
+            # 初始化ch[4]的前值 避免第二帧误触发4.1或4.2
+            self.ch4_prev = ch[4]
+
+            # 如果首次激活时ch[6]小于1000，标记trigger_3已完成，避免误触发
+            if ch[6] < 1000:
+                self.ch6_trigger_3_done = True
 
             # 直接返回，不继续处理后续的摇杆映射
             return
