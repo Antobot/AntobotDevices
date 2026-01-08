@@ -8,8 +8,18 @@ from rclpy.node import Node
 from datetime import datetime
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
+from enum import Enum
 
 from .sbus_received import SBUSReceiver
+
+
+class RobotState(Enum):
+    """机器人状态枚举"""
+    SHUTDOWN = 0      # 关机状态
+    POWER_ON = 1      # 开机状态
+    ACTIVATED = 2     # 激活状态
+
+
 class JoystickSbus(Node):
     def __init__(self):
         super().__init__('joy_sbus_node')
@@ -24,56 +34,40 @@ class JoystickSbus(Node):
 
         self.device_connect = False
         self.publish_first = True
-        self.debug_ = False
+        self.debug_ = True
 
+        # Joy消息数据
         self.axes = [0.0] * 8
         self.buttons = [0] * 11
         self.axes_pre = [0.0] * 8
         self.buttons_pre = [0] * 11
 
-        self.channel5_pre = None
-        self.channel6_pre = None
-        self.buttons_reset = True
+        # 状态机相关
+        self.current_state = RobotState.SHUTDOWN
+        self.activation_triggered = False  # 记录激活状态是否已触发LB/RB
 
-        # 按钮
+        # 多帧窗口检测
+        self.window_size = 30
+        self.ch0_buffer = deque(maxlen=self.window_size)
+        self.ch1_buffer = deque(maxlen=self.window_size)
+        self.ch2_buffer = deque(maxlen=self.window_size)
+        self.ch3_buffer = deque(maxlen=self.window_size)
+
+        # 触发状态记录
+        self.ch4_prev = 1000  # ch[4]前一帧的值
+        self.ch6_min_in_activation = float('inf')  # 本次激活时ch[6]的最小值
+        self.ch6_trigger_2_done = False  # ch[6]触发2是否已完成
+        self.ch6_trigger_3_done = False  # ch[6]触发3是否已完成
+
+        # 按钮状态
         self.A = self.B = self.X = self.Y = 0
-        self.LB = self.RB = self.BACK =  0
+        self.LB = self.RB = self.BACK = 0
         self.RT = 0.0
 
-        self.buffer_size = 30
-        self.data_buffer = deque(maxlen=self.buffer_size)
-        self.flag = 0
-        self.flag_pre = 0
-        self.stable_value = None
-
-        self.blockOut = 0
-
-        self.knob1_norm_orin = 0.0
-        self.knob2_norm_orin = 0.0
-        self.min_knob1 = float('inf')
-        self.openUV = None
-        self.openUV_pre = None
-        self.releaseStop = None
-        self.kaiqikongzhi = None
-        self.ch2 = None
-        self.ch1 = None
-
-        self.last_print_time = None
-
-        self.get_logger().info(f"Joystick SBUS 7C node started on port {self.device_port}")
-
-    def translate_buttons(self, num):
-        """三挡开关数值 0 / 1 / 2"""
-        if num < 300:
-            return 0
-        elif 900 < num < 1100:
-            return 1
-        elif num > 1700:
-            return 2
-        return 1
+        self.get_logger().info(f"Joystick SBUS State Machine node started on port {self.device_port}")
 
     def normalize_axis(self, val):
-        """ 200~1800 映射 [-1.0, 1.0]"""
+        """200~1800 映射到 [-1.0, 1.0]"""
         if val < 100 or val > 1900:
             return 0.0
         norm = (val - 1000) / 800.0
@@ -82,287 +76,281 @@ class JoystickSbus(Node):
             norm = 0.0
         return round(norm, 3)
 
-    def set_buttons_zero(self):
+    def is_buffer_stable(self, buffer):
+        """检查缓冲区内的值是否稳定（所有值相同）"""
+        if len(buffer) < self.window_size:
+            return False, None
+        unique_values = set(buffer)
+        if len(unique_values) == 1:
+            return True, buffer[0]
+        return False, None
+
+    def is_buffer_dynamic(self, buffer):
+        """检查缓冲区内的值是否动态（值不全相同）"""
+        if len(buffer) < self.window_size:
+            return False
+        unique_values = set(buffer)
+        return len(unique_values) > 1
+
+    def update_state(self, ch):
+        """更新状态机状态"""
+        # 更新多帧窗口
+        self.ch0_buffer.append(ch[0])
+        self.ch1_buffer.append(ch[1])
+        self.ch2_buffer.append(ch[2])
+        self.ch3_buffer.append(ch[3])
+
+        # 检查ch[0]-ch[3]是否都稳定
+        ch0_stable, _ = self.is_buffer_stable(self.ch0_buffer)
+        ch1_stable, ch1_val = self.is_buffer_stable(self.ch1_buffer)
+        ch2_stable, _ = self.is_buffer_stable(self.ch2_buffer)
+        ch3_stable, _ = self.is_buffer_stable(self.ch3_buffer)
+
+        all_stable = ch0_stable and ch1_stable and ch2_stable and ch3_stable
+
+        # 检查ch[0]-ch[3]是否都动态
+        all_dynamic = (self.is_buffer_dynamic(self.ch0_buffer) and
+                       self.is_buffer_dynamic(self.ch1_buffer) and
+                       self.is_buffer_dynamic(self.ch2_buffer) and
+                       self.is_buffer_dynamic(self.ch3_buffer))
+
+        prev_state = self.current_state
+
+        # 状态转换逻辑
+        if all_stable:
+            # ch[0]-ch[3]都稳定 -> 关机状态
+            if self.current_state != RobotState.SHUTDOWN:
+                self.get_logger().info("State transition: -> SHUTDOWN")
+                self.current_state = RobotState.SHUTDOWN
+                self.activation_triggered = False
+                self.ch6_min_in_activation = float('inf')
+                self.ch6_trigger_2_done = False
+                self.ch6_trigger_3_done = False
+                self.X = 3
+                self.BACK = 3
+
+                # 立即发布这个退出信号
+                self.axes = [0.0] * 8
+                self.buttons = [0, 0, self.X, 0, 0, 0, self.BACK, 0, 0, 0, 0]
+                self.joy_msg.axes = self.axes
+                self.joy_msg.buttons = self.buttons
+                self.joy_msg.header.stamp = self.get_clock().now().to_msg()
+                self.joy_pub.publish(self.joy_msg)
+
+                # 更新前值
+                self.axes_pre = list(self.axes)
+                self.buttons_pre = list(self.buttons)
+
+                # 状态转换
+                self.current_state = RobotState.POWER_ON
+                self.activation_triggered = False
+                self.ch6_min_in_activation = float('inf')
+                self.ch6_trigger_2_done = False
+                self.ch6_trigger_3_done = False
+
+                # 重置按钮
+                self.reset_buttons()
+
+        elif all_dynamic:
+            # ch[0]-ch[3]都动态 -> 开机状态
+            if self.current_state == RobotState.SHUTDOWN:
+                self.get_logger().info("State transition: SHUTDOWN -> POWER_ON")
+                self.current_state = RobotState.POWER_ON
+
+        # 开机状态下，检查是否进入激活状态
+        if self.current_state == RobotState.POWER_ON:
+            if ch1_stable and ch1_val is not None and ch1_val > 300 and ch1_val < 1500:
+                self.get_logger().info("State transition: POWER_ON -> ACTIVATED")
+                self.current_state = RobotState.ACTIVATED
+                self.activation_triggered = False  # 重置触发标志
+                self.ch6_min_in_activation = float('inf')  # 重置ch6最小值
+                self.ch6_trigger_2_done = False
+                self.ch6_trigger_3_done = False
+
+        # 激活状态下，检查是否退出激活状态（取消激活）
+        if self.current_state == RobotState.ACTIVATED:
+
+            # 如果ch[1]不再稳定或稳定值不再大于100，退出激活状态
+            if not ch1_stable or (ch1_stable and ch1_val is not None and ch1_val <= 100):
+                self.get_logger().info("State transition: ACTIVATED -> POWER_ON (deactivation)")
+
+                # 退出激活时触发 X=3, BACK=3
+                self.X = 3
+                self.BACK = 3
+
+                # 立即发布这个退出信号
+                self.axes = [0.0] * 8
+                self.buttons = [0, 0, self.X, 0, 0, 0, self.BACK, 0, 0, 0, 0]
+                self.joy_msg.axes = self.axes
+                self.joy_msg.buttons = self.buttons
+                self.joy_msg.header.stamp = self.get_clock().now().to_msg()
+                self.joy_pub.publish(self.joy_msg)
+
+                # 更新前值
+                self.axes_pre = list(self.axes)
+                self.buttons_pre = list(self.buttons)
+
+                # 状态转换
+                self.current_state = RobotState.POWER_ON
+                self.activation_triggered = False
+                self.ch6_min_in_activation = float('inf')
+                self.ch6_trigger_2_done = False
+                self.ch6_trigger_3_done = False
+
+                # 重置按钮
+                self.reset_buttons()
+
+    def reset_buttons(self):
+        """重置按钮状态"""
         self.A = self.B = self.X = self.Y = 0
         self.LB = self.RB = self.BACK = 0
         self.RT = 0.0
-        self.channel5_pre = 1
-
-    def filterStable(self, val):
-        self.data_buffer.append(val)
-        if len(self.data_buffer) < self.buffer_size:
-            self.flag = 0
-            return
-        # 使用集合检查所有元素是否相同
-        unique_values = set(self.data_buffer)
-
-        if len(unique_values) == 1:
-            self.flag = 1
-            self.stable_value = self.data_buffer[0]
-        else:
-            self.flag = 0
-            self.stable_value = None
-
-    def uvState(self):
-        if self.knob1_norm_orin - self.min_knob1 > 1 and self.knob1_norm_orin > 0.5:
-            self.openUV = 1
-        elif self.knob1_norm_orin < -0.3:
-            self.openUV = 2
-
-    def velC(self):
-        if self.flag == 1 and self.flag_pre == 0 and self.ch2 > 50 and self.ch1 != 1000:
-            self.kaiqikongzhi = 1
-            self.flag_pre = 1
-        elif self.flag == 1 and self.flag_pre == 1:
-            self.kaiqikongzhi = 2
-            self.flag_pre = 1
-        elif self.flag == 0 and self.flag_pre == 1:
-            self.kaiqikongzhi = 3
-            self.flag_pre = 0
-        elif self.flag == 1 and self.flag_pre == 0 and self.ch2 < 50:
-            self.kaiqikongzhi = 4
-            self.flag_pre = 1
 
     def create_joy_msg(self, SbusFrame):
+        """使用状态机处理Joy消息创建"""
         ch = SbusFrame.sbusChannels
 
-        right_rocker_LR = ch[0]
-        # print(f"channel1 {ch[0]}")
-        right_rocker_FB = ch[2]
-        # print(f"channel3 {ch[2]}")
-        left_rocker_FB = ch[1]
-        self.ch1 = ch[1]
-        self.ch2 = ch[2]
-        # print(f"channel2 {ch[1]}")
-        left_rocker_LR = ch[3]
-        # print(f"channel4 {ch[3]}")
-        channel5 = ch[4] # CH5/CH6: 三挡开关
-        channel6 = ch[5]
-        knob1 = ch[6] # CH7/CH8: 两个旋钮（200~1800）
-        knob2 = ch[7]
-
-        self.filterStable(ch[1])
-        self.velC()
-
-
-        left_LR = self.normalize_axis(left_rocker_LR)
-        # print(f"left_LR {left_LR}")
-        left_FB = self.normalize_axis(left_rocker_FB)
-        right_LR = self.normalize_axis(right_rocker_LR)
-        right_FB = self.normalize_axis(right_rocker_FB)
-        self.knob1_norm_orin = self.normalize_axis(knob1)
-        self.knob2_norm_orin = self.normalize_axis(knob2)
-        self.min_knob1 = min(self.min_knob1, self.knob1_norm_orin)
-
-        if self.knob1_norm_orin >= 0:
-            knob1_norm = 1
-        elif self.knob1_norm_orin < 0:
-            knob1_norm = -1
-
-        if self.knob2_norm_orin >= 0:
-            knob2_norm = 1
-        elif self.knob2_norm_orin < 0:
-            knob2_norm = -1
-
-        if right_rocker_FB < 50:
-            # rocker set ->0
+        # 步骤1: 如果ch[2]小于50，直接返回
+        if ch[2] < 50:
             self.axes = [0.0] * 8
             self.buttons = [0] * 11
             return
 
+        # 步骤2-3: 更新状态机
+        self.update_state(ch)
 
-        if(right_rocker_FB < 50):
-            self.blockOut = 1
+        # 如果不在激活状态，或者激活状态未触发过LB/RB，发布零值
+        if self.current_state != RobotState.ACTIVATED:
+            self.axes = [0.0] * 8
+            self.buttons = [0] * 11
+            self.reset_buttons()
 
-        self.uvState()
+            # 发布零值消息
+            if self.axes != self.axes_pre or self.buttons != self.buttons_pre:
+                self.joy_msg.axes = self.axes
+                self.joy_msg.buttons = self.buttons
+                self.joy_msg.header.stamp = self.get_clock().now().to_msg()
+                self.joy_pub.publish(self.joy_msg)
+                self.axes_pre = list(self.axes)
+                self.buttons_pre = list(self.buttons)
+            return
 
+        # 步骤3: 激活状态，首次触发LB/RB
+        if not self.activation_triggered:
+            self.LB = 1
+            self.RB = 1
+            self.activation_triggered = True
+            self.get_logger().info("Activation triggered: LB=1, RB=1")
 
-        ch5_val = self.translate_buttons(channel5)
-        ch6_val = self.translate_buttons(channel6)
-        # print("ch5_val: ", ch5_val)
-        # print("ch6_val: ", ch6_val)
-        # print("right_FB: ", right_FB)
-        # print("self.flag: ", self.flag)
-        # print("self.flag_pre: ", self.flag_pre)
+            # 首次激活时，只发布LB=1, RB=1，其他都是0
+            self.axes = [0.0] * 8
+            self.buttons = [0, 0, 0, 0, self.LB, self.RB, 0, 0, 0, 0, 0]
 
-        # task
-        if self.buttons_reset:
-            # Manual / Standalone for UV treatment / Standalone for Scouting
-            if self.kaiqikongzhi == 1 and self.ch2 > 100 :
-                self.LB = 1
-                self.RB = 1
-                self.flag_pre = 1
-                self.buttons_reset = True
-            elif self.kaiqikongzhi == 2 :
-                self.LB = 0
-                self.RB = 0
-                # self.print_with_interval('kaiqikongzhi 2')
-            elif self.kaiqikongzhi == 4 :
-                self.LB = 0
-                self.RB = 0
-                # self.print_with_interval('kaiqikongzhi 4')
-
-            # UV Switch
-            elif self.openUV == 1 and left_LR == -1.0 and left_FB == 0.0:
-                self.X = 2
-                self.BACK = 2
-                self.buttons_reset = True
-                # self.openUV_pre = 1
-                if self.debug_:
-                    print('UV Switch 1 ')
-            elif self.openUV == 2 and left_LR == -1.0 and left_FB == 0.0:
-                self.X = 3
-                self.BACK = 3
-                self.buttons_reset = True
-                # self.openUV_pre = 2
-                if self.debug_:
-                    print('UV Switch 2')
-            # forward
-            elif ch5_val == 0 and self.channel5_pre == 1 :
-                self.channel5_pre = ch5_val
-                self.A = 1
-                self.RT = -1.0
-                self.buttons_reset = True
-                if self.debug_:
-                    print('Standalone for Scouting')
-            # backward
-            elif ch5_val == 2 and self.channel5_pre == 1 :
-                self.channel5_pre = ch5_val
-                # self.channel6_pre = ch6_val
-
-                self.A = -1
-                self.RT = -1.0
-                self.buttons_reset = True
-                if self.debug_:
-                    print('Standalone for Scouting')
-
-            # Abort Job
-            # elif ch5_val == 1 and ch6_val == 1 and left_LR == -1.0:
-            #     self.channel5_pre = ch5_val
-            #     self.channel6_pre = ch6_val
-            #
-            #     self.B = 1
-            #     self.RT = -1.0
-            #     self.buttons_reset = True
-            #     if self.debug_:
-            #         print('Abort Job')
-
-            else :
-                self.LB = 0
-                self.RB = 0
-                self.flag_pre = 0
-
-
-
-
-            # Indoor demo - temporary code
-        #     elif ch5_val == 2 and ch6_val == 2 and right_FB == 0.0:
-        #         self.channel5_pre = ch5_val
-        #         self.channel6_pre = ch6_val
-        #
-        #         self.indoor_demo_pub.publish(Empty())
-        #         self.buttons_reset = True
-        #         if self.debug_:
-        #             print('Start indoor demo - Place the robot in the row entry before trigger')
-        #
-        #     # Pause Job
-        #     elif ch5_val == 0 and ch6_val == 1 and right_FB == 0.0:
-        #         self.channel5_pre = ch5_val
-        #         self.channel6_pre = ch6_val
-        #
-        #         self.Y = 1
-        #         self.buttons_reset = True
-        #         if self.debug_:
-        #             print('Pause Job')
-        #
-        #     # Resume Job
-        #     elif ch5_val == 2 and ch6_val == 1 and right_FB == 0.0:
-        #         self.channel5_pre = ch5_val
-        #         self.channel6_pre = ch6_val
-        #
-        #         self.A = 1
-        #         self.buttons_reset = True
-        #         if self.debug_:
-        #             print('Resume Job')
-        #
-        #     # Standalone for Scouting
-        #     elif ch5_val == 0 and ch6_val == 1 and right_FB == 1.0:
-        #         self.channel5_pre = ch5_val
-        #         self.channel6_pre = ch6_val
-        #
-        #         self.A = 1
-        #         self.RT = -1.0
-        #         self.buttons_reset = True
-        #         if self.debug_:
-        #             print('Standalone for Scouting')
-        #
-        #     # Abort Job
-        #     elif ch5_val == 0 and ch6_val == 1 and right_FB == -1.0:
-        #         self.channel5_pre = ch5_val
-        #         self.channel6_pre = ch6_val
-        #
-        #         self.B = 1
-        #         self.RT = -1.0
-        #         self.buttons_reset = True
-        #         if self.debug_:
-        #             print('Abort Job')
-        #
-        #     # UV Switch
-        #     elif knob1_norm > 0.0 and knob2_norm > 0.0:
-        #
-        #         self.X = 1
-        #         self.BACK = 1
-        #         self.buttons_reset = True
-        #         if self.debug_:
-        #             print('UV Switch')
-        #
-        # elif ch5_val == 1 and ch6_val == 1:
-        #     if self.channel5_pre is None or self.channel6_pre is None:
-        #         self.channel5_pre = ch5_val
-        #         self.channel6_pre = ch6_val
-        #         self.buttons_reset = True
-        #     elif ch5_val != self.channel5_pre or ch6_val != self.channel6_pre:
-        #         self.buttons_reset = True
-
-        # 映射到 Joy 消息,axes共8通道, 有旋钮消息
-        # [LX, LY, RX, RY, RT, knob1, knob2, 保留]
-        # self.axes = [
-        #     left_LR, left_FB, right_LR, right_FB,
-        #     self.RT, knob1_norm, knob2_norm, 0.0
-        # ]
-        # 映射到 Joy 消息,axes共8通道, 无旋钮消息
-        # print(f'knob1_norm: {knob1_norm}')
-        # print(f'knob2_norm: {knob2_norm}')
-
-        self.axes = [
-            0.0, left_FB, 0.0, -right_LR, right_FB, self.RT, 0.0, left_LR
-            # ,self.knob1_norm_orin, self.knob2_norm_orin
-        ]
-        self.buttons = [self.A, self.B, self.X, self.Y,
-                        self.LB, self.RB, self.BACK, 0, 0, 0, self.flag]
-
-        # print(f'axes: {self.axes}')
-        # print(f'buttons: {self.buttons}')
-
-        # 数据变化时发布
-        if (self.axes != self.axes_pre or self.buttons != self.buttons_pre
-                or abs(self.axes[4]) > 0.9 or abs(self.axes[3]) > 0.4):
-            print(f'axes: {self.axes}')
-            print(f'buttons: {self.buttons}')
+            # 发布消息
             self.joy_msg.axes = self.axes
             self.joy_msg.buttons = self.buttons
             self.joy_msg.header.stamp = self.get_clock().now().to_msg()
             self.joy_pub.publish(self.joy_msg)
 
+            # 更新前值
+            self.axes_pre = list(self.axes)
+            self.buttons_pre = list(self.buttons)
+
+            # 重置按钮
+            self.reset_buttons()
+
+            # 初始化ch[4]的前值 避免第二帧误触发4.1或4.2
+            self.ch4_prev = ch[4]
+
+            # 如果首次激活时ch[6]小于1000，标记trigger_3已完成，避免误触发
+            if ch[6] < 1000:
+                self.ch6_trigger_3_done = True
+
+            # 直接返回，不继续处理后续的摇杆映射
+            return
+
+        # 步骤4.0: 映射ch[0]-ch[3]为控制方向
+        left_rocker_LR = ch[3]
+        left_rocker_FB = ch[1]
+        right_rocker_LR = ch[0]
+        right_rocker_FB = ch[2]
+
+        left_LR = self.normalize_axis(left_rocker_LR)
+        left_FB = self.normalize_axis(left_rocker_FB)
+        right_LR = self.normalize_axis(right_rocker_LR)
+        right_FB = self.normalize_axis(right_rocker_FB)
+
+        # 步骤4.1: ch[4]从1000变为200
+        if self.ch4_prev == 1000 and 150 < ch[4] < 250:
+            self.A = 1
+            self.RT = -1.0
+            self.get_logger().info("Trigger 4.1: A=1, RT=-1.0 (ch[4]: 1000->200)")
+
+        # 步骤4.2: ch[4]从1000变为1800
+        elif self.ch4_prev == 1000 and 1750 < ch[4] < 1850:
+            self.A = -1
+            self.RT = -1.0
+            self.get_logger().info("Trigger 4.2: A=-1, RT=-1.0 (ch[4]: 1000->1800)")
+
+        # 更新ch[4]前值
+        self.ch4_prev = ch[4]
+
+        # 更新ch[6]最小值
+        self.ch6_min_in_activation = min(self.ch6_min_in_activation, ch[6])
+
+        # 步骤4.3: ch[6]从最小值大800，且自身大于1000
+        if (not self.ch6_trigger_2_done and
+                ch[6] > 1000 and
+                ch[6] - self.ch6_min_in_activation > 800):
+            self.X = 2
+            self.BACK = 2
+            self.ch6_trigger_2_done = True
+            self.get_logger().info(f"Trigger 4.3: X=2, BACK=2 (ch[6]={ch[6]}, min={self.ch6_min_in_activation})")
+
+        # 步骤4.4: ch[6]小于1000
+        if not self.ch6_trigger_3_done and ch[6] < 1000:
+            self.X = 3
+            self.BACK = 3
+            self.ch6_trigger_3_done = True
+            self.get_logger().info(f"Trigger 4.4: X=3, BACK=3 (ch[6]={ch[6]})")
+
+        # 如果ch[6]回到大于1000，重置触发3标志
+        if ch[6] >= 1000:
+            self.ch6_trigger_3_done = False
+
+        # 组装axes和buttons
+        self.axes = [
+            0.0, left_FB, 0.0, -right_LR, right_FB, self.RT, 0.0, left_LR
+        ]
+        self.buttons = [
+            self.A, self.B, self.X, self.Y,
+            self.LB, self.RB, self.BACK, 0, 0, 0, 0
+        ]
+
+        # 步骤4.5: 当映射值有更新时发布joy消息
+        if (self.axes != self.axes_pre or self.buttons != self.buttons_pre):
+            if self.debug_:
+                print(f'State: {self.current_state.name}')
+                print(f'axes: {self.axes}')
+                print(f'buttons: {self.buttons}')
+
+            self.joy_msg.axes = self.axes
+            self.joy_msg.buttons = self.buttons
+            self.joy_msg.header.stamp = self.get_clock().now().to_msg()
+            self.joy_pub.publish(self.joy_msg)
+
+        # 更新前值
         self.axes_pre = list(self.axes)
         self.buttons_pre = list(self.buttons)
-        self.set_buttons_zero()
+
+        self.reset_buttons()
 
     async def read_by_sbus(self):
         while not self.device_connect:
             try:
                 sbus = await SBUSReceiver.create(self.device_port)
                 self.device_connect = True
+                self.get_logger().info(f"Connected to {self.device_port}")
             except Exception as e:
                 if self.publish_first:
                     self.get_logger().warn(f'Cannot open {self.device_port}: {e}')
@@ -375,15 +363,6 @@ class JoystickSbus(Node):
 
 
 def main(args=None):
-    while True:
-        cpu_usage = psutil.cpu_percent(interval=0.5)
-
-        if cpu_usage < 90:
-            print(f"[INFO] CPU OK ({cpu_usage}%). Starting node.")
-            break
-        now = datetime.now().strftime("%H:%M:%S")
-        print(f"[WARN] {now} CPU too high ({cpu_usage}%). Delaying node startup...")
-        time.sleep(1)
     rclpy.init(args=args)
     node = JoystickSbus()
     loop = asyncio.get_event_loop()
