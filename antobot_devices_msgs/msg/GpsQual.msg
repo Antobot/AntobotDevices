@@ -8,3 +8,4 @@ float32 geo_sep      # Geoid separation
 uint8[] sat_info     # Full satellite information
 float32 v_cog        # Velocity - Course over ground (heading) [degrees]
 float32 v_sog        # Velocity - Speed over ground (km/h)
+float32 frequency    # frequency

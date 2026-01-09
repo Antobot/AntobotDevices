@@ -233,16 +233,12 @@ class lidar_cx(lidar):
 
 class lidar_mid360(lidar):
     '''Stores lidar specific information'''
-    def __init__(self, ip="",frame_id="",num=1,id=200,sim=False):
+    def __init__(self,num=1,sim=False):
 
-        super().__init__(id, sim,type="mid360")
+        super().__init__(200, sim,type="mid360")
         self.type = 'mid360'
         # Save arguments
         # TODO: mid360 port settings
-        self.frame_id = frame_id
-        self.name_space = f'lidar_{id}'
-        self.ip = ip
-        self.device_id = id
         self.num = num
 
 
@@ -252,17 +248,20 @@ class lidar_mid360(lidar):
     def createLauncher(self):
         '''Starts mid360 launch file'''
 
-        if(self.num == 1):
-            self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
-        elif(self.num == 2):
-            self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',"multi_"+self.type+"_launch.py")
+        # if(self.num == 1):
+        #     self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',self.type+"_launch.py")
+        # elif(self.num == 2):
+        #     self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',"multi_"+self.type+"_launch.py")
+
+        self.launch_file_path = os.path.join(get_package_share_directory('antobot_devices_lidar'),'launch',"mid360_common_launch.py")
+
         included_launch = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(self.launch_file_path),
-            launch_arguments={
-                'name_space': self.name_space,
-                'frame_id': self.frame_id,
-                'id': str(self.device_id)
-            }.items()
+            PythonLaunchDescriptionSource(self.launch_file_path)
+            # launch_arguments={
+            #     'name_space': self.name_space,
+            #     'frame_id': self.frame_id,
+            #     'id': str(self.device_id)
+            # }.items()
         )
 
         ld = LaunchDescription()
@@ -342,6 +341,12 @@ class lidarManagerClass(Node):
 
             mid360_count = sum(1 for cfg in params["lidar"].values() if cfg["type"] == "mid360")
             print("SW2320: Lidar Manager: Found {} mid360 lidars".format(mid360_count))
+            if mid360_count > 0:
+                self.lidars["mid360"] = lidar_mid360(
+                    mid360_count,
+                    sim = self.sim
+                )
+
 
             for lidar_id, lidar_cfg in params["lidar"].items():
                 lidar_type = lidar_cfg["type"]
@@ -355,18 +360,18 @@ class lidarManagerClass(Node):
                     frame_id = f"lidar_{id}_link"
 
                 # Instantiate based on type
-                if lidar_type == "mid360":
-                    # Example: lidar_mid360(ip, frame_id, id, sim)
-                    self.lidars[f"mid360{lidar_id}"] = lidar_mid360(
-                        ip,
-                        frame_id,
-                        mid360_count,
-                        id=int(id),
-                        sim=self.sim
-                    )
-                    print(f"Started mid360 lidar {lidar_id} at {ip} ({id})")
+                # if lidar_type == "mid360":
+                #     # Example: lidar_mid360(ip, frame_id, id, sim)
+                #     self.lidars[f"mid360{lidar_id}"] = lidar_mid360(
+                #         ip,
+                #         frame_id,
+                #         mid360_count,
+                #         id=int(id),
+                #         sim=self.sim
+                #     )
+                #     print(f"Started mid360 lidar {lidar_id} at {ip} ({id})")
 
-                elif lidar_type == "cx":
+                if lidar_type == "cx":
                     m_port = lidar_cfg.get("msop_port", 2368)
                     d_port = lidar_cfg.get("difop_port", 2369)
                     # Example: lidar_cx(ip, m_port, d_port, frame_id, id, sim)
@@ -416,8 +421,12 @@ class lidarManagerClass(Node):
         frontLidarAvailable=False
         rearLidarAvailable=False
 
-        response.response_code = False 
-        print(self.lidars.values())
+        # response.response_code = False 
+        # print(self.lidars.values())
+        
+        response.response_code = True
+        return response
+        # print(self.lidars.values())
 
         for lidar_i in self.lidars.values():
             print(lidar_i.type, lidar_i.device_id)

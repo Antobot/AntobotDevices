@@ -18,7 +18,7 @@ cmdline_bd_code = 'livox0000000001'
 
 cur_path = os.path.split(os.path.realpath(__file__))[0] + '/'
 cur_config_path = cur_path + '../config'
-user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config.json')
+# user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config.json')
 ################### user configure parameters for ros2 end #####################
 
 
@@ -33,7 +33,7 @@ def generate_launch_description():
     with open(platform_config_file, 'r') as f:
         platform_config = yaml.safe_load(f)
 
-    aRCU_enable = not platform_config.get('aRCU_enable', False)
+    aRCU_enable = platform_config.get('aRCU_enable', False)
 
     if aRCU_enable:
         user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config_aRCU.json')
