@@ -23,6 +23,9 @@ import traceback
 import queue
 
 from dataclasses import dataclass
+
+import yaml
+from ament_index_python import get_package_share_directory
 import rclpy
 from rclpy.node import Node
 
@@ -410,9 +413,33 @@ class ROS2Interface(Node):
         self.declare_parameter('rtcm_topic', '/antobot_gps/rtcm')
         self.declare_parameter('port_movingbase', '/dev/ttyTHS1')
         self.declare_parameter('port_movingrover', '/dev/anto_gps')
-        self.declare_parameter('antenna_baseline', 1.3)
-        self.antenna_baseline = self.get_parameter('antenna_baseline').get_parameter_value().double_value
-        
+        # self.declare_parameter('antenna_baseline', 1.3)
+        # self.antenna_baseline = self.get_parameter('antenna_baseline').get_parameter_value().double_value
+
+        # get parameters from configuration file
+        packagePath = get_package_share_directory('antobot_description')
+        platform_config_path = packagePath + "/config/platform_config.yaml"
+        with open(platform_config_path, 'r') as yamlfile:
+            data = yaml.safe_load(yamlfile)
+            if 'f9p_2' in data['gps']:
+                gps_x_1 = data['gps']['urcu']['px']
+                gps_y_1 = data['gps']['urcu']['py']
+                gps_z_1 = data['gps']['urcu']['pz']
+
+                gps_x_2 = data['gps']['f9p_2']['px']
+                gps_y_2 = data['gps']['f9p_2']['py']
+                gps_z_2 = data['gps']['f9p_2']['pz']
+
+                dx = gps_x_1 - gps_x_2
+                dy = gps_y_1 - gps_y_2
+                dz = gps_z_1 - gps_z_2
+
+                import math
+                self.antenna_baseline = math.sqrt(dx**2 + dy**2 + dz**2)
+                
+        print(f"antenna_baseline: {self.antenna_baseline}")
+
+        # asyncio loop
         self.loop = asyncio.get_running_loop()
         self.rtcm_last_time = 0
         self.msg_rec_heading_time = None
