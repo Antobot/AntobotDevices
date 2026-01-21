@@ -88,13 +88,8 @@ class gpsManager(Node):
         gps_data = None
         device_type = None
 
-
-        packagePath=get_package_share_directory('antobot_description')
-        path = packagePath + "/config/platform_config.yaml"
-
-        with open(path, 'r') as yamlfile:
-            data = yaml.safe_load(yamlfile)
-            gps_data = data['gps']
+        data = get_robot_config("platform_config")
+        gps_data = data['gps']
 
         return gps_data
 

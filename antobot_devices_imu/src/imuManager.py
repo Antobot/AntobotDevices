@@ -10,6 +10,7 @@ import roslib
 roslib.load_manifest("rosparam")
 import rosparam
 #from antobot_manager_software.launchManager import Node,RoslaunchWrapperObject
+from antobot_com_postgresql.db_config_loader import get_robot_config
 
 
 class imuManager():
@@ -18,8 +19,6 @@ class imuManager():
         device_xsens = False
         nav_imu = "urcu"
         rospack = rospkg.RosPack()
-        configPath=rospack.get_path('antobot_description')
-        config_file = configPath+ "/config/platform_config.yaml"
         #paramPath = rospack.get_path('xsens_mti_driver')
         #param_file = paramPath+ "/param/xsens_mti_node.yaml"
 
@@ -51,11 +50,8 @@ class imuManager():
     def load_config(self):
         """Load platform_config."""
         rospack = rospkg.RosPack()
-        packagePath=rospack.get_path('antobot_description')
-        path = packagePath + "/config/platform_config.yaml"
-        with open(path, 'r') as yamlfile:
-            data = yaml.safe_load(yamlfile)
-            imu_data = data['imu']
+        data = get_robot_config("platform_config")
+        imu_data = data['imu']
         return imu_data
 
 

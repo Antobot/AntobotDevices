@@ -29,6 +29,7 @@ from ament_index_python.packages import get_package_share_directory
 
 from antobot_devices_msgs.srv import LidarManager
 from antobot_devices_msgs.srv import CostmapToggleObservation
+from antobot_com_postgresql.db_config_loader import get_robot_config
 
 ###################################################################################################################################################
 
@@ -325,11 +326,7 @@ class lidarManagerClass(Node):
     
     def read_config_file(self):
         try:
-            package_path = get_package_share_directory('antobot_description')
-            config_file = os.path.join(package_path, 'config', 'platform_config.yaml')
-
-            with open(config_file, 'r') as file:
-                params = yaml.safe_load(file)
+            params = get_robot_config("platform_config")
 
             robot_hardware = params["robot_hardware"]
             if robot_hardware:

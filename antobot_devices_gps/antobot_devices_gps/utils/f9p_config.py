@@ -18,6 +18,7 @@ import serial
 import time
 import yaml
 from ament_index_python.packages import get_package_share_directory
+from antobot_com_postgresql.db_config_loader import get_robot_config
 
 class F9P_config:
     """GPS parsing module.	Can parse simple NMEA data sentences from SPI
@@ -519,12 +520,8 @@ if __name__ == '__main__':
     moving_base = False
     scout_box = False
 
-    packagePath=get_package_share_directory('antobot_description')
-    path = packagePath + "/config/platform_config.yaml"
-
-    with open(path, 'r') as yamlfile:
-        data = yaml.safe_load(yamlfile)
-        dev_type = data['gps'].keys()
+    data = get_robot_config("platform_config")
+    dev_type = data['gps'].keys()
     # Importing device-specific packages
     if "urcu" in dev_type :
         device = "spi"

@@ -6,6 +6,7 @@ from launch.substitutions import LaunchConfiguration, TextSubstitution, PathJoin
 from launch_ros.actions import Node
 from launch.substitutions import PythonExpression
 from ament_index_python.packages import get_package_share_directory
+from antobot_com_postgresql.db_config_loader import get_robot_config
 
 ################### user configure parameters for ros2 start ###################
 xfer_format   = 4    # 0-Pointcloud2(PointXYZRTL), 1-customized pointcloud format
@@ -24,15 +25,8 @@ cur_config_path = cur_path + '../config'
 
 def generate_launch_description():
 
-    # Path to platform YAML
-    platform_config_file = os.path.join(
-        get_package_share_directory('antobot_description'),
-        'config',
-        'platform_config.yaml'
-    )
-
-    with open(platform_config_file, 'r') as f:
-        platform_config = yaml.safe_load(f)
+    # Load platform parameters from database
+    platform_config = get_robot_config("platform_config")
 
     aRCU_enable = platform_config.get('aRCU_enable', False)
 

@@ -28,6 +28,7 @@ import threading
 import serial
 from std_msgs.msg import String
 from antobot_devices_msgs.msg import GpsQual, RTCM
+from antobot_com_postgresql.db_config_loader import get_robot_config
 
 
 class gpsCorrections(Node):
@@ -48,17 +49,13 @@ class gpsCorrections(Node):
         self.running = True
         self.sent_time = self.get_clock().now()
         # Reading configuration file
-        packagePath = get_package_share_directory('antobot_description')
-        path = packagePath + "/config/platform_config.yaml"
-
-        with open(path, 'r') as yamlfile:
-            data = yaml.safe_load(yamlfile)
-            dev_type = data['gps'].keys()
-            for key, value in data['gps'].items():
-                #print(key)
-                if key == 'urcu':
-                    self.corr_type=value['rtk_type']
-                    dev_port = value['device_port']
+        data = get_robot_config("platform_config")
+        dev_type = data['gps'].keys()
+        for key, value in data['gps'].items():
+            #print(key)
+            if key == 'urcu':
+                self.corr_type=value['rtk_type']
+                dev_port = value['device_port']
         # Importing device-specific packages
         print(dev_type)
         if "urcu" in dev_type :

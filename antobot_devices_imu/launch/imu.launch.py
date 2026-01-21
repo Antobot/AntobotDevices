@@ -5,9 +5,8 @@ import rclpy
 import yaml
 import os
 from ament_index_python.packages import get_package_share_directory
+from antobot_com_postgresql.db_config_loader import get_robot_config
 
-packagePath=get_package_share_directory('antobot_description')
-path = packagePath + "/config/platform_config.yaml"
 nodelist = []
 
 def generate_launch_description():
@@ -38,11 +37,8 @@ def generate_launch_description():
             executable='transducer_m_imu',
             parameters=[{'use_sim_time': False},config],
         )
-    packagePath=get_package_share_directory('antobot_description')
-    path = packagePath + "/config/platform_config.yaml"
-    with open(path, 'r') as yamlfile:
-            data = yaml.safe_load(yamlfile)
-            imu_data = data['imu']
+    data = get_robot_config("platform_config")
+    imu_data = data['imu']
 
     for device, settings in imu_data.items():
             switch = settings.get("switch", False)
