@@ -55,6 +55,7 @@ class JoystickSbus(Node):
 
         # 触发状态记录
         self.ch4_prev = 1000  # ch[4]前一帧的值
+        self.ch5_prev = 1000  # ch[5]前一帧的值
         self.ch6_min_in_activation = float('inf')  # 本次激活时ch[6]的最小值
         self.ch6_trigger_2_done = False  # ch[6]触发2是否已完成
         self.ch6_trigger_3_done = False  # ch[6]触发3是否已完成
@@ -261,6 +262,7 @@ class JoystickSbus(Node):
 
             # 初始化ch[4]的前值 避免第二帧误触发4.1或4.2
             self.ch4_prev = ch[4]
+            self.ch5_prev = ch[5]
 
             # 如果首次激活时ch[6]小于1000，标记trigger_3已完成，避免误触发
             if ch[6] < 1000:
@@ -280,6 +282,7 @@ class JoystickSbus(Node):
         right_LR = self.normalize_axis(right_rocker_LR)
         right_FB = self.normalize_axis(right_rocker_FB)
 
+
         # 步骤4.1: ch[4]从1000变为200
         if self.ch4_prev == 1000 and 150 < ch[4] < 250:
             self.A = 1
@@ -292,8 +295,21 @@ class JoystickSbus(Node):
             self.RT = -1.0
             self.get_logger().info("Trigger 4.2: A=-1, RT=-1.0 (ch[4]: 1000->1800)")
 
-        # 更新ch[4]前值
+        # 步骤4.3: ch[5]从1000变为200 --resume
+        elif self.ch5_prev == 1000 and 150 < ch[5] < 250:
+            self.A = 1
+            self.RT = 0.0
+            self.get_logger().info("Trigger 4.3: A=1, RT=0.0 (ch[4]: 1000->200)")
+
+        # 步骤4.4: ch[5]从1000变为1800 --pause
+        elif self.ch5_prev == 1000 and 1750 < ch[5] < 1850:
+            self.Y = 1
+            self.RT = 0.0
+            self.get_logger().info("Trigger 4.4: Y=1, RT=0.0 (ch[4]: 1000->1800)")
+
+        # 更新ch[4] ch[5]前值
         self.ch4_prev = ch[4]
+        self.ch5_prev = ch[5]
 
         # 更新ch[6]最小值
         self.ch6_min_in_activation = min(self.ch6_min_in_activation, ch[6])
