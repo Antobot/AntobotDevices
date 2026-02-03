@@ -295,8 +295,6 @@ class JoystickSbus(Node):
             self.RT = -1.0
             self.get_logger().info("Trigger 4.2: A=-1, RT=-1.0 (ch[4]: 1000->1800)")
 
-        # 更新ch[4]前值
-        self.ch4_prev = ch[4]
         # 步骤4.3: ch[5]从1000变为200 --resume
         elif self.ch5_prev == 1000 and 150 < ch[5] < 250:
             self.A = 1
