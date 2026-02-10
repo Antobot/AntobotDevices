@@ -12,6 +12,7 @@
 # # # #  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import yaml
+import os
 import socket
 import serial
 import asyncio
@@ -24,6 +25,7 @@ from builtin_interfaces.msg import Time
 from ament_index_python.packages import get_package_share_directory
 
 from antobot_urcu.launchManager import AntobotSWNode, Launchfile, RoslaunchWrapperObject
+from antobot_com_postgresql.db_config_loader import get_robot_config
 from antobot_devices_gps.gps_f9p import F9P_GPS
 #from antobot_devices_gps.gps_movingbase import MovingBase_Ros
 from antobot_devices_gps.gps_corrections import gpsCorrections
@@ -89,13 +91,10 @@ class gpsManager(Node):
         gps_data = None
         device_type = None
 
-
-        packagePath=get_package_share_directory('antobot_description')
-        path = packagePath + "/config/platform_config.yaml"
-
-        with open(path, 'r') as yamlfile:
-            data = yaml.safe_load(yamlfile)
-            gps_data = data['gps']
+        packagePath = get_package_share_directory('antobot_description')
+        platform_config_path = os.path.join(packagePath, 'config', 'platform_config.yaml')
+        data = get_robot_config("platform_config", platform_config_path)
+        gps_data = data['gps']
 
         return gps_data
 

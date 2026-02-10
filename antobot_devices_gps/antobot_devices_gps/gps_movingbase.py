@@ -25,6 +25,7 @@ import queue
 from dataclasses import dataclass
 
 import yaml
+import os
 from ament_index_python import get_package_share_directory
 import rclpy
 from rclpy.node import Node
@@ -32,6 +33,7 @@ from rclpy.node import Node
 from std_msgs.msg import Header
 
 from antobot_devices_msgs.msg import GpsHeading, RTCM
+from antobot_com_postgresql.db_config_loader import get_robot_config
 
 @dataclass
 class RELPOSNEDFrame:
@@ -418,24 +420,23 @@ class ROS2Interface(Node):
 
         # get parameters from configuration file
         packagePath = get_package_share_directory('antobot_description')
-        platform_config_path = packagePath + "/config/platform_config.yaml"
-        with open(platform_config_path, 'r') as yamlfile:
-            data = yaml.safe_load(yamlfile)
-            if 'f9p_2' in data['gps']:
-                gps_x_1 = data['gps']['urcu']['px']
-                gps_y_1 = data['gps']['urcu']['py']
-                gps_z_1 = data['gps']['urcu']['pz']
+        platform_config_path = os.path.join(packagePath, 'config', 'platform_config.yaml')
+        data = get_robot_config("platform_config", platform_config_path)
+        if 'f9p_2' in data['gps']:
+            gps_x_1 = data['gps']['urcu']['px']
+            gps_y_1 = data['gps']['urcu']['py']
+            gps_z_1 = data['gps']['urcu']['pz']
 
-                gps_x_2 = data['gps']['f9p_2']['px']
-                gps_y_2 = data['gps']['f9p_2']['py']
-                gps_z_2 = data['gps']['f9p_2']['pz']
+            gps_x_2 = data['gps']['f9p_2']['px']
+            gps_y_2 = data['gps']['f9p_2']['py']
+            gps_z_2 = data['gps']['f9p_2']['pz']
 
-                dx = gps_x_1 - gps_x_2
-                dy = gps_y_1 - gps_y_2
-                dz = gps_z_1 - gps_z_2
+            dx = gps_x_1 - gps_x_2
+            dy = gps_y_1 - gps_y_2
+            dz = gps_z_1 - gps_z_2
 
-                import math
-                self.antenna_baseline = math.sqrt(dx**2 + dy**2 + dz**2)
+            import math
+            self.antenna_baseline = math.sqrt(dx**2 + dy**2 + dz**2)
                 
         print(f"antenna_baseline: {self.antenna_baseline}")
 
