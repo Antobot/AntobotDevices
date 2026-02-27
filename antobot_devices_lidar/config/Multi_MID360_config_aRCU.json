@@ -29,6 +29,9 @@
       "pcl_data_type" : 1,
       "pattern_mode" : 0,
       "frame_id" : "lidar_200_frame",
+      "fov_en": 1,
+      "fov_cfg0": { "yaw_start": 0, "yaw_stop": 135, "pitch_start": -7, "pitch_stop": 52 },
+      "fov_cfg1": { "yaw_start": 225, "yaw_stop": 359, "pitch_start": -7, "pitch_stop": 52 },
       "extrinsic_parameter" : {
         "roll": 0.0,
         "pitch": 0.0,
@@ -43,6 +46,9 @@
       "pcl_data_type" : 1,
       "pattern_mode" : 0,
       "frame_id" : "lidar_201_frame",
+      "fov_en": 1,
+      "fov_cfg0": { "yaw_start": 0, "yaw_stop": 135, "pitch_start": -7, "pitch_stop": 52 },
+      "fov_cfg1": { "yaw_start": 225, "yaw_stop": 359, "pitch_start": -7, "pitch_stop": 52 },
       "extrinsic_parameter" : {
         "roll": 0.0,
         "pitch": 0.0,
