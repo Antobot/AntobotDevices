@@ -328,6 +328,7 @@ class JoystickSbus(Node):
             self.X = 3
             self.BACK = 3
             self.ch6_trigger_3_done = True
+            self.ch6_trigger_2_done = False
             self.get_logger().info(f"Trigger 4.4: X=3, BACK=3 (ch[6]={ch[6]})")
 
         # 如果ch[6]回到大于1000，重置触发3标志
