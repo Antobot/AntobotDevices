@@ -59,6 +59,9 @@ class JoystickSbus(Node):
         self.ch6_min_in_activation = float('inf')  # 本次激活时ch[6]的最小值
         self.ch6_trigger_2_done = False  # ch[6]触发2是否已完成
         self.ch6_trigger_3_done = False  # ch[6]触发3是否已完成
+        self.ch7_min_in_activation = float('inf')  # The minimum value of ch[7] during this activation
+        self.ch7_trigger_2_done = False  # Whether trigger 2 for ch[7] has been completed
+        self.ch7_trigger_3_done = False  # Whether trigger 3 for ch[7] has been completed
 
         # 按钮状态
         self.A = self.B = self.X = self.Y = 0
@@ -127,6 +130,9 @@ class JoystickSbus(Node):
                 self.ch6_min_in_activation = float('inf')
                 self.ch6_trigger_2_done = False
                 self.ch6_trigger_3_done = False
+                self.ch7_min_in_activation = float('inf')
+                self.ch7_trigger_2_done = False
+                self.ch7_trigger_3_done = False
                 self.X = 3
                 self.BACK = 3
 
@@ -144,10 +150,10 @@ class JoystickSbus(Node):
 
                 # 状态转换
                 self.current_state = RobotState.POWER_ON
-                self.activation_triggered = False
-                self.ch6_min_in_activation = float('inf')
-                self.ch6_trigger_2_done = False
-                self.ch6_trigger_3_done = False
+                # self.activation_triggered = False
+                # self.ch6_min_in_activation = float('inf')
+                # self.ch6_trigger_2_done = False
+                # self.ch6_trigger_3_done = False
 
                 # 重置按钮
                 self.reset_buttons()
@@ -167,6 +173,9 @@ class JoystickSbus(Node):
                 self.ch6_min_in_activation = float('inf')  # 重置ch6最小值
                 self.ch6_trigger_2_done = False
                 self.ch6_trigger_3_done = False
+                self.ch7_min_in_activation = float('inf')  # Reset ch[7] minimum value
+                self.ch7_trigger_2_done = False
+                self.ch7_trigger_3_done = False
 
         # 激活状态下，检查是否退出激活状态（取消激活）
         if self.current_state == RobotState.ACTIVATED:
@@ -197,6 +206,9 @@ class JoystickSbus(Node):
                 self.ch6_min_in_activation = float('inf')
                 self.ch6_trigger_2_done = False
                 self.ch6_trigger_3_done = False
+                self.ch7_min_in_activation = float('inf')
+                self.ch7_trigger_2_done = False
+                self.ch7_trigger_3_done = False
 
                 # 重置按钮
                 self.reset_buttons()
@@ -268,6 +280,9 @@ class JoystickSbus(Node):
             if ch[6] < 1000:
                 self.ch6_trigger_3_done = True
 
+            if ch[7] < 1000:
+                self.ch7_trigger_3_done = True
+
             # 直接返回，不继续处理后续的摇杆映射
             return
 
@@ -314,6 +329,8 @@ class JoystickSbus(Node):
         # 更新ch[6]最小值
         self.ch6_min_in_activation = min(self.ch6_min_in_activation, ch[6])
 
+
+
         # 步骤4.3: ch[6]从最小值大800，且自身大于1000
         if (not self.ch6_trigger_2_done and
                 ch[6] > 1000 and
@@ -327,14 +344,35 @@ class JoystickSbus(Node):
         if not self.ch6_trigger_3_done and ch[6] < 1000:
             self.X = 3
             self.BACK = 3
+            self.ch6_trigger_2_done = False  # Reset trigger 2 when trigger 3 is activated
             self.ch6_trigger_3_done = True
+            self.ch6_trigger_2_done = False
             self.get_logger().info(f"Trigger 4.4: X=3, BACK=3 (ch[6]={ch[6]})")
 
         # 如果ch[6]回到大于1000，重置触发3标志
         if ch[6] >= 1000:
             self.ch6_trigger_3_done = False
 
-        # 组装axes和buttons
+        # update ch[7] minimum value
+        self.ch7_min_in_activation = min(self.ch7_min_in_activation, ch[7])
+                # ch7
+        if (not self.ch7_trigger_2_done and
+                ch[7] > 1000 and
+                ch[7] - self.ch7_min_in_activation > 800):
+            self.X = 4
+            self.BACK = 4
+            self.ch7_trigger_2_done = True
+            self.get_logger().info(f"Trigger: X=4, BACK=4 (ch[7]={ch[7]}, min={self.ch7_min_in_activation})")
+
+        if not self.ch7_trigger_3_done and ch[7] < 1000:
+            self.X = 5
+            self.BACK = 5
+            self.ch7_trigger_2_done = False  # Reset trigger 2 when trigger 3 is activated
+            self.ch7_trigger_3_done = True
+            self.get_logger().info(f"Trigger: X=5, BACK=5 (ch[7]={ch[7]})")
+
+        if ch[7] >= 1000:
+            self.ch7_trigger_3_done = False        # 组装axes和buttons
         self.axes = [
             0.0, left_FB, 0.0, -right_LR, right_FB, self.RT, 0.0, left_LR
         ]

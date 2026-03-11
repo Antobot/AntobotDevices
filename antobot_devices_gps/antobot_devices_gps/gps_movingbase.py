@@ -543,11 +543,11 @@ class MovingBase:
             self.ros_node.set_heading_time(self.msg_rec_heading_time)
 
 
-            print("MovingBase initialization completed successfully")
+            self.ros_node.get_logger().info("MovingBase initialization completed successfully")
             return True
             
         except Exception as e:
-            print(e)
+            self.ros_node.get_logger().error(f"MovingBase initialization failed: {e}")
             traceback.print_exc()
 
     async def _setup_serial_connections(self, rtcm_buff) -> None:
@@ -562,8 +562,13 @@ class MovingBase:
                 self.port1,
                 baudrate=460800
             )
-            print(f"Base station connected on {self.port1}")
-            
+            self.ros_node.get_logger().info(f"Base station connected on {self.port1}")
+
+        except Exception as e:
+            self.ros_node.get_logger().error(f"Failed to setup port({self.port1}) connections: {e}")
+            raise
+
+        try:
             # Setup rover connection
             self._transport_rover, self._protocol_rover = await serial_asyncio.create_serial_connection(
                 asyncio.get_running_loop(),
@@ -571,15 +576,14 @@ class MovingBase:
                 self.port2,
                 baudrate=460800
             )
-            print(f"Rover connected on {self.port2}")
+            self.ros_node.get_logger().info(f"Rover connected on {self.port2}")
             
             # Link transports for data forwarding
             if self._protocol_base and self._transport_rover:
                 self._protocol_base.transport_rover = self._transport_rover
                 
         except Exception as e:
-            print(f"Failed to setup serial connections: {e}")
-            raise
+            self.ros_node.get_logger().error(f"Failed to setup port ({self.port2}) connections: {e}")
 
 
     async def get_relposned(self):
@@ -603,7 +607,7 @@ class MovingBase:
 
     async def run(self):
         try:           
-            print("MovingBase started successfully")
+            self.ros_node.get_logger().info("MovingBase started successfully")
             msg_heading = GpsHeading()
             msg_heading.header= Header()
             msg_heading.header.frame_id = 'gps_frame'  # FRAME_ID
