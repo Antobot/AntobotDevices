@@ -25,7 +25,7 @@ from builtin_interfaces.msg import Time
 from ament_index_python.packages import get_package_share_directory
 
 from antobot_urcu.launchManager import AntobotSWNode, Launchfile, RoslaunchWrapperObject
-from antobot_com_postgresql.db_config_loader import get_robot_config
+from antobot_urcu.db_config_loader import get_robot_config
 from antobot_devices_gps.gps_f9p import F9P_GPS
 #from antobot_devices_gps.gps_movingbase import MovingBase_Ros
 from antobot_devices_gps.gps_corrections import gpsCorrections

@@ -28,7 +28,7 @@ import threading
 import serial
 from std_msgs.msg import String
 from antobot_devices_msgs.msg import GpsQual, RTCM
-from antobot_com_postgresql.db_config_loader import get_robot_config
+from antobot_urcu.db_config_loader import get_robot_config
 
 
 class gpsCorrections(Node):

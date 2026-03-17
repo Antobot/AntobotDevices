@@ -29,7 +29,7 @@ from ament_index_python.packages import get_package_share_directory
 
 from antobot_devices_msgs.srv import LidarManager
 from antobot_devices_msgs.srv import CostmapToggleObservation
-from antobot_com_postgresql.db_config_loader import get_robot_config
+from antobot_urcu.db_config_loader import get_robot_config
 
 ###################################################################################################################################################
 

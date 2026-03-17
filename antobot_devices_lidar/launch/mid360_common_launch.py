@@ -6,7 +6,7 @@ from launch.substitutions import LaunchConfiguration, TextSubstitution, PathJoin
 from launch_ros.actions import Node
 from launch.substitutions import PythonExpression
 from ament_index_python.packages import get_package_share_directory
-from antobot_com_postgresql.db_config_loader import get_robot_config
+from antobot_urcu.db_config_loader import get_robot_config
 
 ################### user configure parameters for ros2 start ###################
 xfer_format   = 4    # 0-Pointcloud2(PointXYZRTL), 1-customized pointcloud format

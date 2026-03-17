@@ -33,7 +33,7 @@ from rclpy.node import Node
 from std_msgs.msg import Header
 
 from antobot_devices_msgs.msg import GpsHeading, RTCM
-from antobot_com_postgresql.db_config_loader import get_robot_config
+from antobot_urcu.db_config_loader import get_robot_config
 
 @dataclass
 class RELPOSNEDFrame:

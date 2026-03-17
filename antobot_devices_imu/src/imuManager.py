@@ -11,7 +11,7 @@ roslib.load_manifest("rosparam")
 import rosparam
 #from antobot_manager_software.launchManager import Node,RoslaunchWrapperObject
 from ament_index_python.packages import get_package_share_directory
-from antobot_com_postgresql.db_config_loader import get_robot_config
+from antobot_urcul.db_config_loader import get_robot_config
 
 
 class imuManager():

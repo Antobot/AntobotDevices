@@ -5,7 +5,7 @@ import rclpy
 import yaml
 import os
 from ament_index_python.packages import get_package_share_directory
-from antobot_com_postgresql.db_config_loader import get_robot_config
+from antobot_urcu.db_config_loader import get_robot_config
 
 nodelist = []
 
@@ -25,18 +25,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{'use_sim_time': False},{'publish_rate': 100.0}],
         )
-    config = os.path.join(
-        get_package_share_directory('tm_imu'),
-        'config',
-        'params.yaml'
-    )
-    tm_node=Node(
-            name='tm_imu',
-            package='tm_imu',
-            namespace='/tm',
-            executable='transducer_m_imu',
-            parameters=[{'use_sim_time': False},config],
-        )
+ 
     packagePath = get_package_share_directory('antobot_description')
     platform_config_path = os.path.join(packagePath, 'config', 'platform_config.yaml')
     data = get_robot_config("platform_config", platform_config_path)
@@ -62,11 +51,7 @@ def generate_launch_description():
                         icm_node=Node(package='icm_imu',namespace='/imu', executable='icm_node',)
                     nodelist.append(TimerAction(period=waittime,actions=[icm_node])) 
                     waittime=waittime+1.0
-                if device=="ahrs":
-                    if mode == "navigation":
-                        tm_node=Node(package='tm_imu',namespace='/imu', executable='transducer_m_imu',)
-                    nodelist.append(TimerAction(period=waittime,actions=[tm_node]))  
-                    waittime=waittime+1.0
+                
                     
     return LaunchDescription(nodelist)
     
