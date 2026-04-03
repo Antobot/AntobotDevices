@@ -188,6 +188,7 @@ class gpsCorrections(Node):
 
     def rtcm_callback(self, data):
         try:
+            self.get_logger().info(f"[RTCM_RECV_TOPIC] bytes={len(data.data)} hex={data.data[:32].hex()}")
             data = self.serial_port.write(data.data)
             self.last_receive_time = time.time()
         except Exception as e:
@@ -254,10 +255,12 @@ class gpsCorrections(Node):
         if self.latest_gga and self.time_offset<0.5:
             try:
                 self.sock.send(self.latest_gga.encode())
-                print(f"[INFO] Sent GGA: {self.latest_gga.strip()}")
+                # print(f"[INFO] Sent GGA: {self.latest_gga.strip()}")
+                self.get_logger().info(f"[GGA_SENT] {self.latest_gga.strip()}")
                 self.sent_time = self.get_clock().now()
             except Exception as e:
-                print(f"[WARN] Failed to send GGA: {e}")
+                # print(f"[WARN] Failed to send GGA: {e}")
+                self.get_logger().error(f"[GGA_SEND_ERR] {e}")
                 #self.running=False
                 self.connect_ntrip()
         if ((self.get_clock().now()-self.sent_time).nanoseconds/1e9 )> 35:
