@@ -295,7 +295,7 @@ class F9P_GPS(Node):
             self.gpsfix.header.stamp = self.gps_timestamp            # Assigning time received from F9P
         # self.gpsfix.header.stamp = current_time.to_sec()       # Assigning current time (ROS) - DEPRECATED
         else:
-            self.gps_time_offset == 99
+            self.gps_time_offset = 99
         if self.gps_time_offset > 0.5 and self.gps_time_offset != 99:
             self.get_logger().error("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
             self.poll_buff =(self.gps_time_offset//0.125)*3
@@ -305,7 +305,7 @@ class F9P_GPS(Node):
         elif self.gps_time_offset!=99:
             self.poll_buff = 1
         else:
-            self.pull_buff = 24
+            self.poll_buff = 24
         self.poll_buff_pre=self.poll_buff
         
         print("pulled sentence:",self.poll_buff)            
