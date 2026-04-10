@@ -35,6 +35,7 @@ from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8, Float32, Header
 from antobot_devices_msgs.msg import GpsQual
 from .ublox_gps.ublox_gps import UbloxGps
+import math
 
 class F9P_GPS(Node):
 
@@ -49,6 +50,25 @@ class F9P_GPS(Node):
         self.node_type = ""
         print("in gps_f9p")
         super().__init__("gps_f9p")
+        
+        
+        self.declare_parameter("enable_gps_filter", True)
+        self.enable_gps_filter = self.get_parameter("enable_gps_filter").value
+
+        self.declare_parameter("inject_test_bad_fix", False)
+        self.inject_test_bad_fix = self.get_parameter("inject_test_bad_fix").value
+
+        self.inject_test_bad_fix_once_done = False
+        self.good_fix_count = 0
+        
+        
+        if self.enable_gps_filter:
+            self.get_logger().info("GPS jump filter is ENABLED")
+        else:
+            self.get_logger().warn("GPS jump filter is DISABLED, publishing raw GPS")
+        
+        
+        
         self.gpsfix = NavSatFix()
         self.gpsfix.header= Header()
         self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
@@ -100,11 +120,26 @@ class F9P_GPS(Node):
         self.gga_msg_pub=self.create_publisher(String, "/antobot_gps/gga", 10)
         self._timer = self.create_timer(1 / 50, self.do_publish)
         
+        
+         # ---------------- GPS jump filter parameters ----------------
+        self.low_speed_threshold_mps = 0.3              
+        self.max_low_speed_jump_distance_m = 1.0        
 
+        self.base_jump_margin_m = 2.0                   
+        self.max_speed_mps = 3.0                      
+        self.hard_jump_distance_m = 20.0                
+        self.hard_jump_dt_s = 1.0                      
+        self.max_time_gap_s = 2.0                       
 
-
-
+        # last accepted GPS point
+        self.last_good_lat = None
+        self.last_good_lon = None
+        self.last_good_time_s = None
+        
         return
+
+
+
 
     def do_publish(self):
          self.get_gps()
@@ -128,8 +163,20 @@ class F9P_GPS(Node):
             if  self.geo.lat is not None and self.geo.lat != 0:
                 self.create_gps_msg_poll()
                 self.get_gps_freq()
+                
+                
+                ## only for testing - inject a bad fix after 5 good fixes to test the filter --- IGNORE ---
+                # self.good_fix_count += 1
+                # self.maybe_inject_test_bad_fix()
+                
+                
                 if self.hAcc < 500:
-                    self.gps_pub.publish(self.gpsfix)
+                    if self.enable_gps_filter:
+                        if self.should_publish_gps(self.gpsfix):    # add the filtering condition here
+                            self.gps_pub.publish(self.gpsfix)
+                    else:
+                        self.gps_pub.publish(self.gpsfix)
+                    # self.gps_pub.publish(self.gpsfix)
         if self.method == "stream":
             if self.dev_type =="urcu":
                 streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') #stream method
@@ -146,9 +193,18 @@ class F9P_GPS(Node):
                 self.create_gps_msg()
                 self.get_gps_freq()
 
-                self.create_quality_msg()   
+                self.create_quality_msg()
+                
+                ## only for testing - inject a bad fix after 5 good fixes to test the filter --- IGNORE ---
+                # self.good_fix_count += 1
+                # self.maybe_inject_test_bad_fix()  
+                 
                 if self.hAcc < 5000:
-                    self.gps_pub.publish(self.gpsfix)
+                   if self.enable_gps_filter: # self.gps_pub.publish(self.gpsfix)
+                       if self.should_publish_gps(self.gpsfix):   # add the filtering condition here
+                           self.gps_pub.publish(self.gpsfix)
+                   else:
+                        self.gps_pub.publish(self.gpsfix)
 
     
 
@@ -430,12 +486,129 @@ class F9P_GPS(Node):
         gpsQualMsg.frequency = self.gps_hz
         self.gps_qual_pub.publish(gpsQualMsg)
      
+     
+    def stamp_to_sec(self, stamp):
+        return float(stamp.sec) + float(stamp.nanosec) / 1e9
+     
+     
+    def haversine_distance_m(self, lat1, lon1, lat2, lon2):
+        r = 6371000.0  # earth radius in meters
+
+        phi1 = math.radians(lat1)
+        phi2 = math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlambda = math.radians(lon2 - lon1)
+
+        a = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+        c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+        return r * c
+    
+    
+    def accept_fix(self, msg, reason="accepted"):
+        self.last_good_lat = msg.latitude
+        self.last_good_lon = msg.longitude
+        self.last_good_time_s = self.stamp_to_sec(msg.header.stamp)
+        self.get_logger().info(
+            f"GPS accepted: {reason}, lat={msg.latitude:.8f}, lon={msg.longitude:.8f}"
+        )
+        
+        
+    def reject_fix(self, msg, reason="rejected"):
+        self.get_logger().warn(
+            f"GPS rejected: {reason}, lat={msg.latitude:.8f}, lon={msg.longitude:.8f}"
+        )
+        
+        
+    def should_publish_gps(self, msg):
+
+        current_time_s = self.stamp_to_sec(msg.header.stamp)
+
+        # first good point: accept directly
+        if self.last_good_lat is None or self.last_good_lon is None or self.last_good_time_s is None:
+            self.accept_fix(msg, "first_fix")
+            return True
+
+        dt = current_time_s - self.last_good_time_s
+
+        # time gap too large or invalid: reset reference
+        if dt <= 0.0 or dt > self.max_time_gap_s:
+            self.accept_fix(msg, f"reset_by_time_gap dt={dt:.3f}")
+            return True
+
+        dist_m = self.haversine_distance_m(
+            self.last_good_lat,
+            self.last_good_lon,
+            msg.latitude,
+            msg.longitude
+        )
+
+        speed_mps = 0.0
+        try:
+            speed_mps = float(self.sogk) / 3.6   # VTG gives km/h
+        except Exception:
+            speed_mps = 0.0
+
+        # Rule 1: low speed jump reject
+        if speed_mps < self.low_speed_threshold_mps and dist_m > self.max_low_speed_jump_distance_m:
+            self.reject_fix(
+                msg,
+                f"low_speed_jump_reject dist={dist_m:.2f}m speed={speed_mps:.2f}mps"
+            )
+            return False
+
+        # Rule 2: hard jump reject
+        if dt < self.hard_jump_dt_s and dist_m > self.hard_jump_distance_m:
+            self.reject_fix(
+                msg,
+                f"hard_jump_reject dist={dist_m:.2f}m dt={dt:.3f}s"
+            )
+            return False
+
+        # Rule 3: general dynamic jump reject
+        max_allowed_dist = self.base_jump_margin_m + self.max_speed_mps * dt
+        if dist_m > max_allowed_dist:
+            self.reject_fix(
+                msg,
+                f"dynamic_jump_reject dist={dist_m:.2f}m max_allowed={max_allowed_dist:.2f}m dt={dt:.3f}s"
+            )
+            return False
+
+        self.accept_fix(
+            msg,
+            f"normal dist={dist_m:.2f}m dt={dt:.3f}s speed={speed_mps:.2f}mps"
+        )
+        return True
+     
+     
+     
+    def maybe_inject_test_bad_fix(self):
+        if not self.inject_test_bad_fix:
+            return
+
+        if self.inject_test_bad_fix_once_done:
+            return
+
+        if self.good_fix_count < 5:
+            return
+
+        self.gpsfix.latitude = self.gpsfix.latitude + 0.3
+        self.gpsfix.longitude = self.gpsfix.longitude + 0.3
+
+        self.inject_test_bad_fix_once_done = True
+        self.get_logger().warn(
+            f"Injected TEST bad GPS fix: lat={self.gpsfix.latitude:.8f}, lon={self.gpsfix.longitude:.8f}"
+        )
+ 
+     
 def spin_in_background(self):
     executor = rclpy.get_global_executor()
     try:
         executor.spin()
     except ExternalShutdownException:
         pass 
+
+
+
 
 def main(args=None):
     rclpy.init()
