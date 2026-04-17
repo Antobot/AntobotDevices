@@ -1,5 +1,7 @@
+#!/usr/bin/env python3
 import serial
 import math
+import re
 import rclpy
 from rclpy.node import Node
 
@@ -276,7 +278,6 @@ class GgaPublisherNode(Node):
 
         self.gps_qual_val = 0
 
-
         # Time state
         self.gps_timestamp = self.get_clock().now().to_msg()
         self.gps_time_offset = 99.0
@@ -286,27 +287,40 @@ class GgaPublisherNode(Node):
         self.gps_time_buf = []
 
         try:
-            self.ser = serial.Serial(self.port, self.baud, timeout=0.5, write_timeout=0.5)
-            # self.ser.flush()
+            self.ser = serial.Serial(
+                self.port,
+                self.baud,
+                timeout=0.05
+            )
             self.get_logger().info(f"Opened serial: {self.port} @ {self.baud}")
         except Exception as e:
             self.get_logger().error(f"Failed to open serial {self.port}: {e}")
             raise
 
+        self.ser.reset_input_buffer()
+        self.ser.reset_output_buffer()
+        self.rx_buffer = b""
+
+        # Match complete UM982 sentences without depending on newline
+        # NMEA: $......*XX
+        # Extended: #......*XXXXXXXX
+        self.sentence_pattern = re.compile(
+            rb'(\$[^$#\r\n]*\*[0-9A-Fa-f]{2})|(#[^$#\r\n]*\*[0-9A-Fa-f]{8})'
+        )
+
         if self.send_init_command:
             self.init_um982_output()
-       
-        self.timer = self.create_timer(0.05, self.read_serial)
+
+        self.timer = self.create_timer(0.2, self.read_serial)
 
     def init_um982_output(self):
         try:
-            # Uncomment if you want to clear existing outputs first
             # self.ser.write(b"UNLOG COM2\r\n")
             # self.get_logger().info("Sent: UNLOG COM2")
 
-            # 0.2 = 5Hz according to UM982 manual
+            # 0.2 = 5Hz
             self.ser.write(b"GPGGA COM2 0.2\r\n")
-            self.ser.flush()
+            # self.ser.flush()
             self.get_logger().info("Sent: GPGGA COM2 0.2")
 
             self.ser.write(b"GPGST COM2 0.2\r\n")
@@ -320,10 +334,11 @@ class GgaPublisherNode(Node):
             self.ser.write(b"PVTSLNA 0.2\r\n")
             # self.ser.flush()
             self.get_logger().info("Sent: PVTSLNA 0.2")
-
+            
             self.ser.write(b"UNIHEADINGA 0.2\r\n")
             # self.ser.flush()
             self.get_logger().info("Sent: UNIHEADINGA 0.2")
+
         except Exception as e:
             self.get_logger().error(f"Failed to init UM982 output: {e}")
 
@@ -415,16 +430,15 @@ class GgaPublisherNode(Node):
 
         msg.status.service = NavSatStatus.SERVICE_GPS
 
-        # if pv["bestpos_type"] in ["NARROW_INT", "NARROW_FLOAT", "PSRDIFF", "SINGLE"]:
-        #     msg.status.status = NavSatStatus.STATUS_FIX
-        # else:
-        #     msg.status.status = NavSatStatus.STATUS_NO_FIX
         if self.gps_qual_val == 4:
             msg.status.status = 3
         elif self.gps_qual_val == 5:
             msg.status.status = 2
         elif self.gps_qual_val in [1, 2]:
             msg.status.status = 1
+        else:
+            msg.status.status = 0
+
         msg.position_covariance[0] = pv["bestpos_latstd"] ** 2
         msg.position_covariance[4] = pv["bestpos_lonstd"] ** 2
         msg.position_covariance[8] = pv["bestpos_hgtstd"] ** 2
@@ -442,7 +456,7 @@ class GgaPublisherNode(Node):
         msg.stamp = self.last_fix_stamp
         msg.t_offset = float(self.gps_time_offset)
 
-        # h_acc: prefer GST to align with F9P; fallback to PVTSLNA
+        # h_acc: prefer GST; fallback to PVTSLNA
         if self.last_gst is not None:
             msg.h_acc = float(math.sqrt(
                 self.last_gst["lat_std"] ** 2 + self.last_gst["lon_std"] ** 2
@@ -460,11 +474,11 @@ class GgaPublisherNode(Node):
         msg.geo_sep = float(self.last_gga["undulation"])
 
         self.gps_qual_val = int(self.last_gga["qual"])
-        
-        # sat_info not implemented for now
+
+        # sat_info not implemented
         msg.sat_info = []
 
-        # v_cog / v_sog: prefer VTG to align with F9P
+        # v_cog / v_sog: prefer VTG
         if self.last_vtg is not None:
             msg.v_cog = float(self.last_vtg["course_true"])
             msg.v_sog = float(self.last_vtg["speed_kmh"])
@@ -518,89 +532,168 @@ class GgaPublisherNode(Node):
 
         self.heading_pub.publish(msg)
 
+    def extract_complete_sentences(self):
+        """
+        Extract complete UM982 sentences from self.rx_buffer without relying on newline.
+
+        Supports:
+          - NMEA style:    $......*XX
+          - Extended type: #......*XXXXXXXX
+
+        Returns:
+            list[str]: decoded complete sentences
+        """
+        sentences = []
+
+        if not self.rx_buffer:
+            return sentences
+
+        # Remove leading garbage until a possible sentence start
+        start_positions = [
+            p for p in (self.rx_buffer.find(b"$"), self.rx_buffer.find(b"#")) if p != -1
+        ]
+        if not start_positions:
+            if len(self.rx_buffer) > 4096:
+                self.get_logger().warn("No sentence start found in RX buffer, clearing garbage")
+                self.rx_buffer = b""
+            return sentences
+
+        first_start = min(start_positions)
+        if first_start > 0:
+            self.rx_buffer = self.rx_buffer[first_start:]
+
+        consumed_upto = 0
+
+        for match in self.sentence_pattern.finditer(self.rx_buffer):
+            start, end = match.span()
+
+            if start < consumed_upto:
+                continue
+
+            sentence_bytes = self.rx_buffer[start:end]
+            consumed_upto = end
+
+            try:
+                sentence = sentence_bytes.decode("utf-8", errors="ignore").strip()
+                if sentence:
+                    sentences.append(sentence)
+            except Exception as e:
+                self.get_logger().warn(f"Decode failed while extracting sentence: {e}")
+
+        # Keep only unconsumed tail in buffer for next round
+        if consumed_upto > 0:
+            self.rx_buffer = self.rx_buffer[consumed_upto:]
+        else:
+            max_keep = 8192
+            if len(self.rx_buffer) > max_keep:
+                last_dollar = self.rx_buffer.rfind(b"$")
+                last_hash = self.rx_buffer.rfind(b"#")
+                last_start = max(last_dollar, last_hash)
+
+                if last_start != -1:
+                    self.get_logger().warn(
+                        "RX buffer oversized without complete sentence, trimming old data"
+                    )
+                    self.rx_buffer = self.rx_buffer[last_start:]
+                else:
+                    self.get_logger().warn(
+                        "RX buffer oversized without recognizable sentence start, clearing"
+                    )
+                    self.rx_buffer = b""
+
+        return sentences
+
     def read_serial(self):
         try:
-            raw = self.ser.readline()
-            self.get_logger().error(f"raw: {raw}")
-            if not raw:
-                self.get_logger().error(f"no raw")
+            chunk = self.ser.read(4096)
+            if not chunk:
                 return
 
-            line = raw.decode("utf-8", errors="ignore").strip()
-            if not line:
-                self.get_logger().error(f"no line")
+            self.rx_buffer += chunk
+
+            # 防止极端情况下 buffer 一直涨
+            max_buffer_size = 1024 * 1024
+            if len(self.rx_buffer) > max_buffer_size:
+                self.get_logger().warn("RX buffer too large, clearing stale data")
+                self.rx_buffer = b""
                 return
 
-            if line.startswith("$command"):
-                self.get_logger().info(f"Device response: {line}")
-                return
+            sentences = self.extract_complete_sentences()
 
-            # GGA: for timestamp, time offset, quality core fields
-            if line.startswith("$GNGGA") or line.startswith("$GPGGA"):
-                if nmea_crc(line):
-                    raw_msg = String()
-                    raw_msg.data = line + "\r\n"
-                    self.gga_pub.publish(raw_msg)
-                    self.get_logger().info(f"Published GGA: {line}")
-
-                    self.last_gga = parse_gga(line)
-                    self.update_gps_time_from_gga(self.last_gga)
-
-                    self.publish_gpsqual()
-                else:
-                    self.get_logger().warn(f"Invalid GGA CRC: {line}")
-                return
-
-            # GST: for h_acc
-            if line.startswith("$GNGST") or line.startswith("$GPGST"):
-                if nmea_crc(line):
-                    self.last_gst = parse_gst(line)
-                    self.publish_gpsqual()
-                else:
-                    self.get_logger().warn(f"Invalid GST CRC: {line}")
-                return
-
-            # VTG: for v_cog / v_sog
-            if line.startswith("$GNVTG") or line.startswith("$GPVTG"):
-                if nmea_crc(line):
-                    self.last_vtg = parse_vtg(line)
-                    self.publish_gpsqual()
-                else:
-                    self.get_logger().warn(f"Invalid VTG CRC: {line}")
-                return
-
-            # PVTSLNA: for NavSatFix and fallback quality values
-            if line.startswith("#PVTSLNA"):
-                if nmea_expend_crc(line):
-                    raw_msg = String()
-                    raw_msg.data = line
-                    self.pvtslna_pub.publish(raw_msg)
-                    self.get_logger().info(f"Published PVTSLNA: {line}")
-
-                    self.last_pv = parse_pvtslna(line)
-                    self.publish_navsatfix_from_pvtslna(self.last_pv)
-
-                    self.publish_gpsqual()
-                else:
-                    self.get_logger().warn(f"Invalid PVTSLNA CRC: {line}")
-                return
-
-            # UNIHEADINGA: for GpsHeading only
-            if line.startswith("#UNIHEADINGA"):
-                if nmea_expend_crc(line):
-                    raw_msg = String()
-                    raw_msg.data = line
-                    self.heading_raw_pub.publish(raw_msg)
-                    self.get_logger().info(f"Published UNIHEADINGA: {line}")
-
-                    self.last_heading = parse_uniheadinga(line)
-                    self.publish_heading_from_uniheading(self.last_heading)
-                else:
-                    self.get_logger().warn(f"Invalid UNIHEADINGA CRC: {line}")
-                return
+            for line in sentences:
+                self.process_line(line)
 
         except Exception as e:
             self.get_logger().error(f"Read serial failed: {e}")
+
+    def process_line(self, line: str):
+        if not line:
+            return
+
+        if line.startswith("$command"):
+            self.get_logger().info(f"Device response: {line}")
+            return
+
+        # GGA
+        if line.startswith("$GNGGA") or line.startswith("$GPGGA"):
+            if nmea_crc(line):
+                raw_msg = String()
+                raw_msg.data = line + "\r\n"
+                self.gga_pub.publish(raw_msg)
+                self.get_logger().info(f"Published GGA: {line}")
+
+                self.last_gga = parse_gga(line)
+                self.update_gps_time_from_gga(self.last_gga)
+            else:
+                self.get_logger().warn(f"Invalid GGA CRC: {line}")
+            return
+
+        # GST
+        if line.startswith("$GNGST") or line.startswith("$GPGST"):
+            if nmea_crc(line):
+                self.last_gst = parse_gst(line)
+            else:
+                self.get_logger().warn(f"Invalid GST CRC: {line}")
+            return
+
+        # VTG
+        if line.startswith("$GNVTG") or line.startswith("$GPVTG"):
+            if nmea_crc(line):
+                self.last_vtg = parse_vtg(line)
+            else:
+                self.get_logger().warn(f"Invalid VTG CRC: {line}")
+            return
+
+        # PVTSLNA
+        if line.startswith("#PVTSLNA"):
+            if nmea_expend_crc(line):
+                raw_msg = String()
+                raw_msg.data = line
+                self.pvtslna_pub.publish(raw_msg)
+                self.get_logger().info(f"Published PVTSLNA: {line}")
+
+                self.last_pv = parse_pvtslna(line)
+                self.publish_navsatfix_from_pvtslna(self.last_pv)
+
+                if self.last_gga is not None:
+                    self.publish_gpsqual()
+            else:
+                self.get_logger().warn(f"Invalid PVTSLNA CRC: {line}")
+            return
+
+        # UNIHEADINGA
+        if line.startswith("#UNIHEADINGA"):
+            if nmea_expend_crc(line):
+                raw_msg = String()
+                raw_msg.data = line
+                self.heading_raw_pub.publish(raw_msg)
+                self.get_logger().info(f"Published UNIHEADINGA: {line}")
+
+                self.last_heading = parse_uniheadinga(line)
+                self.publish_heading_from_uniheading(self.last_heading)
+            else:
+                self.get_logger().warn(f"Invalid UNIHEADINGA CRC: {line}")
+            return
 
     def rtcm_callback(self, msg):
         try:
@@ -633,8 +726,3 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
