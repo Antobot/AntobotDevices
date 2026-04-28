@@ -1,73 +1,56 @@
 import os
-import yaml
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, TextSubstitution, PathJoinSubstitution
 from launch_ros.actions import Node
-from launch.substitutions import PythonExpression
-from ament_index_python.packages import get_package_share_directory
-from antobot_com_postgresql.db_config_loader import get_robot_config
 
 ################### user configure parameters for ros2 start ###################
-xfer_format   = 4    # 0-Pointcloud2(PointXYZRTL), 1-customized pointcloud format
-multi_topic   = 1    # 0-All LiDARs share the same topic, 1-One LiDAR one topic
-data_src      = 0    # 0-lidar, others-Invalid data src
-publish_freq  = 10.0 # freqency of publish, 5.0, 10.0, 20.0, 50.0, etc.
-output_type   = 0
+xfer_format = 4      # 0-Pointcloud2(PointXYZRTL), 1-customized pointcloud format, 4-both
+multi_topic = 1      # 0-All LiDARs share the same topic, 1-One LiDAR one topic
+data_src = 0         # 0-lidar, others-Invalid data src
+publish_freq = 10.0  # freqency of publish, 5.0, 10.0, 20.0, 50.0, etc.
+output_type = 0
 lvx_file_path = '/home/livox/livox_test.lvx'
 cmdline_bd_code = 'livox0000000001'
 
 cur_path = os.path.split(os.path.realpath(__file__))[0] + '/'
 cur_config_path = cur_path + '../config'
-
+config_200_path = os.path.join(cur_config_path, 'MID360_200_config.json')
+config_201_path = os.path.join(cur_config_path, 'MID360_201_config.json')
 ################### user configure parameters for ros2 end #####################
 
 
-def generate_launch_description():
-
-    # Load platform parameters from database
-    platform_config_path = os.path.join(
-        get_package_share_directory('antobot_description'),
-        'config',
-        'platform_config.yaml'
-    )
-    platform_config = get_robot_config("platform_config", platform_config_path)
-
-    aRCU_enable = platform_config.get('aRCU_enable', False)
-    mid360_count = sum(1 for cfg in platform_config["lidar"].values() if cfg["type"] == "mid360")
-
-    if aRCU_enable:
-        if mid360_count == 1:
-            user_config_path = os.path.join(cur_config_path, 'MID360_config_aRCU.json')
-        elif mid360_count == 2:
-            user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config_aRCU.json')
-    else:
-        if mid360_count == 1:
-            user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
-        elif mid360_count == 2:
-            user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config.json')
-
-    livox_ros2_params = [
-        {"xfer_format": xfer_format},
-        {"multi_topic": multi_topic},
-        {"data_src": data_src},
-        {"publish_freq": publish_freq},
-        {"output_data_type": output_type},
-        {"lvx_file_path": lvx_file_path},
-        {"user_config_path": user_config_path},
-        {"cmdline_input_bd_code": cmdline_bd_code},
-
-    ]
-
-    livox_driver = Node(
+def make_livox_node(name, frame_id, config_path):
+    return Node(
         package='livox_ros_driver2',
         executable='livox_ros_driver2_node',
-        name='livox_lidar_publisher',
+        name=name,
         output='screen',
-        parameters=livox_ros2_params
+        parameters=[
+            {"xfer_format": xfer_format},
+            {"multi_topic": multi_topic},
+            {"data_src": data_src},
+            {"publish_freq": publish_freq},
+            {"output_data_type": output_type},
+            {"frame_id": frame_id},
+            {"lvx_file_path": lvx_file_path},
+            {"user_config_path": config_path},
+            {"cmdline_input_bd_code": cmdline_bd_code},
+        ]
     )
 
 
+def generate_launch_description():
+    livox_200 = make_livox_node(
+        'livox_lidar_publisher_200',
+        'lidar_200_frame',
+        config_200_path
+    )
+    livox_201 = make_livox_node(
+        'livox_lidar_publisher_201',
+        'lidar_201_frame',
+        config_201_path
+    )
+
     return LaunchDescription([
-        livox_driver
+        livox_200,
+        livox_201
     ])
