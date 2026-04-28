@@ -508,9 +508,9 @@ class F9P_GPS(Node):
         self.last_good_lat = msg.latitude
         self.last_good_lon = msg.longitude
         self.last_good_time_s = self.stamp_to_sec(msg.header.stamp)
-        self.get_logger().info(
-            f"GPS accepted: {reason}, lat={msg.latitude:.8f}, lon={msg.longitude:.8f}"
-        )
+        # self.get_logger().info(
+        #     f"GPS accepted: {reason}, lat={msg.latitude:.8f}, lon={msg.longitude:.8f}"
+        # )
         
         
     def reject_fix(self, msg, reason="rejected"):
