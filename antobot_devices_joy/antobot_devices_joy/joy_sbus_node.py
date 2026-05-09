@@ -149,7 +149,7 @@ class JoystickSbus(Node):
                 self.buttons_pre = list(self.buttons)
 
                 # 状态转换
-                self.current_state = RobotState.POWER_ON
+                # self.current_state = RobotState.POWER_ON
                 # self.activation_triggered = False
                 # self.ch6_min_in_activation = float('inf')
                 # self.ch6_trigger_2_done = False
