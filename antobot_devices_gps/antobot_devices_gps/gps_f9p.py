@@ -58,6 +58,14 @@ class F9P_GPS(Node):
         self.declare_parameter("inject_test_bad_fix", False)
         self.inject_test_bad_fix = self.get_parameter("inject_test_bad_fix").value
 
+        self.declare_parameter("fixed_gga_quality_status", 4)
+        self.declare_parameter("non_fixed_covariance_scale", 20.0)
+        self.declare_parameter("non_fixed_min_horizontal_std_m", 5.0)
+        self.fixed_gga_quality_status = self.get_parameter("fixed_gga_quality_status").value
+        self.non_fixed_covariance_scale = self.get_parameter("non_fixed_covariance_scale").value
+        self.non_fixed_min_horizontal_std_m = self.get_parameter("non_fixed_min_horizontal_std_m").value
+        self.last_covariance_quality_fixed = None
+
         self.inject_test_bad_fix_once_done = False
         self.good_fix_count = 0
         
@@ -114,6 +122,9 @@ class F9P_GPS(Node):
         self.geo_sep = 0
         self.cogt = 0
         self.sogk = 0
+        self.gga_gps_qual = 0
+        self.num_sats = 0
+        self.hor_dil = 99.0
         self.gps_hz = 0
         self.gps_pub = self.create_publisher( NavSatFix,pub_name, 10)
         self.gps_qual_pub = self.create_publisher( GpsQual,"/antobot_gps/quality", 10)
@@ -279,6 +290,31 @@ class F9P_GPS(Node):
 
         return self.fix_status
 
+    def set_gps_covariance(self, horizontal_std_m, fixed_quality):
+        horizontal_std_m = max(float(horizontal_std_m), 0.001)
+
+        if not fixed_quality:
+            horizontal_std_m = max(
+                horizontal_std_m * float(self.non_fixed_covariance_scale),
+                float(self.non_fixed_min_horizontal_std_m),
+            )
+
+        self.gpsfix.position_covariance[0] = horizontal_std_m ** 2
+        self.gpsfix.position_covariance[4] = horizontal_std_m ** 2
+        self.gpsfix.position_covariance[8] = (4.0 * horizontal_std_m) ** 2
+
+        if self.last_covariance_quality_fixed != fixed_quality:
+            self.last_covariance_quality_fixed = fixed_quality
+            if fixed_quality:
+                self.get_logger().info(
+                    f"GPS covariance confidence: fixed status, horizontal std={horizontal_std_m:.3f}m"
+                )
+            else:
+                self.get_logger().warn(
+                    "GPS covariance confidence degraded: "
+                    f"gga_quality={self.gga_gps_qual}, horizontal std={horizontal_std_m:.3f}m"
+                )
+
     def create_gps_msg(self):
         print("create_gps_msg")
         self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
@@ -296,10 +332,8 @@ class F9P_GPS(Node):
         # Get GPS fix status
         self.gpsfix.status.status = self.get_fix_status()
 
-        # Assumptions made on covariance
-        self.gpsfix.position_covariance[0] = (self.hAcc)**2 
-        self.gpsfix.position_covariance[4] = (self.hAcc)**2 
-        self.gpsfix.position_covariance[8] = (4*self.hAcc)**2 
+        fixed_quality = self.gga_gps_qual == self.fixed_gga_quality_status
+        self.set_gps_covariance(self.hAcc, fixed_quality)
 
         # Set the time of the GPS message
         self.set_gps_msg_time()
@@ -319,10 +353,10 @@ class F9P_GPS(Node):
         # Get GPS fix status
         self.gpsfix.status.status = self.get_fix_status_poll()
 
-        # Assumptions made on covariance  ###hAcc unit might be different, tbd
-        self.gpsfix.position_covariance[0] = (self.hAcc*0.001)**2 
-        self.gpsfix.position_covariance[4] = (self.hAcc*0.001)**2 
-        self.gpsfix.position_covariance[8] = (4*self.hAcc*0.001)**2 
+        # Polling hAcc is in millimeters. There is no raw GGA quality here, so use the
+        # internal fixed-mode status as the confidence gate.
+        fixed_quality = self.gpsfix.status.status == 3
+        self.set_gps_covariance(self.hAcc * 0.001, fixed_quality)
 
         # Set the time of the GPS message
         self.set_gps_msg_time()
@@ -658,4 +692,3 @@ def main(args=None):
 
 if __name__ == '__main__':   
     main()
-
