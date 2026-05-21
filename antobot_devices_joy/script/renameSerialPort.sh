@@ -1,6 +1,6 @@
 #!/bin/bash
 
-Device_Name="/dev/ttyUSB0" # ttyCH341USB0 / ttyUSB0
+Device_Name="/dev/ttyCH341USB1" # ttyCH341USB0 / ttyUSB0
 LINK_NAME="anto_gps" # anto_gps / anto_joy
 RULE_FILE="/etc/udev/rules.d/99-usb_$LINK_NAME.rules"
 
