@@ -39,6 +39,9 @@ class JoystickSbus(Node):
         self.channel5_pre = None
         self.channel6_pre = None
         self.buttons_reset = True 
+        self.ch6_min_in_activation = float('inf')
+        self.ch6_trigger = False
+        self.ch6_last_trigger_knob1 = 0  # prevent jumping around 1000
 
         # Buttons
         self.A = self.B = self.X = self.Y = 0
@@ -188,6 +191,36 @@ class JoystickSbus(Node):
         else:
             self.LB = 0
             self.RB = 0
+        # ============================
+
+        if self.flag == 1 and self.blockOut == 0:
+            self.ch6_min_in_activation = min(self.ch6_min_in_activation, knob1)
+
+            if (not self.ch6_trigger and
+                    knob1 > 1000 and
+                    knob1 - self.ch6_last_trigger_knob1 > 50 and
+                    knob1 - self.ch6_min_in_activation > 800):
+                self.X = 2
+                self.BACK = 2
+                self.ch6_trigger = True
+                self.ch6_last_trigger_knob1 = knob1
+                self.get_logger().info(
+                    f"[4WS] UV ON trigger: X=2, BACK=2 (ch[6]={knob1}, min={self.ch6_min_in_activation})"
+                )
+
+            if (self.ch6_trigger and 
+                knob1 < 1000 and
+                self.ch6_last_trigger_knob1 - knob1 > 50):
+                self.X = 3
+                self.BACK = 3
+                self.ch6_trigger = False
+                self.ch6_last_trigger_knob1 = knob1
+                self.get_logger().info(f"[4WS] UV OFF trigger: X=3, BACK=3 (ch[6]={knob1})")
+
+        else:
+            self.ch6_min_in_activation = float('inf')
+            self.ch6_trigger = False
+            self.ch6_last_trigger_knob1 = 0
         # ============================
 
         # 映射到 Joy 消息,axes共8通道, 无旋钮消息
