@@ -41,11 +41,16 @@ def generate_launch_description():
             user_config_path = os.path.join(cur_config_path, 'MID360_config_aRCU.json')
         elif mid360_count == 2:
             user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config_aRCU.json')
+        elif mid360_count == 4:
+            user_config_path = os.path.join(cur_config_path, 'U501_MID360_config_aRCU.json')
+
     else:
         if mid360_count == 1:
             user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
         elif mid360_count == 2:
             user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config.json')
+        elif mid360_count == 4:
+            user_config_path = os.path.join(cur_config_path, 'U501_MID360_config_aRCU.json')
 
     livox_ros2_params = [
         {"xfer_format": xfer_format},
