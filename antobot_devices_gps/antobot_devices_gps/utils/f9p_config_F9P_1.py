@@ -980,7 +980,7 @@ if __name__ == '__main__':
     device_name = '/dev/ttyUSB0'
     device_baudrate=38400
 
-    desired_messages = ['GST', 'VTG']
+    desired_messages = ['GST', 'VTG', 'RMC']
     meas_rate = 8
     print("1111111111111")
     if config_mode[0] == "0":
