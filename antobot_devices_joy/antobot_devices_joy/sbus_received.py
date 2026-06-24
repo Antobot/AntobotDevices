@@ -93,6 +93,11 @@ class SBUSReceiver:
                 self.sbusChannels[ch] = channel_sum & 0x7ff
                 channel_sum = channel_sum >> 11
 
+
+            # 这台U501前后装反了，所以中心旋转一下输出
+            self.sbusChannels[0] = 2000 - self.sbusChannels[0]
+            self.sbusChannels[2] = 2000 - self.sbusChannels[2]
+
             # to be tested, No 17 & 18 channel on taranis X8R
             if (frame[23]) & 0x0001:
                 self.sbusChannels[16] = 2047
@@ -145,7 +150,7 @@ class SBUSReceiver:
         self.frames = asyncio.Queue()
 
     @staticmethod
-    async def create(port='/dev/ttyUSB0'):
+    async def create(port='/dev/ttyCH341USB0'):
         loop = asyncio.get_running_loop()
         receiver = SBUSReceiver()
         receiver._transport, receiver._protocol = await serial_asyncio.create_serial_connection(
@@ -165,7 +170,7 @@ class SBUSReceiver:
 
 
 async def main():
-    sbus = await SBUSReceiver.create("/dev/ttyUSB0")
+    sbus = await SBUSReceiver.create("/dev/ttyCH341USB0")
 
     while True:
 
