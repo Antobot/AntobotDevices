@@ -12,7 +12,10 @@
     <arg name="device_ip" default="192.168.1.200" />
     <arg name="msop_port" default="2368"/>
     <arg name="difop_port" default="2369"/>
-    <arg name="use_time_service" default="false" />
+    <!-- true = lidar timestamps points from its onboard time service (GPS/PTP/NTP).
+         Requires a GPS/PPS or PTP source wired to the lidar; otherwise points get
+         the lidar's uninitialised clock. Set back to false to use host arrival time. -->
+    <arg name="use_time_service" default="true" />
     <arg name="pcl_type" default="false" /> 
     <arg name="packet_rate" default="1695.0"/>
     <arg name="name_space" default="c16_front"/>

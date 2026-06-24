@@ -400,7 +400,12 @@ class F9P_config:
             key_id = self.get_key_id(msg)
             enable = msg in self.desired_messages
 
-            packet = self.config_gx_message(key_id, enable)
+            # GSV (satellites in view) is slow-changing and bulky (one set per
+            # constellation). Output it every Nth nav epoch (~1 Hz) so it does
+            # not eat into the high-rate position bandwidth; everything else 1:1.
+            rate = self.meas_rate if msg == 'GSV' else 1
+
+            packet = self.config_gx_message(key_id, enable, rate)
             if self.device=="uart":
                 self.port.write(packet)
             
@@ -455,7 +460,7 @@ class F9P_config:
         return key_id
     
 
-    def config_gx_message(self, key_id, enable):
+    def config_gx_message(self, key_id, enable, rate=1):
         # prepare packet
         length = 18
         packet = self.prepare_cfg_packet(length)
@@ -465,11 +470,11 @@ class F9P_config:
         packet[11] = 0x00
         packet[12] = 0x91
         packet[13] = 0x20
-        #value
+        #value: output rate in nav epochs (0 = disabled, N = every Nth epoch)
         if enable:
-            packet[14] = 0x01 # 0:disable, 1:enable
+            packet[14] = rate & 0xFF
         else:
-            packet[14] = 0x00 # 0:disable, 1:enable
+            packet[14] = 0x00 # 0:disable
         packet[15] = 0x00
         packet = self.calculate_checksum(packet, length)
 
@@ -547,7 +552,7 @@ def configure_f9p():
     moving_base = "movingbase" in dev_type      # Is dual-GPS being used?
     scout_box = False
 
-    desired_messages = ['GST', 'VTG']
+    desired_messages = ['GST', 'VTG', 'GSV']
     #desired_messages = []
     meas_rate = 8
     if moving_base:

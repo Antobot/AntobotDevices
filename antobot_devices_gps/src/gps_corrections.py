@@ -55,6 +55,10 @@ class gpsCorrections():
             dev_type = data['gps'].keys()
             for key, value in data['gps'].items():
                 #print(key)
+                # Only the primary receiver defines rtk_type; skip secondary
+                # antennas (e.g. ublox_rover) that have no correction config.
+                if 'rtk_type' not in value:
+                    continue
                 self.corr_type=value['rtk_type']
                 dev_port = value['device_port']
         if "urcu" in dev_type :

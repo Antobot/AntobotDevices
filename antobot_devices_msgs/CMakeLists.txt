@@ -14,6 +14,9 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   gpsQual.msg
+  GnssSat.msg
+  GnssSystem.msg
+  GnssConstellation.msg
 )
 
 add_service_files(

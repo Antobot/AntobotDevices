@@ -30,8 +30,19 @@ import serial
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8, Float32, String
-from antobot_devices_msgs.msg import gpsQual
+from antobot_devices_msgs.msg import gpsQual, GnssConstellation, GnssSystem, GnssSat
 from antobot_devices_gps.ublox_gps import UbloxGps
+
+# NMEA GSV talker ID -> uRCU GNS System id (uRCU Data Exchange System PRNs Block)
+GSV_TALKER_TO_SYSID = {
+    "GP": 1,  # GPS
+    "GL": 2,  # GLONASS
+    "GA": 3,  # Galileo
+    "GB": 4,  # BeiDou
+    "BD": 4,  # BeiDou (alternative talker)
+    "GQ": 6,  # QZSS
+    "GI": 7,  # IRNSS / NavIC
+}
 
 class F9P_GPS:
 
@@ -87,6 +98,11 @@ class F9P_GPS:
         self.gps_pub = rospy.Publisher(pub_name, NavSatFix, queue_size=10)
         self.gps_qual_pub = rospy.Publisher(pub_name_qual, gpsQual, queue_size=10)
         self.gga_msg_pub=rospy.Publisher("/antobot_gps/gga", String, queue_size=10)
+        self.constellation_pub = rospy.Publisher("/antobot_gps/constellation", GnssConstellation, queue_size=5)
+
+        # GSV (satellites-in-view / constellation) accumulation state
+        self._gsv_partial = {}   # sys_id -> list[GnssSat] currently being collected
+        self._gsv_systems = {}   # sys_id -> list[GnssSat] completed for this cycle
 
         return
 
@@ -330,6 +346,10 @@ class F9P_GPS:
     def get_gps_quality(self, streamed_data):
 
         if isinstance(streamed_data,str):
+            # GSV talkers are per-constellation ($GPGSV, $GLGSV, $GAGSV, ...),
+            # so match on the sentence type rather than a fixed talker.
+            if len(streamed_data) > 6 and streamed_data[0] == "$" and streamed_data[3:6] == "GSV":
+                self._handle_gsv(streamed_data)
             if streamed_data.startswith("$GNGST"):
                 gst_parse = pynmea2.parse(streamed_data)
 
@@ -384,6 +404,64 @@ class F9P_GPS:
             
 
         return
+
+    def _handle_gsv(self, sentence):
+        """Accumulate GSV (satellites in view) across the multi-sentence,
+        multi-constellation set and publish a GnssConstellation snapshot once a
+        full cycle has been collected (uRCU Data Exchange msg 1.2.1)."""
+        talker = sentence[1:3]
+        sys_id = GSV_TALKER_TO_SYSID.get(talker)
+        if sys_id is None:
+            return
+        try:
+            gsv = pynmea2.parse(sentence)
+            total = int(gsv.num_messages)
+            msg_num = int(gsv.msg_num)
+        except Exception:
+            return
+
+        # msg_num == 1 for a constellation already completed => a new cycle has
+        # started: publish what we have and reset the accumulator.
+        if msg_num == 1 and sys_id in self._gsv_systems:
+            self._publish_constellation()
+            self._gsv_partial = {}
+            self._gsv_systems = {}
+
+        if msg_num == 1 or sys_id not in self._gsv_partial:
+            self._gsv_partial[sys_id] = []
+        sats = self._gsv_partial[sys_id]
+
+        # Up to 4 satellites per GSV sentence
+        for i in range(1, 5):
+            prn = getattr(gsv, "sv_prn_num_%d" % i, "")
+            if prn in (None, ""):
+                continue
+            sat = GnssSat()
+            sat.svid = int(prn) & 0xFF
+            ele = getattr(gsv, "elevation_deg_%d" % i, "")
+            azi = getattr(gsv, "azimuth_%d" % i, "")
+            snr = getattr(gsv, "snr_%d" % i, "")
+            sat.elevation = int(ele) if ele not in (None, "") else -1
+            sat.azimuth = int(azi) if azi not in (None, "") else 0
+            sat.cno = int(snr) if snr not in (None, "") else 0
+            sats.append(sat)
+
+        # This constellation's set is complete
+        if msg_num == total:
+            self._gsv_systems[sys_id] = sats
+
+    def _publish_constellation(self):
+        if not self._gsv_systems:
+            return
+        msg = GnssConstellation()
+        ts = getattr(self, "gps_timestamp", None)
+        msg.stamp = ts if ts is not None else rospy.Time.now()
+        for sys_id, sats in sorted(self._gsv_systems.items()):
+            gs = GnssSystem()
+            gs.system_id = sys_id
+            gs.satellites = sats
+            msg.systems.append(gs)
+        self.constellation_pub.publish(msg)
 
     def create_quality_msg(self):
         gpsQualMsg = gpsQual()
