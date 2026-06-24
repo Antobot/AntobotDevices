@@ -15,9 +15,9 @@ class JoystickSbus(Node):
     def __init__(self):
         super().__init__('joy_sbus_4ws_node')
 
-        self.declare_parameter('dev', '/dev/ttyUSB0')
+        self.declare_parameter('dev', '/dev/anto_joy')
         self.device_port = self.get_parameter('dev').get_parameter_value().string_value
-
+        print(f"device_port:{self.device_port}" )
         self.indoor_demo_pub = self.create_publisher(Empty, '/indoor_demo', 10)
         self.joy_pub = self.create_publisher(Joy, '/joy', 10)
         self.joy_msg = Joy()
