@@ -152,12 +152,30 @@ class F9P_config:
         packet[12] = 0x21
         packet[13] = 0x30
         #value
-        packet[14] = 0x01 
+        packet[14] = 0x01
         packet[15] = 0x00
         packet = self.calculate_checksum(packet, length)
 
         return packet
-    
+
+    def cfg_nmea_protver(self):
+        """Set CFG-NMEA-PROTVER to NMEA 4.11 so GSA/GSV carry the trailing
+        'GNSS System ID' field (needed to attribute satellites to a constellation).
+        Key ID: 0x20930001 (U1). Value: 42=4.11 (41=4.10, 40=4.0)."""
+        length = 18
+        packet = self.prepare_cfg_packet(length)
+
+        #key id
+        packet[10] = 0x01
+        packet[11] = 0x00
+        packet[12] = 0x93
+        packet[13] = 0x20
+        #value: 42 (0x2A) = NMEA 4.11
+        packet[14] = 0x2A
+        packet = self.calculate_checksum(packet, length)
+
+        return packet
+
     def cfg_valget_uart1_baudrate(self):
 
         # prepare packet
@@ -400,10 +418,11 @@ class F9P_config:
             key_id = self.get_key_id(msg)
             enable = msg in self.desired_messages
 
-            # GSV (satellites in view) is slow-changing and bulky (one set per
-            # constellation). Output it every Nth nav epoch (~1 Hz) so it does
-            # not eat into the high-rate position bandwidth; everything else 1:1.
-            rate = self.meas_rate if msg == 'GSV' else 1
+            # GSV (satellites in view) and GSA (satellites used) are slow-changing
+            # and bulky (one set per constellation). Output them every Nth nav epoch
+            # (~1 Hz) so they don't eat into the high-rate position bandwidth;
+            # everything else 1:1.
+            rate = self.meas_rate if msg in ('GSV', 'GSA') else 1
 
             packet = self.config_gx_message(key_id, enable, rate)
             if self.device=="uart":
@@ -501,8 +520,20 @@ class F9P_config:
             packet = self.cfg_valget_uart2_baudrate()
             self.port.writebytes(packet)
             received_bytes = self.receive_ubx_bytes_from_spi()
-        self.check_ubx_uart(received_bytes)            
-        print("Configured the measurement rate as " + str(self.meas_rate) + " Hz") 
+        self.check_ubx_uart(received_bytes)
+        print("Configured the measurement rate as " + str(self.meas_rate) + " Hz")
+
+        # Set NMEA protocol version to 4.11 so GSA/GSV include the GNSS System ID
+        # field, required to attribute satellites to a constellation (1.2.0 PRN / 1.2.1).
+        ubx_nmea_protver = self.cfg_nmea_protver()
+        if self.device == "uart":
+            self.port.write(ubx_nmea_protver)
+            received_bytes = self.receive_ubx_bytes_from_uart()
+        else:
+            self.port.writebytes(ubx_nmea_protver)
+            received_bytes = self.receive_ubx_bytes_from_spi()
+        self.check_ubx_uart(received_bytes)
+        print("Configured NMEA protocol version to 4.11")
 
         self.set_gx_messages()
         
@@ -552,7 +583,7 @@ def configure_f9p():
     moving_base = "movingbase" in dev_type      # Is dual-GPS being used?
     scout_box = False
 
-    desired_messages = ['GST', 'VTG', 'GSV']
+    desired_messages = ['GST', 'VTG', 'GSV', 'GSA']
     #desired_messages = []
     meas_rate = 8
     if moving_base:

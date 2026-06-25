@@ -44,6 +44,16 @@ GSV_TALKER_TO_SYSID = {
     "GI": 7,  # IRNSS / NavIC
 }
 
+# NMEA GSA "GNSS System ID" (NMEA 4.11 trailing field) -> uRCU GNS System id.
+# GPS/GLONASS/Galileo/BeiDou map 1:1; QZSS/NavIC/SBAS numbering is receiver
+# dependent - validate against the live stream before trusting them.
+GSA_NMEA_TO_SYSID = {
+    1: 1,  # GPS
+    2: 2,  # GLONASS
+    3: 3,  # Galileo
+    4: 4,  # BeiDou
+}
+
 class F9P_GPS:
 
 
@@ -103,6 +113,8 @@ class F9P_GPS:
         # GSV (satellites-in-view / constellation) accumulation state
         self._gsv_partial = {}   # sys_id -> list[GnssSat] currently being collected
         self._gsv_systems = {}   # sys_id -> list[GnssSat] completed for this cycle
+        # GSA (satellites used in the solution): sys_id -> list[svid]
+        self._gsa_used_systems = {}
 
         return
 
@@ -387,9 +399,8 @@ class F9P_GPS:
                     self.geo_sep = float(gns_parse.geo_sep)         # Geoid separation
                 except:
                     print("GNS information invalid")
-            if streamed_data.startswith("$GNGSA"):      # Full satellite information
-                gsa_parse = pynmea2.parse(streamed_data)
-                # Add parser here (?)
+            if streamed_data.startswith("$GNGSA"):      # Satellites used in the solution
+                self._handle_gsa(streamed_data)
             if streamed_data.startswith("$GNVTG"):      # Velocity
                 vtg_parse = pynmea2.parse(streamed_data)
                 try:
@@ -450,6 +461,34 @@ class F9P_GPS:
         if msg_num == total:
             self._gsv_systems[sys_id] = sats
 
+    def _handle_gsa(self, sentence):
+        """Parse a $xxGSA sentence to collect the satellites USED in the solution,
+        grouped by constellation (uRCU Data Exchange 1.2.0 PRN block). Relies on the
+        NMEA 4.11 trailing 'GNSS System ID' field to attribute SVs to a system."""
+        core = sentence.split("*")[0]
+        fields = core.split(",")
+        # $xxGSA,mode,fix,[12 SV ids],pdop,hdop,vdop,systemId
+        if len(fields) < 19:
+            return
+        try:
+            nmea_sysid = int(fields[18]) if fields[18] != "" else None
+        except ValueError:
+            nmea_sysid = None
+        if nmea_sysid is None:
+            return
+        sys_id = GSA_NMEA_TO_SYSID.get(nmea_sysid)
+        if sys_id is None:
+            return
+        svids = []
+        for f in fields[3:15]:   # 12 SV-ID slots
+            if f != "":
+                try:
+                    svids.append(int(f) & 0xFF)
+                except ValueError:
+                    pass
+        # Overwrite this system's used list each cycle (~1 Hz)
+        self._gsa_used_systems[sys_id] = svids
+
     def _publish_constellation(self):
         if not self._gsv_systems:
             return
@@ -473,6 +512,13 @@ class F9P_GPS:
         gpsQualMsg.horDil = self.hor_dil
         gpsQualMsg.geoSep = self.geo_sep
         # gpsQualMsg.satInfo = ???
+        # PRN block (1.2.0): satellites used in the solution, per constellation
+        gpsQualMsg.used_systems = []
+        for sys_id, svids in sorted(self._gsa_used_systems.items()):
+            gs = GnssSystem()
+            gs.system_id = sys_id
+            gs.satellites = [GnssSat(svid=s) for s in svids]
+            gpsQualMsg.used_systems.append(gs)
         gpsQualMsg.vCOG = self.cogt
         gpsQualMsg.vSOG = self.sogk
         gpsQualMsg.frequency = self.gps_hz
