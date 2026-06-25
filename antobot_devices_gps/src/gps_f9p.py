@@ -115,6 +115,8 @@ class F9P_GPS:
         self._gsv_systems = {}   # sys_id -> list[GnssSat] completed for this cycle
         # GSA (satellites used in the solution): sys_id -> list[svid]
         self._gsa_used_systems = {}
+        # Rolling buffer holding any trailing partial serial line (stream mode, usb)
+        self._rx_buffer = b""
 
         return
 
@@ -138,29 +140,79 @@ class F9P_GPS:
                     self.gps_pub.publish(self.gpsfix)
                     
         if self.method == "stream":
-            if self.dev_type =="urcu":
-                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') #stream method
             if self.dev_type == "usb":
-                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8')  self.poll_buff
-            self.get_gps_quality(streamed_data)
+                # Original single-sentence-per-tick read (unchanged)
+                streamed_data = self.gps_dev.stream_nmea(self.poll_buff)
+                self.get_gps_quality(streamed_data)
+                if self.correct_gps_format(streamed_data):
+                    self.create_gps_msg()
+                    self.get_gps_freq()
+                    self.create_quality_msg()
+                    if self.hAcc < 5000:
+                        self.gps_pub.publish(self.gpsfix)
+            else:
+                # urcu / SPI: drain the whole F9P buffer each tick so the consumer
+                # keeps up with the F9P and never publishes stale, backlogged data.
+                new_fix = False
+                for streamed_data in self._read_available_sentences():
+                    self.get_gps_quality(streamed_data)
+                    # Check the new data is viable and update message
+                    if self.correct_gps_format(streamed_data):
+                        self.create_gps_msg()
+                        self.get_gps_freq()
+                        new_fix = True
 
-
-            #print(streamed_data)
-
-
-            # Check the new data is viable and update message
-            if self.correct_gps_format(streamed_data):                
-                self.create_gps_msg()
-                self.get_gps_freq()
-
-                self.create_quality_msg()   
-                if self.hAcc < 5000:
+                # Publish once per drain using the freshest fix (backlog is dropped)
+                if new_fix and self.hAcc < 5000:
+                    self.create_quality_msg()
                     self.gps_pub.publish(self.gpsfix)
 
     
 
+    def _read_available_sentences(self):
+        """Drain all NMEA sentences currently buffered in the F9P over SPI and return
+        them in order, keeping any trailing partial line for the next call. Draining
+        each tick keeps the published fix from lagging behind the F9P output."""
+        try:
+            raw = self._spi_drain()
+            self._rx_buffer += raw
+        except Exception:
+            return []
+
+        sentences = []
+        while b"\n" in self._rx_buffer:
+            line, self._rx_buffer = self._rx_buffer.split(b"\n", 1)
+            try:
+                s = line.decode("utf-8", errors="ignore").strip()
+            except Exception:
+                continue
+            if s:
+                sentences.append(s)
+
+        # Throttled visibility into whether the drain is keeping up (<=1 per 5s)
+        rospy.loginfo_throttle(5.0, "SPI drain: %d bytes -> %d sentences (%d B partial held)"
+                               % (len(raw), len(sentences), len(self._rx_buffer)))
+        return sentences
+
+    def _spi_drain(self, max_chunks=32, chunk=256):
+        """Drain all bytes currently buffered in the F9P over SPI. The receiver
+        returns 0xFF as fill when its buffer is empty; NMEA is ASCII so 0xFF never
+        appears in real data and is dropped. Bulk reads (chunk bytes per SPI
+        transaction) replace the old byte-at-a-time read."""
+        port = self.gps_dev.hard_port   # sfeSpiWrapper
+        out = bytearray()
+        for _ in range(max_chunks):
+            data = port.read(chunk)
+            if not data:
+                break
+            kept = bytes(b for b in data if b != 0xFF)
+            out.extend(kept)
+            if not kept:            # whole chunk was fill -> buffer drained
+                break
+        return bytes(out)
+
     def correct_gps_format(self, streamed_data):
-        # Function to check whether the streamed data matches the desired 
+        # Function to check whether the streamed data matches the desired
         if self.message == "GGA":
             if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
                 self.geo = pynmea2.parse(streamed_data)
