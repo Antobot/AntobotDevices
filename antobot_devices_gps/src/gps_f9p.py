@@ -155,12 +155,16 @@ class F9P_GPS:
                 # keeps up with the F9P and never publishes stale, backlogged data.
                 new_fix = False
                 for streamed_data in self._read_available_sentences():
-                    self.get_gps_quality(streamed_data)
-                    # Check the new data is viable and update message
-                    if self.correct_gps_format(streamed_data):
-                        self.create_gps_msg()
-                        self.get_gps_freq()
-                        new_fix = True
+                    try:
+                        self.get_gps_quality(streamed_data)
+                        # Check the new data is viable and update message
+                        if self.correct_gps_format(streamed_data):
+                            self.create_gps_msg()
+                            self.get_gps_freq()
+                            new_fix = True
+                    except Exception as e:
+                        # One malformed sentence must never kill the GPS timer thread
+                        rospy.logwarn_throttle(5.0, "Skipping bad GPS sentence: %s" % e)
 
                 # Publish once per drain using the freshest fix (backlog is dropped)
                 if new_fix and self.hAcc < 5000:
@@ -499,14 +503,27 @@ class F9P_GPS:
             prn = getattr(gsv, "sv_prn_num_%d" % i, "")
             if prn in (None, ""):
                 continue
+            try:
+                svid = int(prn) & 0xFF
+            except (ValueError, TypeError):
+                continue   # skip malformed / non-numeric PRN (corrupt sentence)
             sat = GnssSat()
-            sat.svid = int(prn) & 0xFF
+            sat.svid = svid
             ele = getattr(gsv, "elevation_deg_%d" % i, "")
             azi = getattr(gsv, "azimuth_%d" % i, "")
             snr = getattr(gsv, "snr_%d" % i, "")
-            sat.elevation = int(ele) if ele not in (None, "") else -1
-            sat.azimuth = int(azi) if azi not in (None, "") else 0
-            sat.cno = int(snr) if snr not in (None, "") else 0
+            try:
+                sat.elevation = int(ele) if ele not in (None, "") else -1
+            except (ValueError, TypeError):
+                sat.elevation = -1
+            try:
+                sat.azimuth = int(azi) if azi not in (None, "") else 0
+            except (ValueError, TypeError):
+                sat.azimuth = 0
+            try:
+                sat.cno = int(snr) if snr not in (None, "") else 0
+            except (ValueError, TypeError):
+                sat.cno = 0
             sats.append(sat)
 
         # This constellation's set is complete
