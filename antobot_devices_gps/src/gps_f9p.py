@@ -117,6 +117,9 @@ class F9P_GPS:
         self._gsa_used_systems = {}
         # Rolling buffer holding any trailing partial serial line (stream mode, usb)
         self._rx_buffer = b""
+        # Differential block (1.2.0): correction age (s) and reference station ID
+        self.corr_age = -1.0
+        self.station_id = -1
 
         return
 
@@ -445,6 +448,17 @@ class F9P_GPS:
                     self.geo_sep = float(gga_parse.geo_sep)         # Geoid separation
                 except:
                     print("Geoid separation value invalid")
+                # Differential block (1.2.0): correction age + reference station ID
+                try:
+                    age = gga_parse.age_gps_data
+                    self.corr_age = float(age) if age not in (None, "") else -1.0
+                except (ValueError, TypeError, AttributeError):
+                    self.corr_age = -1.0
+                try:
+                    sid = gga_parse.ref_station_id
+                    self.station_id = int(sid) if sid not in (None, "") else -1
+                except (ValueError, TypeError, AttributeError):
+                    self.station_id = -1
             if streamed_data.startswith("$GNGNS"):
                 gns_parse = pynmea2.parse(streamed_data)
                 # self.pos_mode = int(gns_parse.mode_indicator)
@@ -588,6 +602,9 @@ class F9P_GPS:
             gs.system_id = sys_id
             gs.satellites = [GnssSat(svid=s) for s in svids]
             gpsQualMsg.used_systems.append(gs)
+        # Differential block (1.2.0): correction age + reference station ID
+        gpsQualMsg.corrAge = self.corr_age
+        gpsQualMsg.stationId = self.station_id
         gpsQualMsg.vCOG = self.cogt
         gpsQualMsg.vSOG = self.sogk
         gpsQualMsg.frequency = self.gps_hz

@@ -7,6 +7,8 @@ float32 horDil      # HDOP
 float32 geoSep      # Geoid separation
 uint8[] satInfo     # Full satellite information
 GnssSystem[] used_systems   # Satellites used in the solution, per constellation (1.2.0 PRN block)
+float32 corrAge     # Age of differential corrections (s), -1 if not available (1.2.0 Differential block)
+int16 stationId     # Differential reference station ID, -1 if not available (1.2.0 Differential block)
 float32 vCOG        # Velocity - Course over ground (heading) [degrees]
 float32 vSOG        # Velocity - Speed over ground (km/h)
 float32 frequency   # frequency
