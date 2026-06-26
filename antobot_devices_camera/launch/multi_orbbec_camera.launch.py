@@ -15,7 +15,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(camera_launch_file),
         launch_arguments={
             'camera_name': 'camera_front',
-            'usb_port': '2-2',
+            'usb_port': '4-4',
             'device_num': '2',
             'sync_mode': 'free_run',
             'color_qos': 'SENSOR_DATA',
@@ -27,7 +27,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(camera_launch_file),
         launch_arguments={
             'camera_name': 'camera_rear',
-            'usb_port': '2-1',
+            'usb_port': '2-2',
             'device_num': '2',
             'sync_mode': 'free_run',
             'color_qos': 'SENSOR_DATA',
