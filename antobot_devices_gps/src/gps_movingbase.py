@@ -85,6 +85,13 @@ class MovingBase_Ros:
             heading = frame.relPosHeading/100000
             self.heading_status = frame.relPosHeadingValid
 
+            if not self.heading_status:
+                rospy.logwarn_throttle(2.0,
+                    "RELPOSNED invalid: gnssFixOK=%s diffSoln=%s relPosValid=%s "
+                    "carrSoln=%d(0none/1float/2fix) isMoving=%s baselineLen=%dcm" % (
+                        frame.flag_gnssFixOK, frame.flag_diffSoln, frame.flag_relPosValid,
+                        frame.flag_carrSoln, frame.flag_isMoving, frame.relPosLength))
+
             if self.heading_status:
                 self.pub_heading_urcu.publish(heading) # True North heading - keep it for debugging
 

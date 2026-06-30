@@ -91,8 +91,18 @@ class MovingBase:
             self.transport.write(b'0')
 
         def data_received(self, data):
+            if getattr(self, 'transport_rover', None) is None:
+                return  # rover transport not wired yet (startup race) - drop chunk
             self.transport_rover.write(data)
             logger.debug(f"RTCMFramer received data: {data}")
+            # Throttled diagnostic: are we actually relaying RTCM from base to rover?
+            self._frame_count += len(data)
+            now = time.time()
+            if now - getattr(self, '_last_relay_log', 0) > 2.0:
+                self._last_relay_log = now
+                head = data[0] if data else -1
+                logger.info("RTCMFramer: relayed %d bytes base->rover (last chunk %dB, head=0x%02x; 0xd3=RTCM)"
+                            % (self._frame_count, len(data), head))
             
         def connection_lost(self, exc):
             logger.error('Moving Base: Connection lost, attempting to reconnect...')
