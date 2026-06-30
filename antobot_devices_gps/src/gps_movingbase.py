@@ -101,7 +101,7 @@ class MovingBase_Ros:
                 relposned.x = frame.relPosN
                 relposned.y = frame.relPosE
                 relposned.z = frame.relPosD
-                self.pub_relposned(relposned)
+                self.pub_relposned.publish(relposned)
 
                 
         elif len(self.heading_time_buf) > 0:

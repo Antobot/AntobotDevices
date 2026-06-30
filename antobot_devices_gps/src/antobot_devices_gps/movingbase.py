@@ -113,7 +113,8 @@ class MovingBase:
                 if self.movebase._protocol_base:
                     self.movebase._protocol_base.transport_rover = self.movebase._transport_rover
                     
-                    self.movebase.MyMQTT.set_transport(self.movebase._transport_base)
+                    if self.movebase.MyMQTT:
+                        self.movebase.MyMQTT.set_transport(self.movebase._transport_base)
                     logger.info(f'Moving Base: Reconnection succeeded')
                 
             except Exception as e:
@@ -378,13 +379,18 @@ class MovingBase:
         if movebase._protocol_base:
             movebase._protocol_base.transport_rover = movebase._transport_rover
         
+        # MQTT (network-RTK corrections to the base) is OPTIONAL - corrections can
+        # come from an external NTRIP client instead. If mqtt_config is missing,
+        # disable it and keep running: moving-base heading only needs the base->rover
+        # RTCM relay + the rover's RELPOSNED, not MQTT.
         if movebase._transport_base:
-            movebase.MyMQTT = MovingBase.MyMqtt(movebase._transport_base, mode)
+            try:
+                movebase.MyMQTT = MovingBase.MyMqtt(movebase._transport_base, mode)
+            except Exception as e:
+                logger.warning(f"MyMqtt disabled (no/invalid mqtt_config): {e}")
+                movebase.MyMQTT = None
         else:
             logger.error(f"MyMqtt: No movebase transport_base")
-
-        
-        movebase.F9P_Base  = MovingBase.F9P_GPS(port3)
 
         return movebase
     
@@ -400,7 +406,8 @@ class MovingBase:
             return None
     
     def pub_PVT_Heading(self, data):
-        self.MyMQTT.publish_message(data)
+        if self.MyMQTT:
+            self.MyMQTT.publish_message(data)
     
     # for test
     def close(self):
