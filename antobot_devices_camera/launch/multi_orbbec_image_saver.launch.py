@@ -25,6 +25,7 @@ def generate_launch_description():
                 'sync_slop_ms': 30.0,
                 'queue_size': 10,
                 'qos_depth': 5,
+                'log_interval_sec': 0,
                 'depth_float_to_mm': False,
             }],
         ),

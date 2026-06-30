@@ -427,6 +427,7 @@ public:
     options.queue_size = static_cast<size_t>(declare_parameter<int>("queue_size", 10));
     options.depth_float_to_mm = declare_parameter<bool>("depth_float_to_mm", false);
     const int qos_depth = declare_parameter<int>("qos_depth", 5);
+    const int log_interval_sec = declare_parameter<int>("log_interval_sec", 5);
 
     if (options.save_every_n < 1) {
       throw std::runtime_error("save_every_n must be >= 1");
@@ -439,6 +440,9 @@ public:
     }
     if (qos_depth < 1) {
       throw std::runtime_error("qos_depth must be >= 1");
+    }
+    if (log_interval_sec < 0) {
+      throw std::runtime_error("log_interval_sec must be >= 0");
     }
 
     const fs::path output_root = default_output_dir();
@@ -460,9 +464,11 @@ public:
     recorders_.push_back(std::make_unique<CameraRecorder>(*this, front_topics, output_root, options, qos));
     recorders_.push_back(std::make_unique<CameraRecorder>(*this, rear_topics, output_root, options, qos));
 
-    timer_ = create_wall_timer(
-      std::chrono::seconds(1),
-      [this]() { log_stats(); });
+    if (log_interval_sec > 0) {
+      timer_ = create_wall_timer(
+        std::chrono::seconds(log_interval_sec),
+        [this]() { log_stats(); });
+    }
 
     RCLCPP_INFO(get_logger(), "Saving %s to %s", options.sync ? "synchronized pairs" : "independent frames",
       output_root.c_str());
