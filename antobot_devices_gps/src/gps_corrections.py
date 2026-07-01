@@ -37,7 +37,7 @@ class gpsCorrections():
 
 
         self.sock = None
-        self.corr_type = "ppp"
+        self.corr_type = "ntrip"
         self.gga_interval=10
         self.latest_gga = None
         self.sub_gga = rospy.Subscriber("/antobot_gps/gga",String,self.gga_callback)
@@ -53,17 +53,17 @@ class gpsCorrections():
         with open(path, 'r') as yamlfile:
             data = yaml.safe_load(yamlfile)
             dev_type = data['gps'].keys()
-            for key, value in data['gps'].items():
-                #print(key)
-                # Only the primary receiver defines rtk_type; skip secondary
-                # antennas (e.g. ublox_rover) that have no correction config.
-                if 'rtk_type' not in value:
-                    continue
-                self.corr_type=value['rtk_type']
-                dev_port = value['device_port']
+            #print(dev_type)
+            #for key, value in data['gps'].items():
+            #    print(key)
+            #    self.corr_type=value['rtk_type']
+            #    dev_port = value['device_port']
         if "urcu" in dev_type :
             print("in urcu type")
+            self.corr_type=data['gps']['urcu']['rtk_type']
+            dev_port = data['gps']['urcu']['device_port']
             GPIO = importlib.import_module("Jetson.GPIO") 
+            print(self.corr_type)
             #dev_port = "/dev/ttyTHS0"
             baud = 460800
             self.serial_port = serial.Serial(port=dev_port, baudrate=baud)  #38400
@@ -105,6 +105,7 @@ class gpsCorrections():
         
 
         # If the uRCU is being used, the appropriate GPIO pin must be set to "high" to enable corrections from Xavier 
+        """
         if "urcu" in dev_type:
             # Set the GPIO pin of the URCU high
             self.gpio01 = 29
@@ -112,6 +113,7 @@ class gpsCorrections():
             self.GPIO.setmode(GPIO.BOARD)
             self.GPIO.setup(self.gpio01, GPIO.OUT)
             #self.GPIO.output(self.gpio01, GPIO.HIGH) # if need 20240424
+        """
 
 
 ###added for check
@@ -212,8 +214,10 @@ class gpsCorrections():
             if not data:
                 print("[WARN] NTRIP server closed connection")
                 self.connect_ntrip()
-            #print(data)
-            self.serial_port.write(data)
+                
+            else:
+                #print(data)
+                self.serial_port.write(data)
         except:
             print("[ERROR] NTRIP server break, reconnecting")
             self.connect_ntrip()

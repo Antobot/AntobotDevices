@@ -45,7 +45,7 @@ import importlib
 from antobot_devices_gps.movingbase import MovingBase
 
 class MovingBase_Ros:
-    def __init__(self, base_port_uart, rover_port, base_port_spi, mode=1):
+    def __init__(self, base_port_uart, rover_port, base_port_spi, mode=2):
 
         self.node_type = "movingbase"
         self.base_port_uart = base_port_uart
@@ -69,32 +69,25 @@ class MovingBase_Ros:
         self.heading_status = False
         self.heading_status_str = None
 
+
         # Only considering px and py (two antennas should be placed at the same height)
         urcu_px = rospy.get_param("/gps/urcu/px",0.1)
         urcu_py = rospy.get_param("/gps/urcu/py",0.6)
 
-        rover_px = rospy.get_param("/gps/movingbase/px",0.1)
-        rover_py = rospy.get_param("/gps/movingbase/py",-0.6)
+        rover_px = rospy.get_param("/movingbase/px",0.1)
+        rover_py = rospy.get_param("/movingbase/py",-0.6)
 
         self.robot_angle_correction = self.calculate_enu_angle(urcu_px, urcu_py, rover_px, rover_py)
 
     def ros_pub_relposned(self, frame):
-
+        #print(frame)
         if frame:
             self.heading_time_buf.append(time.time())
             heading = frame.relPosHeading/100000
             self.heading_status = frame.relPosHeadingValid
-
-            if not self.heading_status:
-                rospy.logwarn_throttle(2.0,
-                    "RELPOSNED invalid: gnssFixOK=%s diffSoln=%s relPosValid=%s "
-                    "carrSoln=%d(0none/1float/2fix) isMoving=%s baselineLen=%dcm" % (
-                        frame.flag_gnssFixOK, frame.flag_diffSoln, frame.flag_relPosValid,
-                        frame.flag_carrSoln, frame.flag_isMoving, frame.relPosLength))
-
             if self.heading_status:
                 self.pub_heading_urcu.publish(heading) # True North heading - keep it for debugging
-
+                
                 # Convert the value to ENU (East-North-Up)
                 enu_heading = (450.0 - heading) % 360.0
 
@@ -102,13 +95,10 @@ class MovingBase_Ros:
                 msgs = Float64()
                 msgs.data = ((enu_heading) - self.robot_angle_correction)%360.0 # Normalise the result to be within 0 to 360
                 self.pub_heading_robot.publish(msgs)
-
+                
                 # Publish the relative position in north, east, down directions
-                relposned = Vector3()
-                relposned.x = frame.relPosN
-                relposned.y = frame.relPosE
-                relposned.z = frame.relPosD
-                self.pub_relposned.publish(relposned)
+                vec=Vector3(float(frame.relPosN),float(frame.relPosE),float(frame.relPosD))
+                self.pub_relposned.publish(vec)
 
                 
         elif len(self.heading_time_buf) > 0:
@@ -118,9 +108,11 @@ class MovingBase_Ros:
 
         if self.heading_status is False and self.heading_status_str != "Invalid":
             rospy.logerr("SN4020: Heading Status: Invalid")
+            #print(f"status_fix:{self.heading_status}")
             self.heading_status_str  = "Invalid"
         elif self.heading_status and self.heading_status_str != "Valid":
             rospy.loginfo("SN4020: Heading Status: Valid")
+            #print(f"status_fix:{self.heading_status}")
             self.heading_status_str = "Valid"
 
         if len(self.heading_time_buf) > self.time_buf_len:
@@ -162,7 +154,7 @@ class MovingBase_Ros:
     async def create_MovingBase(self):
         while not self.device_connect:
             try:
-                MB = await MovingBase.create(self.base_port_uart, self.rover_port, self.base_port_spi, self.mode)
+                MB = await MovingBase.create(self.base_port_uart, self.rover_port, self.base_port_spi, 2)
                 self.device_connect = True
                 return MB
             except Exception as e:
@@ -173,24 +165,30 @@ class MovingBase_Ros:
         
     async def main(self):
         MB = await self.create_MovingBase()
-        while True:
+        #print(MB)
+        while not rospy.is_shutdown():
             try:
                 headFrame = await MB.get_RELPOSNEDframe()
                 self.ros_pub_relposned(headFrame)
-
-            except:
-                rospy.logerr(f"MovingBase: Close the MovingBase node")
-                break
+            except TimeoutException:
+                continue
+            except (serial.SerialException, asyncio.exceptions.CancelledError) as e:
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                rospy.logerr(f"MovingBase error: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
 
 if __name__ == '__main__':
     
     rospy.init_node("nRTK", disable_signals=True)
 
     base_port_uart = rospy.get_param("/gps/urcu/device_port","/dev/ttyTHS0")
-    rover_port = rospy.get_param("/gps/ublox_rover/device_port","/dev/AntoF9P")
+    rover_port = rospy.get_param("/movingbase/device_port","/dev/AntoF9P")
     base_port_spi = None
 
-    movebase = MovingBase_Ros(base_port_uart, rover_port, base_port_spi, mode=1)
+    movebase = MovingBase_Ros(base_port_uart, rover_port, base_port_spi, mode=2)
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(movebase.main())

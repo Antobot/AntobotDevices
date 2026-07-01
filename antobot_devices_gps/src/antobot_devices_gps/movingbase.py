@@ -24,7 +24,7 @@ import serial
 import serial_asyncio
 import struct
 from dataclasses import dataclass
-
+from pathlib import Path
 import threading
 import time
 
@@ -91,23 +91,14 @@ class MovingBase:
             self.transport.write(b'0')
 
         def data_received(self, data):
-            if getattr(self, 'transport_rover', None) is None:
-                return  # rover transport not wired yet (startup race) - drop chunk
-            self.transport_rover.write(data)
-            logger.debug(f"RTCMFramer received data: {data}")
-            # Throttled diagnostic: are we actually relaying RTCM from base to rover?
-            self._frame_count += len(data)
-            now = time.time()
-            if now - getattr(self, '_last_relay_log', 0) > 2.0:
-                self._last_relay_log = now
-                head = data[0] if data else -1
-                logger.info("RTCMFramer: relayed %d bytes base->rover (last chunk %dB, head=0x%02x; 0xd3=RTCM)"
-                            % (self._frame_count, len(data), head))
+            if self.movebase._transport_rover:
+                
+                asyncio.get_running_loop().call_soon(self.movebase._transport_rover.write, data)  #not block  port
+                logger.debug(f"RTCMFramer received data: {data}")
             
         def connection_lost(self, exc):
             logger.error('Moving Base: Connection lost, attempting to reconnect...')
             asyncio.get_event_loop().create_task(self.reconnect())
-            #asyncio.get_event_loop().stop()
 
         async def reconnect(self):
             await asyncio.sleep(1)
@@ -123,8 +114,7 @@ class MovingBase:
                 if self.movebase._protocol_base:
                     self.movebase._protocol_base.transport_rover = self.movebase._transport_rover
                     
-                    if self.movebase.MyMQTT:
-                        self.movebase.MyMQTT.set_transport(self.movebase._transport_base)
+                    #self.movebase.MyMQTT.set_transport(self.movebase._transport_base)
                     logger.info(f'Moving Base: Reconnection succeeded')
                 
             except Exception as e:
@@ -241,92 +231,78 @@ class MovingBase:
 
             return relposnedFrame
 
-    # mqtt class: receive the rtcm message from fixed base and write it to base
-    class MyMqtt:
-        def __init__(self, transport, mode):
-            
-            self.transport = transport
-            self.mode = mode
 
-            if self.mode == 1:
-                logger.info(f'nRTK Mode: base station')     
-                parent_directory = os.path.dirname(os.path.abspath(__file__))
-                yaml_file_path = os.path.join(parent_directory, "../../config/mqtt_config.yaml")
-               
-                with open(yaml_file_path, 'r') as file:
-                    config = yaml.safe_load(file)
-                    self.client_id = 'Anto_MQTT_F9P_Sub_' + config['device_ID']
-                    self.topics_sub = 'Anto_MQTT_F9P_' + config['base_ID']
-                    self.broker = config['mqtt_Broker']
-                    self.port = config['mqtt_Port']
-                    self.keepalive = config['mqtt_keepalive']
-                    self.mqtt_username = config['mqtt_UserName']
-                    self.mqtt_password = config['mqtt_PassWord']
+    class F9P_GPS:
+        def __init__(self, port = None):
+            if port is None:
+                self.port = spidev.SpiDev()
+                logger.debug(f"F9P_GPS: SPI")
+            else:
+                self.port = serial.Serial(port=port, baudrate=460800, timeout=0)
+                logger.debug(f"F9P_GPS: UART")
 
-                self.client = mqtt_client.Client(self.client_id)
-                #self.client = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION1, self.client_id) # for paho-mqtt 2.0
-
-                self.client.username_pw_set(self.mqtt_username, self.mqtt_password)
-
-            elif self.mode == 2:     
-                logger.info(f'nRTK Mode: ppp')
-                parent_directory = os.path.dirname(os.path.abspath(__file__))
-                yaml_file_path = os.path.join(parent_directory, "../../config/ppp_config.yaml")
-  
-                with open(yaml_file_path, 'r') as file:
-                        config = yaml.safe_load(file)
-                        client_id = config['device_ID']
-
-                self.client_id = client_id 
-                self.broker = 'pp.services.u-blox.com'
-                self.port=8883
-                self.topics_sub = [(f"/pp/ip/eu", 0), ("/pp/ubx/mga", 0), ("/pp/ubx/0236/ip", 0)]
-                self.client = mqtt_client.Client(client_id=self.client_id)
-                self.client.tls_set(certfile=os.path.join(parent_directory,"../../config/")+f'device-{self.client_id}-pp-cert.crt',keyfile=os.path.join(parent_directory,"../../config/")+f'device-{self.client_id}-pp-key.pem')
-                            
-            self.client.on_connect = self.on_connect
-            self.client.on_message = self.on_message
-
-            
-            self.connect_broker()
-
-        def connect_broker(self):
+            self.gps_port = UbloxGps(self.port)
+            self.h_acc = 500 
+            self.fix_status = None
+                        
+        def get_gps(self):
+            #function to parse and publish the UBX parser GPS coordinates
             try:
-                if self.mode == 1:
-                    self.client.connect(self.broker, self.port, self.keepalive)
-                elif self.mode == 2:
-                    self.client.connect(self.broker, self.port)
+                geo = self.gps_port.geo_coords()
+                #logger.info(f"geo: {geo}") 
+                self.get_fix_status(geo)
 
-            except Exception as e:
-                logger.error(f"MQTT: Connection failed: {e}")
+                pvtFrame = MovingBase.PVTFrame(geo.iTOW, geo.fixType, geo.flags.carrSoln, geo.lon, geo.lat, geo.height, geo.hAcc, self.fix_status)
+                
+                return pvtFrame
+            except TimeoutException:
+                logger.error(f"F9P_GPS: can not read pvt from F9P")
+            except IOError:
+                logger.error(f"F9P_GPS: IOError")
+                pass
 
-            self.client.loop_start() 
-
-        def disconnect_broker(self):
-            self.client.loop_stop()
-            self.client.disconnect()
-
-        def on_connect(self, client, userdata, flags, rc):
-            if rc == 0:
-                logger.info(f"MQTT: Connected to MQTT Broker successfully!")
-                self.client.subscribe(self.topics_sub)
+        def get_fix_status(self, geo):
+            if geo.flags.carrSoln == 2:  #fix mode =2 ; float mode = 1
+                if self.fix_status != 3:
+                    #logger.info(f"GPS-PVT Fix status: Good (3)")
+                    self.fix_status = geo.fixType #3: 3Dfix, 2:2Dfix
+                
+            elif geo.flags.carrSoln == 1: # float conditions
+                #PPP-IP can show float even if the horizontal accuracy is good, so adding another loop to check the fix mode
+                if geo.hAcc < self.h_acc:
+                    if self.fix_status != 3:
+                        #logger.info(f"GPS-PVT Fix status: Good (3)")
+                        self.fix_status = 3
+                    
+                elif geo.hAcc > self.h_acc :
+                    if self.fix_status != 1:
+                        #logger.warning(f"GPS-PVT Fix status: Warning (1)")
+                        self.fix_status = 1
             else:
-                logger.error("MQTT: Failed to connect, return code {0}".format(rc))
-
-        def publish_message(self, msg):
-            result = self.client.publish(topic=self.topic, payload=msg, qos=0, retain=True)
-
-            if result[0] == 0:
-                return True
-            else:
-                logger.error("MQTT: Failed to send message {0} to topic {1}".format(msg, self.topic))
-                return False
-        
-        def on_message(self, client, userdata, msg):
-            self.transport.write(msg.payload)
-
-        def set_transport(self, transport_):
-            self.transport = transport_
+                if self.fix_status != 0:
+                    #logger.error(f"GPS-PVT Fix status: Critical (0)")
+                    self.fix_status = 0 #no fix
+                
+        # time limit
+        def wait_for(self, func, seconds, *args, **kwargs):
+            time_out = False
+            
+            def timeout_handler():
+               nonlocal time_out
+               time_out = True
+              
+            timer = threading.Timer(seconds, timeout_handler)
+            timer.start()
+            try:
+                result = func(*args, **kwargs)
+            except TimeoutException:
+                result = None
+            finally:
+                timer.cancel()
+                if time_out:
+                    raise TimeoutException("Function call timed out")
+                    
+            return result
 
     @dataclass
     class RELPOSNEDFrame:
@@ -367,10 +343,10 @@ class MovingBase:
         self.MyMQTT = None
         self.F9P_Base = None
         
-        self.time_limit = 0.25
+        self.time_limit = 0.7
         
     @staticmethod
-    async def create(port1='port_movingbase', port2='port_rover', port3='port_base', mode=1):
+    async def create(port1='port_movingbase', port2='port_rover', port3='port_base', mode=2):
         movebase = MovingBase()
         movebase._transport_base, movebase._protocol_base = await serial_asyncio.create_serial_connection(
             asyncio.get_running_loop(),
@@ -389,18 +365,7 @@ class MovingBase:
         if movebase._protocol_base:
             movebase._protocol_base.transport_rover = movebase._transport_rover
         
-        # MQTT (network-RTK corrections to the base) is OPTIONAL - corrections can
-        # come from an external NTRIP client instead. If mqtt_config is missing,
-        # disable it and keep running: moving-base heading only needs the base->rover
-        # RTCM relay + the rover's RELPOSNED, not MQTT.
-        if movebase._transport_base:
-            try:
-                movebase.MyMQTT = MovingBase.MyMqtt(movebase._transport_base, mode)
-            except Exception as e:
-                logger.warning(f"MyMqtt disabled (no/invalid mqtt_config): {e}")
-                movebase.MyMQTT = None
-        else:
-            logger.error(f"MyMqtt: No movebase transport_base")
+        movebase.F9P_Base  = MovingBase.F9P_GPS(port3)    #F9P_GPS
 
         return movebase
     
@@ -412,12 +377,11 @@ class MovingBase:
             result = await asyncio.wait_for(self._protocol_rover.frames.get(), timeout=self.time_limit)
             return result
         except Exception as e:
-            #logger.error(f"Timeout: get_RELPOSNEDframe ({e})")
+            logger.error(f"Timeout: get_RELPOSNEDframe ({e})")
             return None
     
     def pub_PVT_Heading(self, data):
-        if self.MyMQTT:
-            self.MyMQTT.publish_message(data)
+        self.MyMQTT.publish_message(data)
     
     # for test
     def close(self):
@@ -445,13 +409,15 @@ async def main():
 
     #time_start = time.time()
     
-    publish_mqtt = True
+    publish_mqtt = False
     while True:
-        
+        print("in while loop")
         time1 = time.time()
         headFrame = await movebase.get_RELPOSNEDframe()
         time2 = time.time()
-        
+        print(time2 - time1) 
+
+
         if publish_mqtt:
             
             if headFrame:
