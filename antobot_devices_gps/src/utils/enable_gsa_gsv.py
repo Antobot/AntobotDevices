@@ -5,18 +5,19 @@
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-# # # Code Description:  MINIMAL config for the urcu F9P: enable NMEA GSA output on the
-#                        SPI port + set NMEA protocol version to 4.11, so GSA carries the
-#                        trailing "GNSS System ID" field that gps_f9p._handle_gsa needs to
-#                        populate gpsQual.used_systems (per-constellation satellites used).
+# # # Code Description:  MINIMAL config for the urcu F9P: enable NMEA GSA + GSV output on
+#                        the SPI port + set NMEA protocol version to 4.11, so both carry the
+#                        trailing "GNSS System ID" field. This feeds:
+#                          - GSA -> gps_f9p._handle_gsa -> gpsQual.used_systems (1.2.0 PRN block)
+#                          - GSV -> gps_f9p._handle_gsv -> /antobot_gps/constellation (1.2.1)
 #
-#                        It changes ONLY these two things - it does NOT touch RTCM, message
-#                        rates, UART settings, moving-base, or anything else. The existing
-#                        working dual-GPS / RTCM configuration on the chip is left intact.
-#                        Sent over SPI (the port gps_f9p reads the urcu on). Saved to RAM+Flash.
+#                        Changes ONLY these three items - does NOT touch RTCM, message rates,
+#                        UART settings, or moving-base. The existing working dual-GPS / RTCM
+#                        config is left intact. Sent over SPI (the port gps_f9p reads the urcu
+#                        on). Saved to RAM+Flash.
 #
-# Run with the urcu GPS node STOPPED (so the SPI bus is free), once:
-#     python3 enable_gsa.py
+# Run with the whole software stack STOPPED (so the SPI bus is free), once:
+#     python3 enable_gsa_gsv.py
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -27,13 +28,14 @@ SPI_BUS, SPI_DEV = 2, 0      # spi1 - same as f9p_config / sfeSpiWrapper
 SPI_SPEED = 7800000
 LAYERS = 0x05                # RAM + Flash (persist)
 
-# (name, key, value, value_bytes)
+# (name, key, value, value_bytes). value for MSGOUT = output every Nth nav epoch;
+# 8 -> ~1 Hz (GSA/GSV change slowly and GSV is bulky, keeps SPI load minimal).
 ITEMS = [
-    # Enable NMEA-GSA on the SPI port. value = output every Nth nav epoch; 8 -> ~1 Hz
-    # (used-satellites change slowly, keeps SPI load minimal). Key 0x209100c3 = GSA_SPI
-    # (matches f9p_config.py's GSA SPI key 0xc3 with the 0x2091_00_ prefix).
+    # NMEA-GSA on SPI (satellites USED -> gpsQual.used_systems / 1.2.0 PRN block)
     ("CFG-MSGOUT-NMEA_ID_GSA_SPI", 0x209100c3, 8, 1),
-    # NMEA 4.11 so GSA (and GSV) include the trailing GNSS System ID. NMEA-format only:
+    # NMEA-GSV on SPI (satellites IN VIEW -> /antobot_gps/constellation / 1.2.1 message)
+    ("CFG-MSGOUT-NMEA_ID_GSV_SPI", 0x209100c8, 8, 1),
+    # NMEA 4.11 so GSA/GSV include the trailing GNSS System ID. NMEA-format only:
     # does NOT affect RTCM, GGA, or moving-base.
     ("CFG-NMEA-PROTVER",           0x20930001, 42, 1),
 ]
@@ -55,7 +57,7 @@ def build_valset(key, value, val_bytes):
 
 
 def main():
-    print("Enabling NMEA-GSA (SPI) + NMEA 4.11 on the urcu F9P over SPI ...")
+    print("Enabling NMEA GSA + GSV (SPI) + NMEA 4.11 on the urcu F9P over SPI ...")
     spi = spidev.SpiDev()
     spi.open(SPI_BUS, SPI_DEV)
     spi.max_speed_hz = SPI_SPEED
@@ -65,7 +67,8 @@ def main():
         time.sleep(0.05)
         print("  sent %-28s (0x%08x = %d)" % (name, key, value))
     spi.close()
-    print("Done (RAM+Flash). Restart the gps node; gpsQual.used_systems should populate.")
+    print("Done (RAM+Flash). Restart the gps node.")
+    print("  used_systems (GSA) -> 1.2.0 PRN block; /antobot_gps/constellation (GSV) -> 1.2.1.")
     print("Nothing else changed - RTCM / rates / UART / moving-base untouched.")
 
 
