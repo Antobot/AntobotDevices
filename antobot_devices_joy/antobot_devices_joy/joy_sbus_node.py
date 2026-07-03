@@ -419,13 +419,13 @@ class JoystickSbus(Node):
                 while self.device_connect and rclpy.ok():
                     try:
                         # read
-                        frame = await asyncio.wait_for(sbus.get_frame(), timeout=1.0)
+                        frame = await asyncio.wait_for(sbus.get_frame(), timeout=0.5)
                         self.create_joy_msg(frame)
                         self.device_connect = True
                     except asyncio.TimeoutError:
                         if self.device_connect is True:
                             self.device_connect = False
-                            self.get_logger().warn("Wait frame timeout")
+                            self.get_logger().error("Wait frame timeout")
                             self.publish_disconnect()
                     except Exception as e:
                         self.get_logger().error(f"Read sbus failed: {e}")
