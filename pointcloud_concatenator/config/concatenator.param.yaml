@@ -1,0 +1,36 @@
+pointcloud_concatenator:
+  ros__parameters:
+    input_topics:
+      - /lidar_90/pointcloud
+      - /lidar_91/pointcloud
+
+    # All input point clouds are transformed into this frame before concatenation.
+    output_frame: base_link
+
+    # Maximum wait time after the first cloud enters a collector; on timeout, concatenate the clouds received so far.
+    timeout_sec: 0.1
+
+    # Maximum wait time for each TF lookup.
+    tf_timeout_sec: 0.2
+
+    # Queue size for each subscription and publisher.
+    maximum_queue_size: 5
+
+    # Number of timestamp groups allowed to wait in parallel. Use 3 or more when multiple LiDAR timestamps are interleaved.
+    num_collectors: 3
+
+    # If false, concatenated results older than the previous output timestamp are dropped.
+    publish_previous_but_late_pointcloud: false
+
+    # When replaying a rosbag in a loop, a backward time jump larger than this value is treated as a new replay cycle.
+    # Set to 0 if looped rosbag replay handling is not needed.
+    rosbag_length: 0.0
+
+    matching_strategy:
+      # naive: group clouds by message arrival time.
+      # advanced: group clouds by PointCloud2 header.stamp, per-topic offset, and noise window.
+      type: naive
+
+      # In advanced mode, these lists must match the length of input_topics; ignored in naive mode.
+      lidar_timestamp_offsets: [0.0, 0.0]
+      lidar_timestamp_noise_window: [0.01, 0.01]
