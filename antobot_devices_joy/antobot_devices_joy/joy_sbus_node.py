@@ -399,21 +399,45 @@ class JoystickSbus(Node):
 
         self.reset_buttons()
 
+    def publish_disconnect(self):
+        self.get_logger().warn("Publishing disconnect message")
+        self.axes = [0.0] * 8
+        self.buttons = [0] * 11
+        self.joy_msg.axes = self.axes
+        self.joy_msg.buttons = self.buttons
+        self.joy_msg.header.stamp = self.get_clock().now().to_msg()
+        self.joy_pub.publish(self.joy_msg)
+
     async def read_by_sbus(self):
-        while not self.device_connect:
+        while not self.device_connect and rclpy.ok():
             try:
+                # connect
                 sbus = await SBUSReceiver.create(self.device_port)
                 self.device_connect = True
                 self.get_logger().info(f"Connected to {self.device_port}")
+
+                while self.device_connect and rclpy.ok():
+                    try:
+                        # read
+                        frame = await asyncio.wait_for(sbus.get_frame(), timeout=0.5)
+                        self.create_joy_msg(frame)
+                        self.device_connect = True
+                    except asyncio.TimeoutError:
+                        if self.device_connect is True:
+                            self.device_connect = False
+                            self.get_logger().error("Wait frame timeout")
+                            self.publish_disconnect()
+                    except Exception as e:
+                        self.get_logger().error(f"Read sbus failed: {e}")
+
+
             except Exception as e:
                 if self.publish_first:
                     self.get_logger().warn(f'Cannot open {self.device_port}: {e}')
                     self.publish_first = False
                 await asyncio.sleep(1)
 
-        while rclpy.ok():
-            frame = await sbus.get_frame()
-            self.create_joy_msg(frame)
+
 
 
 def main(args=None):
