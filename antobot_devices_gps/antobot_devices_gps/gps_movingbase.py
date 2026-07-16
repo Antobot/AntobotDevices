@@ -653,9 +653,16 @@ class MovingBase:
                             msg_heading.time_diff = 999 # 999 means no message received
 
 
-                        heading_valid_ = (frame.flag_gnssFixOK and frame.flag_isMoving and frame.relPosHeadingValid and (abs(frame.relPosLength * 1e-2 - self.ros_node.antenna_baseline) < 0.1 ) and (frame.flag_carrSoln == 2))
+                        heading_valid_ = (
+                            frame.flag_gnssFixOK
+                            and frame.flag_isMoving
+                            and frame.flag_relPosValid
+                            and frame.relPosHeadingValid
+                            and frame.flag_carrSoln == 2
+                            and abs(frame.relPosLength * 1e-2 - self.ros_node.antenna_baseline) < 0.1
+                        )
                         print(f"heading_valid_: {heading_valid_}; flag_gnssFixOK:{frame.flag_gnssFixOK}; flag_isMoving: {frame.flag_isMoving}; relPosHeadingValid: {frame.relPosHeadingValid};  \
-                              flag_carrSoln: {frame.flag_carrSoln == 2}; relPosLength: {frame.relPosLength * 1e-2}; {abs(frame.relPosLength * 1e-2 - self.ros_node.antenna_baseline) < 0.1}  ")
+                              flag_relPosValid: {frame.flag_relPosValid}; flag_carrSoln: {frame.flag_carrSoln == 2}; relPosLength: {frame.relPosLength * 1e-2}; {abs(frame.relPosLength * 1e-2 - self.ros_node.antenna_baseline) < 0.1}  ")
                         
                         if heading_valid != heading_valid_:
                             if heading_valid_:
