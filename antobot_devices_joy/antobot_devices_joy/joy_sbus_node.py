@@ -14,10 +14,10 @@ from .sbus_received import SBUSReceiver
 
 
 class RobotState(Enum):
-    """机器人状态枚举"""
-    SHUTDOWN = 0      # 关机状态
-    POWER_ON = 1      # 开机状态
-    ACTIVATED = 2     # 激活状态
+    """Robot state enum"""
+    SHUTDOWN = 0      # Shutdown state
+    POWER_ON = 1      # Power-on state
+    ACTIVATED = 2     # Activated state
 
 
 class JoystickSbus(Node):
@@ -36,34 +36,34 @@ class JoystickSbus(Node):
         self.publish_first = True
         self.debug_ = True
 
-        # Joy消息数据
+        # Joy message data
         self.axes = [0.0] * 8
         self.buttons = [0] * 11
         self.axes_pre = [0.0] * 8
         self.buttons_pre = [0] * 11
 
-        # 状态机相关
+        # State machine data
         self.current_state = RobotState.SHUTDOWN
-        self.activation_triggered = False  # 记录激活状态是否已触发LB/RB
+        self.activation_triggered = False  # Whether LB/RB has been triggered in activated state
 
-        # 多帧窗口检测
+        # Multi-frame window detection
         self.window_size = 30
         self.ch0_buffer = deque(maxlen=self.window_size)
         self.ch1_buffer = deque(maxlen=self.window_size)
         self.ch2_buffer = deque(maxlen=self.window_size)
         self.ch3_buffer = deque(maxlen=self.window_size)
 
-        # 触发状态记录
-        self.ch4_prev = 1000  # ch[4]前一帧的值
-        self.ch5_prev = 1000  # ch[5]前一帧的值
-        self.ch6_min_in_activation = float('inf')  # 本次激活时ch[6]的最小值
-        self.ch6_trigger_2_done = False  # ch[6]触发2是否已完成
-        self.ch6_trigger_3_done = False  # ch[6]触发3是否已完成
+        # Trigger state tracking
+        self.ch4_prev = 1000  # Previous frame value of ch[4]
+        self.ch5_prev = 1000  # Previous frame value of ch[5]
+        self.ch6_min_in_activation = float('inf')  # Minimum ch[6] value during this activation
+        self.ch6_trigger_2_done = False  # Whether trigger 2 for ch[6] has been completed
+        self.ch6_trigger_3_done = False  # Whether trigger 3 for ch[6] has been completed
         self.ch7_min_in_activation = float('inf')  # The minimum value of ch[7] during this activation
         self.ch7_trigger_2_done = False  # Whether trigger 2 for ch[7] has been completed
         self.ch7_trigger_3_done = False  # Whether trigger 3 for ch[7] has been completed
 
-        # 按钮状态
+        # Button states
         self.A = self.B = self.X = self.Y = 0
         self.LB = self.RB = self.BACK = 0
         self.RT = 0.0
@@ -71,7 +71,7 @@ class JoystickSbus(Node):
         self.get_logger().info(f"Joystick SBUS State Machine node started on port {self.device_port}")
 
     def normalize_axis(self, val):
-        """200~1800 映射到 [-1.0, 1.0]"""
+        """Map 200~1800 to [-1.0, 1.0]"""
         if val < 100 or val > 1900:
             return 0.0
         norm = (val - 1000) / 800.0
@@ -81,7 +81,7 @@ class JoystickSbus(Node):
         return round(norm, 3)
 
     def is_buffer_stable(self, buffer):
-        """检查缓冲区内的值是否稳定（所有值相同）"""
+        """Check whether all values in the buffer are stable."""
         if len(buffer) < self.window_size:
             return False, None
         unique_values = set(buffer)
@@ -90,21 +90,21 @@ class JoystickSbus(Node):
         return False, None
 
     def is_buffer_dynamic(self, buffer):
-        """检查缓冲区内的值是否动态（值不全相同）"""
+        """Check whether values in the buffer are dynamic."""
         if len(buffer) < self.window_size:
             return False
         unique_values = set(buffer)
         return len(unique_values) > 1
 
     def update_state(self, ch):
-        """更新状态机状态"""
-        # 更新多帧窗口
+        """Update the state machine."""
+        # Update multi-frame window
         self.ch0_buffer.append(ch[0])
         self.ch1_buffer.append(ch[1])
         self.ch2_buffer.append(ch[2])
         self.ch3_buffer.append(ch[3])
 
-        # 检查ch[0]-ch[3]是否都稳定
+        # Check whether ch[0]-ch[3] are all stable
         ch0_stable, _ = self.is_buffer_stable(self.ch0_buffer)
         ch1_stable, ch1_val = self.is_buffer_stable(self.ch1_buffer)
         ch2_stable, _ = self.is_buffer_stable(self.ch2_buffer)
@@ -112,7 +112,7 @@ class JoystickSbus(Node):
 
         all_stable = ch0_stable and ch1_stable and ch2_stable and ch3_stable
 
-        # 检查ch[0]-ch[3]是否都动态
+        # Check whether ch[0]-ch[3] are all dynamic
         all_dynamic = (self.is_buffer_dynamic(self.ch0_buffer) and
                        self.is_buffer_dynamic(self.ch1_buffer) and
                        self.is_buffer_dynamic(self.ch2_buffer) and
@@ -120,9 +120,9 @@ class JoystickSbus(Node):
 
         prev_state = self.current_state
 
-        # 状态转换逻辑
+        # State transition logic
         if all_stable:
-            # ch[0]-ch[3]都稳定 -> 关机状态
+            # ch[0]-ch[3] all stable -> shutdown state
             if self.current_state != RobotState.SHUTDOWN:
                 self.get_logger().info("State transition: -> SHUTDOWN")
                 self.current_state = RobotState.SHUTDOWN
@@ -136,7 +136,7 @@ class JoystickSbus(Node):
                 self.X = 3
                 self.BACK = 3
 
-                # 立即发布这个退出信号
+                # Publish this exit signal immediately
                 self.axes = [0.0] * 8
                 self.buttons = [0, 0, self.X, 0, 0, 0, self.BACK, 0, 0, 0, 0]
                 self.joy_msg.axes = self.axes
@@ -144,51 +144,51 @@ class JoystickSbus(Node):
                 self.joy_msg.header.stamp = self.get_clock().now().to_msg()
                 self.joy_pub.publish(self.joy_msg)
 
-                # 更新前值
+                # Update previous values
                 self.axes_pre = list(self.axes)
                 self.buttons_pre = list(self.buttons)
 
-                # 状态转换
+                # State transition
                 # self.current_state = RobotState.POWER_ON
                 # self.activation_triggered = False
                 # self.ch6_min_in_activation = float('inf')
                 # self.ch6_trigger_2_done = False
                 # self.ch6_trigger_3_done = False
 
-                # 重置按钮
+                # Reset buttons
                 self.reset_buttons()
 
         elif all_dynamic:
-            # ch[0]-ch[3]都动态 -> 开机状态
+            # ch[0]-ch[3] all dynamic -> power-on state
             if self.current_state == RobotState.SHUTDOWN:
                 self.get_logger().info("State transition: SHUTDOWN -> POWER_ON")
                 self.current_state = RobotState.POWER_ON
 
-        # 开机状态下，检查是否进入激活状态
+        # In power-on state, check whether to enter activated state
         if self.current_state == RobotState.POWER_ON:
             if ch1_stable and ch1_val is not None and ch1_val > 300 and ch1_val < 1500:
                 self.get_logger().info("State transition: POWER_ON -> ACTIVATED")
                 self.current_state = RobotState.ACTIVATED
-                self.activation_triggered = False  # 重置触发标志
-                self.ch6_min_in_activation = float('inf')  # 重置ch6最小值
+                self.activation_triggered = False  # Reset trigger flag
+                self.ch6_min_in_activation = float('inf')  # Reset ch6 minimum value
                 self.ch6_trigger_2_done = False
                 self.ch6_trigger_3_done = False
                 self.ch7_min_in_activation = float('inf')  # Reset ch[7] minimum value
                 self.ch7_trigger_2_done = False
                 self.ch7_trigger_3_done = False
 
-        # 激活状态下，检查是否退出激活状态（取消激活）
+        # In activated state, check whether to leave activated state
         if self.current_state == RobotState.ACTIVATED:
 
-            # 如果ch[1]不再稳定或稳定值不再大于100，退出激活状态
+            # Leave activated state if ch[1] is not stable or its stable value is no longer greater than 100
             if not ch1_stable or (ch1_stable and ch1_val is not None and ch1_val <= 100):
                 self.get_logger().info("State transition: ACTIVATED -> POWER_ON (deactivation)")
 
-                # 退出激活时触发 X=3, BACK=3
+                # Trigger X=3, BACK=3 when leaving activated state
                 self.X = 3
                 self.BACK = 3
 
-                # 立即发布这个退出信号
+                # Publish this exit signal immediately
                 self.axes = [0.0] * 8
                 self.buttons = [0, 0, self.X, 0, 0, 0, self.BACK, 0, 0, 0, 0]
                 self.joy_msg.axes = self.axes
@@ -196,11 +196,11 @@ class JoystickSbus(Node):
                 self.joy_msg.header.stamp = self.get_clock().now().to_msg()
                 self.joy_pub.publish(self.joy_msg)
 
-                # 更新前值
+                # Update previous values
                 self.axes_pre = list(self.axes)
                 self.buttons_pre = list(self.buttons)
 
-                # 状态转换
+                # State transition
                 self.current_state = RobotState.POWER_ON
                 self.activation_triggered = False
                 self.ch6_min_in_activation = float('inf')
@@ -210,35 +210,35 @@ class JoystickSbus(Node):
                 self.ch7_trigger_2_done = False
                 self.ch7_trigger_3_done = False
 
-                # 重置按钮
+                # Reset buttons
                 self.reset_buttons()
 
     def reset_buttons(self):
-        """重置按钮状态"""
+        """Reset button states."""
         self.A = self.B = self.X = self.Y = 0
         self.LB = self.RB = self.BACK = 0
         self.RT = 0.0
 
     def create_joy_msg(self, SbusFrame):
-        """使用状态机处理Joy消息创建"""
+        """Create Joy messages with the state machine."""
         ch = SbusFrame.sbusChannels
 
-        # 步骤1: 如果ch[2]小于50，直接返回
+        # Step 1: return directly if ch[2] is less than 50
         if ch[2] < 50:
             self.axes = [0.0] * 8
             self.buttons = [0] * 11
             return
 
-        # 步骤2-3: 更新状态机
+        # Steps 2-3: update the state machine
         self.update_state(ch)
 
-        # 如果不在激活状态，或者激活状态未触发过LB/RB，发布零值
+        # Publish zero values when not activated or LB/RB has not been triggered
         if self.current_state != RobotState.ACTIVATED:
             self.axes = [0.0] * 8
             self.buttons = [0] * 11
             self.reset_buttons()
 
-            # 发布零值消息
+            # Publish zero-value message
             if self.axes != self.axes_pre or self.buttons != self.buttons_pre:
                 self.joy_msg.axes = self.axes
                 self.joy_msg.buttons = self.buttons
@@ -248,45 +248,45 @@ class JoystickSbus(Node):
                 self.buttons_pre = list(self.buttons)
             return
 
-        # 步骤3: 激活状态，首次触发LB/RB
+        # Step 3: activated state, first LB/RB trigger
         if not self.activation_triggered:
             self.LB = 1
             self.RB = 1
             self.activation_triggered = True
             self.get_logger().info("Activation triggered: LB=1, RB=1")
 
-            # 首次激活时，只发布LB=1, RB=1，其他都是0
+            # On first activation, publish only LB=1 and RB=1; all others are 0
             self.axes = [0.0] * 8
             self.buttons = [0, 0, 0, 0, self.LB, self.RB, 0, 0, 0, 0, 0]
 
-            # 发布消息
+            # Publish message
             self.joy_msg.axes = self.axes
             self.joy_msg.buttons = self.buttons
             self.joy_msg.header.stamp = self.get_clock().now().to_msg()
             self.joy_pub.publish(self.joy_msg)
 
-            # 更新前值
+            # Update previous values
             self.axes_pre = list(self.axes)
             self.buttons_pre = list(self.buttons)
 
-            # 重置按钮
+            # Reset buttons
             self.reset_buttons()
 
-            # 初始化ch[4]的前值 避免第二帧误触发4.1或4.2
+            # Initialize previous values to avoid false triggers on the second frame
             self.ch4_prev = ch[4]
             self.ch5_prev = ch[5]
 
-            # 如果首次激活时ch[6]小于1000，标记trigger_3已完成，避免误触发
+            # Mark trigger_3 as done if ch[6] is below 1000 on first activation
             if ch[6] < 1000:
                 self.ch6_trigger_3_done = True
 
             if ch[7] < 1000:
                 self.ch7_trigger_3_done = True
 
-            # 直接返回，不继续处理后续的摇杆映射
+            # Return directly and skip subsequent joystick mapping
             return
 
-        # 步骤4.0: 映射ch[0]-ch[3]为控制方向
+        # Step 4.0: map ch[0]-ch[3] to control directions
         left_rocker_LR = ch[3]
         left_rocker_FB = ch[1]
         right_rocker_LR = ch[0]
@@ -298,40 +298,40 @@ class JoystickSbus(Node):
         right_FB = self.normalize_axis(right_rocker_FB)
 
 
-        # 步骤4.1: ch[4]从1000变为200
+        # Step 4.1: ch[4] changes from 1000 to 200
         if self.ch4_prev == 1000 and 150 < ch[4] < 250:
             self.A = 1
             self.RT = -1.0
             self.get_logger().info("Trigger 4.1: A=1, RT=-1.0 (ch[4]: 1000->200)")
 
-        # 步骤4.2: ch[4]从1000变为1800
+        # Step 4.2: ch[4] changes from 1000 to 1800
         elif self.ch4_prev == 1000 and 1750 < ch[4] < 1850:
             self.A = -1
             self.RT = -1.0
             self.get_logger().info("Trigger 4.2: A=-1, RT=-1.0 (ch[4]: 1000->1800)")
 
-        # 步骤4.3: ch[5]从1000变为200 --resume
+        # Step 4.3: ch[5] changes from 1000 to 200 --resume
         elif self.ch5_prev == 1000 and 150 < ch[5] < 250:
             self.A = 1
             self.RT = 0.0
             self.get_logger().info("Trigger 4.3: A=1, RT=0.0 (ch[4]: 1000->200)")
 
-        # 步骤4.4: ch[5]从1000变为1800 --pause
+        # Step 4.4: ch[5] changes from 1000 to 1800 --pause
         elif self.ch5_prev == 1000 and 1750 < ch[5] < 1850:
             self.Y = 1
             self.RT = 0.0
             self.get_logger().info("Trigger 4.4: Y=1, RT=0.0 (ch[4]: 1000->1800)")
 
-        # 更新ch[4] ch[5]前值
+        # Update previous values for ch[4] and ch[5]
         self.ch4_prev = ch[4]
         self.ch5_prev = ch[5]
 
-        # 更新ch[6]最小值
+        # Update ch[6] minimum value
         self.ch6_min_in_activation = min(self.ch6_min_in_activation, ch[6])
 
 
 
-        # 步骤4.3: ch[6]从最小值大800，且自身大于1000
+        # Step 4.3: ch[6] is 800 above the minimum and greater than 1000
         if (not self.ch6_trigger_2_done and
                 ch[6] > 1000 and
                 ch[6] - self.ch6_min_in_activation > 800):
@@ -340,7 +340,7 @@ class JoystickSbus(Node):
             self.ch6_trigger_2_done = True
             self.get_logger().info(f"Trigger 4.3: X=2, BACK=2 (ch[6]={ch[6]}, min={self.ch6_min_in_activation})")
 
-        # 步骤4.4: ch[6]小于1000
+        # Step 4.4: ch[6] is less than 1000
         if not self.ch6_trigger_3_done and ch[6] < 1000:
             self.X = 3
             self.BACK = 3
@@ -349,7 +349,7 @@ class JoystickSbus(Node):
             self.ch6_trigger_2_done = False
             self.get_logger().info(f"Trigger 4.4: X=3, BACK=3 (ch[6]={ch[6]})")
 
-        # 如果ch[6]回到大于1000，重置触发3标志
+        # Reset trigger 3 flag if ch[6] returns to 1000 or above
         if ch[6] >= 1000:
             self.ch6_trigger_3_done = False
 
@@ -372,7 +372,7 @@ class JoystickSbus(Node):
             self.get_logger().info(f"Trigger: X=5, BACK=5 (ch[7]={ch[7]})")
 
         if ch[7] >= 1000:
-            self.ch7_trigger_3_done = False        # 组装axes和buttons
+            self.ch7_trigger_3_done = False        # Build axes and buttons
         self.axes = [
             0.0, left_FB, 0.0, -right_LR, right_FB, self.RT, 0.0, left_LR
         ]
@@ -381,7 +381,7 @@ class JoystickSbus(Node):
             self.LB, self.RB, self.BACK, 0, 0, 0, 0
         ]
 
-        # 步骤4.5: 当映射值有更新时发布joy消息
+        # Step 4.5: publish Joy message when mapped values change
         if (self.axes != self.axes_pre or self.buttons != self.buttons_pre):
             if self.debug_:
                 print(f'State: {self.current_state.name}')
@@ -393,7 +393,7 @@ class JoystickSbus(Node):
             self.joy_msg.header.stamp = self.get_clock().now().to_msg()
             self.joy_pub.publish(self.joy_msg)
 
-        # 更新前值
+        # Update previous values
         self.axes_pre = list(self.axes)
         self.buttons_pre = list(self.buttons)
 
