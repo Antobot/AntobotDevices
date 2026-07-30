@@ -34,6 +34,7 @@ from std_msgs.msg import Header
 
 from antobot_devices_msgs.msg import GpsHeading, RTCM
 from antobot_com_postgresql.db_config_loader import get_robot_config
+from antobot_devices_gps.heading_continuity import HeadingContinuityChecker
 
 @dataclass
 class RELPOSNEDFrame:
@@ -415,6 +416,9 @@ class ROS2Interface(Node):
         self.declare_parameter('rtcm_topic', '/antobot_gps/rtcm')
         self.declare_parameter('port_movingbase', '/dev/ttyTHS1')
         self.declare_parameter('port_movingrover', '/dev/anto_gps')
+        self.declare_parameter('heading_continuity_samples', 5)
+        self.declare_parameter('heading_max_turn_rate_deg_s', 60.0)
+        self.declare_parameter('heading_max_sample_gap_s', 0.5)
         # self.declare_parameter('antenna_baseline', 1.3)
         # self.antenna_baseline = self.get_parameter('antenna_baseline').get_parameter_value().double_value
 
@@ -444,6 +448,18 @@ class ROS2Interface(Node):
         self.loop = asyncio.get_running_loop()
         self.rtcm_last_time = 0
         self.msg_rec_heading_time = None
+        self.heading_continuity_samples = max(
+            1,
+            self.get_parameter('heading_continuity_samples')
+            .get_parameter_value()
+            .integer_value,
+        )
+        self.heading_max_turn_rate_deg_s = self.get_parameter(
+            'heading_max_turn_rate_deg_s'
+        ).get_parameter_value().double_value
+        self.heading_max_sample_gap_s = self.get_parameter(
+            'heading_max_sample_gap_s'
+        ).get_parameter_value().double_value
 
 
         self.timer_period_heading = 1
@@ -530,6 +546,11 @@ class MovingBase:
         
         self.rtcm_buffer = rtcm_buffer
         self.ros_node = ros_node
+        self.heading_continuity = HeadingContinuityChecker(
+            minimum_samples=self.ros_node.heading_continuity_samples,
+            maximum_turn_rate_deg_s=self.ros_node.heading_max_turn_rate_deg_s,
+            maximum_sample_gap_s=self.ros_node.heading_max_sample_gap_s,
+        )
     
     async def initialize(self):
         try:
@@ -612,8 +633,7 @@ class MovingBase:
             msg_heading.header= Header()
             msg_heading.header.frame_id = 'gps_frame'  # FRAME_ID
             
-            heading_valid = True
-            heading_valid_last = False
+            heading_valid_last = None
             
             # Keep the event loop running
             while True:
@@ -653,22 +673,38 @@ class MovingBase:
                             msg_heading.time_diff = 999 # 999 means no message received
 
 
-                        heading_valid_ = (frame.flag_gnssFixOK and frame.flag_isMoving and frame.relPosHeadingValid and (abs(frame.relPosLength * 1e-2 - self.ros_node.antenna_baseline) < 0.1 ) and (frame.flag_carrSoln == 2))
-                        print(f"heading_valid_: {heading_valid_}; flag_gnssFixOK:{frame.flag_gnssFixOK}; flag_isMoving: {frame.flag_isMoving}; relPosHeadingValid: {frame.relPosHeadingValid};  \
-                              flag_carrSoln: {frame.flag_carrSoln == 2}; relPosLength: {frame.relPosLength * 1e-2}; {abs(frame.relPosLength * 1e-2 - self.ros_node.antenna_baseline) < 0.1}  ")
-                        
-                        if heading_valid != heading_valid_:
-                            if heading_valid_:
-                                self.ros_node.get_logger().info("SN4110: Heading message status: valid")
+                        source_valid = (
+                            frame.flag_gnssFixOK
+                            and frame.flag_isMoving
+                            and frame.relPosHeadingValid
+                            and abs(
+                                frame.relPosLength * 1e-2
+                                - self.ros_node.antenna_baseline
+                            ) < 0.1
+                            and frame.flag_carrSoln == 2
+                        )
+                        heading_valid, continuity_reason = self.heading_continuity.check(
+                            msg_heading.heading, frame.iTOW, source_valid
+                        )
+
+                        if heading_valid != heading_valid_last:
+                            if heading_valid:
+                                self.ros_node.get_logger().info(
+                                    "SN4110: Heading message status: valid"
+                                )
                             else:
-                                self.ros_node.get_logger().error("SN4110: Heading message status: invalid")
-                            heading_valid = heading_valid_
-    			    
-                        msg_heading.heading_valid = heading_valid_
+                                self.ros_node.get_logger().error(
+                                    "SN4110: Heading message status: invalid (%s)"
+                                    % continuity_reason
+                                )
+                            heading_valid_last = heading_valid
+
+                        msg_heading.heading_valid = heading_valid
                         self.ros_node.pub_heading.publish(msg_heading)
                         
-                    elif heading_valid and heading_valid != heading_valid_last:
-                        heading_valid = heading_valid_last
+                    elif heading_valid_last:
+                        self.heading_continuity.reset()
+                        heading_valid_last = False
                         self.ros_node.get_logger().error("SN4110: Heading message status: invalid")
                         
                     await asyncio.sleep(0.2)
