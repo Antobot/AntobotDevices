@@ -840,9 +840,9 @@ class F9P_config:
         """Return the per-navigation-epoch output rate for one message."""
         if msg not in self.desired_messages:
             return 0
-        if msg in ('GSA', 'GSV'):
+        if msg == 'GSV':
             # A rate of one is every navigation epoch. Match the 5/8 Hz
-            # navigation rate so these diagnostic sentences are emitted at 1 Hz.
+            # navigation rate so this diagnostic sentence is emitted at 1 Hz.
             return self.meas_rate
         return 1
 
@@ -987,8 +987,8 @@ if __name__ == '__main__':
     device_name = '/dev/ttyUSB0'
     device_baudrate=38400
 
-    # GST/VTG/RMC retain the navigation rate. GSA/GSV are rate-limited to 1 Hz.
-    desired_messages = ['GST', 'VTG', 'RMC', 'GSA', 'GSV']
+    # GST/VTG/RMC retain the navigation rate. GSV is rate-limited to 1 Hz.
+    desired_messages = ['GST', 'VTG', 'RMC', 'GSV']
     meas_rate = 8
     print("1111111111111")
     if config_mode[0] == "0":
