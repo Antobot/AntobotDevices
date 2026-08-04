@@ -8,13 +8,16 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(builtin_interfaces REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 find_package(std_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/GpsIntegrity.msg"
   "msg/GpsQual.msg"
+  "msg/GpsSignalHealth.msg"
   "msg/GpsHeading.msg"
   "msg/RTCM.msg"
   "srv/CamManager.srv"

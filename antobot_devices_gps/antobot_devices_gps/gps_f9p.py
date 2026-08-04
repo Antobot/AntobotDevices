@@ -144,6 +144,7 @@ class F9P_GPS(Node):
         self.gps_pub = self.create_publisher( NavSatFix,pub_name, 10)
         self.gps_qual_pub = self.create_publisher( GpsQual,"/antobot_gps/quality", 10)
         self.gga_msg_pub=self.create_publisher(String, "/antobot_gps/gga", 10)
+        self.nmea_msg_pub=self.create_publisher(String, "/antobot_gps/nmea", 50)
         self._timer = self.create_timer(1 / 50, self.do_publish)
         
         
@@ -218,6 +219,11 @@ class F9P_GPS(Node):
             if self.dev_type == "usb":
                 streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') 1 self.poll_buff
             self.get_gps_quality(streamed_data)
+
+            if isinstance(streamed_data, str) and streamed_data.startswith("$"):
+                nmea_msg = String()
+                nmea_msg.data = streamed_data
+                self.nmea_msg_pub.publish(nmea_msg)
 
 
             print("streamed_data:",streamed_data)
@@ -749,4 +755,3 @@ def main(args=None):
 
 if __name__ == '__main__':   
     main()
-

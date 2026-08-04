@@ -476,7 +476,7 @@ class F9PMessageMap:
 
     def get_default_rover_messages(self) -> List[str]:
         """Rover messages"""
-        return ["GST", "VTG"]
+        return ["GGA", "GST", "GSV", "VTG"]
 
     def get_moving_rover_messages(self) -> List[str]:
         """Messages for moving rover: RELPOSNED only."""
