@@ -658,8 +658,10 @@ class F9P_config:
         return packet
 
 
-    def config_out_message(self, key_id_1, key_id_2, enable):
+    def config_out_message(self, key_id_1, key_id_2, rate):
         # prepare packet
+        if not 0 <= rate <= 255:
+            raise ValueError("message output rate must fit in one byte")
         length = 18
         packet = self.prepare_cfg_packet(length)
 
@@ -668,11 +670,8 @@ class F9P_config:
         packet[11] = key_id_2
         packet[12] = 0x91
         packet[13] = 0x20
-        #value
-        if enable:
-            packet[14] = 0x01 # 0:disable, 1:enable
-        else:
-            packet[14] = 0x00 # 0:disable, 1:enable
+        # Value is the number of navigation epochs between output messages.
+        packet[14] = rate
         packet[15] = 0x00
         packet = self.calculate_checksum(packet, length)
 
@@ -816,14 +815,14 @@ class F9P_config:
         print("    Out message setting: ")  
         for msg in all_messages:
 
-            enable = msg in self.desired_messages
+            rate = self.message_rate(msg)
             key_id_1 = self.get_key_id_new(msg)
             key_id_2 = 0x00
 
             if len(msg) > 4 and msg[0:4] == 'RTCM':
                 key_id_2 = 0x03
 
-            packet = self.config_out_message(key_id_1, key_id_2, enable)
+            packet = self.config_out_message(key_id_1, key_id_2, rate)
 
             if self.config_mode[0] in ["2", "5"]:
                 self.port.write(packet)
@@ -834,10 +833,18 @@ class F9P_config:
 
             self.check_ubx_uart(received_bytes)
 
-            enable_text = "Disabled"
-            if enable:
-                enable_text = "Enabled"
-            print(f"        Set {msg} Message {enable_text}")        
+            rate_text = "Disabled" if rate == 0 else f"every {rate} navigation epochs"
+            print(f"        Set {msg} Message {rate_text}")
+
+    def message_rate(self, msg):
+        """Return the per-navigation-epoch output rate for one message."""
+        if msg not in self.desired_messages:
+            return 0
+        if msg in ('GSA', 'GSV'):
+            # A rate of one is every navigation epoch. Match the 5/8 Hz
+            # navigation rate so these diagnostic sentences are emitted at 1 Hz.
+            return self.meas_rate
+        return 1
 
     def get_baud(self):
         length = 8
@@ -980,7 +987,8 @@ if __name__ == '__main__':
     device_name = '/dev/ttyUSB0'
     device_baudrate=38400
 
-    desired_messages = ['GST', 'VTG', 'RMC']
+    # GST/VTG/RMC retain the navigation rate. GSA/GSV are rate-limited to 1 Hz.
+    desired_messages = ['GST', 'VTG', 'RMC', 'GSA', 'GSV']
     meas_rate = 8
     print("1111111111111")
     if config_mode[0] == "0":
