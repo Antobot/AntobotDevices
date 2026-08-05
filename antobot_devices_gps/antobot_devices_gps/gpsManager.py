@@ -76,7 +76,7 @@ class gpsManager(Node):
                 if gps_cls_tmp:
                     self.gps_nodes.append(gps_cls_tmp)
                 
-        self.timer=self.create_timer(0.02, self.check_gps)
+        self.timer=self.create_timer(0.001, self.check_gps)
         # Launch corrections node - should it be launched directly from SW manager?
         """
         if self.launch_corrections:
