@@ -24,7 +24,7 @@ class JoystickSbus(Node):
     def __init__(self):
         super().__init__('joy_sbus_node')
 
-        self.declare_parameter('dev', '/dev/ttyUSB0')
+        self.declare_parameter('dev', '/dev/ttyCH341USB0')
         self.device_port = self.get_parameter('dev').get_parameter_value().string_value
 
         self.indoor_demo_pub = self.create_publisher(Empty, '/indoor_demo', 10)
@@ -409,33 +409,36 @@ class JoystickSbus(Node):
         self.joy_pub.publish(self.joy_msg)
 
     async def read_by_sbus(self):
+        sbus = None
         while not self.device_connect and rclpy.ok():
             try:
-                # connect
                 sbus = await SBUSReceiver.create(self.device_port)
                 self.device_connect = True
                 self.get_logger().info(f"Connected to {self.device_port}")
-
-                while self.device_connect and rclpy.ok():
-                    try:
-                        # read
-                        frame = await asyncio.wait_for(sbus.get_frame(), timeout=0.5)
-                        self.create_joy_msg(frame)
-                        self.device_connect = True
-                    except asyncio.TimeoutError:
-                        if self.device_connect is True:
-                            self.device_connect = False
-                            self.get_logger().error("Wait frame timeout")
-                            self.publish_disconnect()
-                    except Exception as e:
-                        self.get_logger().error(f"Read sbus failed: {e}")
-
-
             except Exception as e:
                 if self.publish_first:
                     self.get_logger().warn(f'Cannot open {self.device_port}: {e}')
                     self.publish_first = False
                 await asyncio.sleep(1)
+
+        # After the initial connection, only SBUSReceiver handles reconnecting.
+        # A frame timeout does not open the serial device again.
+        while rclpy.ok():
+            try:
+                frame = await asyncio.wait_for(sbus.get_frame(), timeout=0.5)
+                if not self.device_connect:
+                    self.get_logger().info(
+                        f"reconnect successfully to {self.device_port}")
+                self.device_connect = True
+                self.create_joy_msg(frame)
+            except asyncio.TimeoutError:
+                if self.device_connect:
+                    self.device_connect = False
+                    self.get_logger().error("Wait frame timeout")
+                    self.publish_disconnect()
+            except Exception as e:
+                self.get_logger().error(f"Read sbus failed: {e}")
+                await asyncio.sleep(0.1)
 
 
 
