@@ -145,7 +145,6 @@ class F9P_GPS(Node):
         self.gps_pub = self.create_publisher( NavSatFix,pub_name, 10)
         self.gps_qual_pub = self.create_publisher( GpsQual,"/antobot_gps/quality", 10)
         self.gga_msg_pub=self.create_publisher(String, "/antobot_gps/gga", 10)
-        self.nmea_msg_pub=self.create_publisher(String, "/antobot_gps/nmea", 50)
         self.signal_health_pub=self.create_publisher(GpsSignalHealth, "/antobot_gps/signal_health", 10)
         self._timer = self.create_timer(1 / 50, self.do_publish)
         
@@ -181,7 +180,6 @@ class F9P_GPS(Node):
 
     def do_publish(self):
          self.get_gps()
-         print("do_publish")
         
 
     def uart2_config(self,baud):
@@ -194,7 +192,6 @@ class F9P_GPS(Node):
         
     def get_gps(self):
         # Get the data from the F9P
-        print("get_gps")
         if self.method == "poll":
             self.geo = self.gps_dev.geo_coords() #poll method
             self.hAcc=self.geo.hAcc
@@ -227,15 +224,6 @@ class F9P_GPS(Node):
             if self.dev_type == "usb":
                 streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') 1 self.poll_buff
             self.get_gps_quality(streamed_data)
-
-            if isinstance(streamed_data, str) and streamed_data.startswith("$"):
-                nmea_msg = String()
-                nmea_msg.data = streamed_data
-                self.nmea_msg_pub.publish(nmea_msg)
-
-
-            print("streamed_data:",streamed_data)
-
 
             # Check the new data is viable and update message
             if self.correct_gps_format(streamed_data):                
@@ -283,7 +271,6 @@ class F9P_GPS(Node):
         if self.message == "GGA":
             if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
                 self.geo = pynmea2.parse(streamed_data)
-                print("gps_format_true")
                 return True
         if self.message == "GNS":
             if isinstance(streamed_data,str) and streamed_data.startswith("$GNGNS"):
@@ -350,7 +337,6 @@ class F9P_GPS(Node):
         return self.fix_status
 
     def create_gps_msg(self):
-        print("create_gps_msg")
         self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
 
         self.gpsfix.altitude = 0.0
@@ -402,7 +388,6 @@ class F9P_GPS(Node):
     def set_gps_msg_time(self):
 
         # Getting time
-        print("set_gps_msg_time")
         current_time = self.get_clock().now().to_msg()
         dt0 = self.get_gps_timestamp_utc()
         #print("current time (ROS): {}".format(current_time.to_sec()))
@@ -434,7 +419,6 @@ class F9P_GPS(Node):
             self.poll_buff = 24
         self.poll_buff_pre=self.poll_buff
         
-        print("pulled sentence:",self.poll_buff)            
         
     def get_gps_timestamp_utc(self):
         today_date = datetime.today()
@@ -542,10 +526,7 @@ class F9P_GPS(Node):
                 try:
                     self.gga_gps_qual = int(gga_parse.gps_qual)
                     self.num_sats = int(gga_parse.num_sats)         # Number of satellites
-                    print("self.gps_time_offset:",self.gps_time_offset)
-                    print("num_sats:",self.num_sats)
                     if self.gps_time_offset < 0.5 and self.num_sats >0:
-                        print("publish gga")
                         msg=String()
                         msg.data = streamed_data
                         self.gga_msg_pub.publish(msg)

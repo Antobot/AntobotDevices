@@ -46,7 +46,7 @@ class F9PSpiFrameReader:
         max_nmea_bytes: int = 256,
         max_ubx_payload_bytes: int = 2048,
         ubx_chunk_size: int = 32,
-        idle_reads_before_return: int = 8,
+        idle_reads_before_return: int = 1,
     ) -> None:
         if max_nmea_bytes < 8:
             raise ValueError("max_nmea_bytes must be at least 8")

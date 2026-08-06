@@ -28,7 +28,6 @@ setup(
             'gps_corrections= antobot_devices_gps.gps_corrections:main',
             'gps_movingbase= antobot_devices_gps.gps_movingbase:main',
             'gps_integrity = antobot_devices_gps.gps_integrity:main',
-            'gps_signal_health = antobot_devices_gps.gps_signal_health:main',
         ],
     },
 )

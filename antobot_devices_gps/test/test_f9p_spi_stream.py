@@ -83,3 +83,10 @@ def test_nav_sig_uses_healthy_tracking_signals_before_carrier_solution_exists():
     assert health.valid
     assert health.satellites_in_view == 2
     assert health.cno_median_dbhz == 40.0
+
+
+def test_idle_poll_uses_one_spi_transfer():
+    transport = FakeSpiRead(b"\xff")
+
+    assert F9PSpiFrameReader(transport).read_frame() is None
+    assert transport.requests == [1]
