@@ -13,6 +13,9 @@
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+import argparse
+import struct
+
 import spidev
 import serial
 import time
@@ -676,6 +679,97 @@ class F9P_config:
         packet = self.calculate_checksum(packet, length)
 
         return packet
+
+    @staticmethod
+    def _ubx_packet(message_class, message_id, payload):
+        """Build one UBX packet without changing unrelated receiver settings."""
+        packet = bytearray(b'\xb5\x62')
+        packet.extend((message_class, message_id))
+        packet.extend(struct.pack('<H', len(payload)))
+        packet.extend(payload)
+        check_a = 0
+        check_b = 0
+        for value in packet[2:]:
+            check_a = (check_a + value) & 0xFF
+            check_b = (check_b + check_a) & 0xFF
+        packet.extend((check_a, check_b))
+        return packet
+
+    def _read_transport_byte(self):
+        """Read one byte while treating SPI's 0xFF idle value as no data."""
+        if self.config_mode[0] == '1':
+            data = self.port.readbytes(1)
+            if not data or data[0] == 0xFF:
+                return None
+            return data[0]
+
+        data = self.port.read(1)
+        if not data:
+            return None
+        return data[0]
+
+    def _wait_for_valset_ack(self, timeout_s=2.0):
+        """Wait for the ACK/NAK of the focused CFG-VALSET command."""
+        deadline = time.monotonic() + timeout_s
+        buffer = bytearray()
+        while time.monotonic() < deadline:
+            value = self._read_transport_byte()
+            if value is None:
+                time.sleep(0.001)
+                continue
+            buffer.append(value)
+
+            while True:
+                start = buffer.find(b'\xb5\x62')
+                if start < 0:
+                    buffer[:] = buffer[-1:] if buffer[-1:] == b'\xb5' else b''
+                    break
+                if start:
+                    del buffer[:start]
+                if len(buffer) < 8:
+                    break
+
+                payload_length = buffer[4] | (buffer[5] << 8)
+                frame_length = 8 + payload_length
+                if len(buffer) < frame_length:
+                    break
+                frame = bytes(buffer[:frame_length])
+                del buffer[:frame_length]
+
+                check_a = 0
+                check_b = 0
+                for byte in frame[2:-2]:
+                    check_a = (check_a + byte) & 0xFF
+                    check_b = (check_b + check_a) & 0xFF
+                if frame[-2:] != bytes((check_a, check_b)):
+                    continue
+                if frame[2:6] == b'\x05\x01\x02\x00' and frame[6:8] == b'\x06\x8a':
+                    return True
+                if frame[2:6] == b'\x05\x00\x02\x00' and frame[6:8] == b'\x06\x8a':
+                    return False
+        raise TimeoutError('timed out waiting for CFG-VALSET ACK')
+
+    def configure_spi_nav_sig(self, nav_epochs_per_output):
+        """Disable GSV and enable UBX-NAV-SIG on SPI without resetting F9P."""
+        if self.config_mode[0] != '1':
+            raise ValueError('NAV-SIG test configuration is only supported over SPI')
+        if not 1 <= nav_epochs_per_output <= 255:
+            raise ValueError('NAV-SIG epoch interval must be in [1, 255]')
+
+        # CFG-MSGOUT-NMEA_ID_GSV_SPI and CFG-MSGOUT-UBX_NAV_SIG_SPI.
+        # Layer 0x05 applies the change to RAM and flash, matching this script's
+        # former persistent configuration behavior.
+        payload = bytearray((0x00, 0x05, 0x00, 0x00))
+        payload.extend(struct.pack('<IB', 0x209100C8, 0))
+        payload.extend(struct.pack('<IB', 0x20910349, nav_epochs_per_output))
+        packet = self._ubx_packet(0x06, 0x8A, payload)
+        self.write_new(packet)
+        if not self._wait_for_valset_ack():
+            raise RuntimeError('F9P rejected CFG-VALSET for SPI GSV/NAV-SIG output')
+
+        print('F9P SPI stream configuration applied:')
+        print('    GSV: disabled')
+        print('    UBX-NAV-SIG: every {} navigation epochs'.format(nav_epochs_per_output))
     
     
 
@@ -954,131 +1048,23 @@ class F9P_config:
 
 
 if __name__ == '__main__':
-    
-    # config mode: 
-    # 1x: spi; 10: reset; 11: rovel; 12: local base; 13: moving rovel; 14: moving base;
-    # 2x: uart1; 20: reset; 21: rovel; 22: local base; 23: moving rovel; 24: moving base;
-    # 3x: uart2; 30: reset; 31: rovel; 32: local base; 33: moving rovel; 34: moving base;
-    # 4x: usb; 
-    # 5x: uart1 for usb; 50: reset; 51: rovel; 52: local base; 53: moving rovel; 54: moving base;
+    parser = argparse.ArgumentParser(
+        description='Configure SPI output for the NAV-SIG C/N0 test without resetting F9P.'
+    )
+    parser.add_argument(
+        '--nav-epochs-per-output',
+        type=int,
+        default=5,
+        help='navigation epochs between NAV-SIG outputs; 5 gives 1 Hz on a 5 Hz rover',
+    )
+    args = parser.parse_args()
 
-
-    # config mode: 
-    # 1xx: spi; 
-    #   100: reset; 
-    #   11x: spi;
-    #   12x: uart1;    
-    #   13x: uart2;  
-    # 2xx: usb; 
-    # 3xx: uart; 20: reset; 21: rovel; 22: local base; 23: moving rovel; 24: moving base;
-    
-    # x00: reset; 
-    # xx: spi;
-    # x2x: uart1;    
-    # x3x: uart2;
-
-    # xx1: rovel; 
-    # xx2: local base; 
-    # xx3: moving rovel; 
-    # xx4: moving base;
-
-
-    config_mode = '14'
-    device_name = '/dev/ttyUSB0'
-    device_baudrate=38400
-
-    # GST/VTG/RMC retain the navigation rate. GSV is rate-limited to 1 Hz.
-    desired_messages = ['GST', 'VTG', 'RMC', 'GSV']
-    meas_rate = 8
-    print("1111111111111")
-    if config_mode[0] == "0":
-        pass
-    elif config_mode[0] == "1":
-        spi = spidev.SpiDev()
-        spi.open(1, 0)  # (2,0) for spi1, (0,0) for spi0
-        spi.max_speed_hz =  7800000 # 1000000, 15600000,62400000....
+    spi = spidev.SpiDev()
+    try:
+        spi.open(1, 0)
+        spi.max_speed_hz = 10_000_000
         spi.mode = 0
-        spi.no_cs
-        f9p_cfg = F9P_config(spi, desired_messages, meas_rate, config_mode)
-        f9p_cfg.config()
-    elif config_mode[0] == "2":
-        pass
-    elif config_mode[0] == "3":
-        pass
-    elif config_mode[0] == "5":
-        uart = serial.Serial(port='/dev/ttyUSB0', baudrate=38400, timeout=1)
-        f9p_cfg = F9P_config(uart, desired_messages, meas_rate, config_mode)
-        f9p_cfg.config()
-
-    # packagePath=get_package_share_directory('antobot_description')
-    # path = packagePath + "/config/platform_config.yaml"
-
-    # with open(path, 'r') as yamlfile:
-    #     data = yaml.safe_load(yamlfile)
-    #     dev_type = data['gps'].keys()
-    # # Importing device-specific packages
-    # if "urcu" in dev_type :
-    #     device = "spi"
-    # elif "f9p_usb" in dev_type:
-    #     device = "uart"
-
-    # device = "uart"
-    # desired_messages = ['GST', 'VTG']
-    # #desired_messages = []
-    # meas_rate = 8
-    # if moving_base:
-    #     meas_rate = 5
-
-
-    # if device=="uart":
-    #     # uart = serial.Serial(port='/dev/ttyACM0', baudrate=460800, timeout=1)
-    #     uart = serial.Serial(port='/dev/ttyUSB0', baudrate=38400, timeout=1)
-    #     f9p_cfg = F9P_config(uart, desired_messages, meas_rate, device)
-    #     # # step2: reset
-    #     # packet = f9p_cfg.revert_to_default_mode()
-    #     # f9p_cfg .uartwrite(packet)
-    #     # received_bytes = f9p_cfg.receive_ubx_bytes_from_uart()
-
-
-    #     # packet = f9p_cfg.get_ver()
-    #     # f9p_cfg.uartwrite(packet)
-    #     # received_bytes = f9p_cfg.receive_ubx_bytes_from_uart()
-    #     # print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
-    #     # f9p_cfg.config_f9p()
-    
-
-    #     # #receive GPS messages
-    #     # packet = f9p_cfg.receive_gps()
-    #     # f9p_cfg.uartwrite(packet)
-    #     # received_bytes = f9p_cfg.receive_ubx_bytes_from_uart() 
-    #     # f9p_cfg.config_moving_base()
-    # else:
-    #     spi = spidev.SpiDev()
-    #     spi.open(1, 0)  # (2,0) for spi1, (0,0) for spi0
-    #     spi.max_speed_hz =  7800000 # 1000000, 15600000,62400000....
-    #     spi.mode = 0
-    #     spi.no_cs
-
-    #     f9p_cfg = F9P_config(spi, desired_messages, meas_rate,device)         
-
-    #     #function to get the f9p firmware version
-    #     packet = f9p_cfg.get_ver()
-    #     f9p_cfg.write(packet)
-    #     received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()
-    #     print("Firmware version of Ublox F9P: ",received_bytes) # To print out the firmware version of F9P if required
-
-    #     # revert to the default mode
-        
-    #     packet = f9p_cfg.revert_to_default_mode()
-    #     f9p_cfg.write(packet)
-    #     received_bytes = f9p_cfg.receive_ubx_bytes_from_spi() 
-    #     #configure the f9p to block unwanted messages
-    #     f9p_cfg.config_f9p()
-    
-    #     if moving_base:
-    #         # configure the uart2's output (for movingbase)
-    #         f9p_cfg.config_uart2_rtcm()
-    #     #receive GPS messages
-    #     packet = f9p_cfg.receive_gps()
-    #     f9p_cfg.write(packet)
-    #     received_bytes = f9p_cfg.receive_ubx_bytes_from_spi()     
+        f9p_cfg = F9P_config(spi, [], 5, '14')
+        f9p_cfg.configure_spi_nav_sig(args.nav_epochs_per_output)
+    finally:
+        spi.close()
