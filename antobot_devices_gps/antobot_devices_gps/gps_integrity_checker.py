@@ -58,6 +58,22 @@ class GpsIntegrityResult:
     reason: str
 
 
+class FixedDurationTracker:
+    """Measure how long all conditions have remained RTK Fixed."""
+
+    def __init__(self) -> None:
+        self._fixed_since: Optional[float] = None
+
+    def update(self, now: float, fixed: bool) -> float:
+        """Return continuous Fixed duration, resetting immediately when it breaks."""
+        if not fixed:
+            self._fixed_since = None
+            return 0.0
+        if self._fixed_since is None:
+            self._fixed_since = now
+        return max(0.0, now - self._fixed_since)
+
+
 class GpsIntegrityChecker:
     """Validate F9P fix and quality topic completeness and consistency."""
 

@@ -37,8 +37,9 @@ from std_msgs.msg import  String
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from std_msgs.msg import UInt8, Float32, Header
-from antobot_devices_msgs.msg import GpsQual
+from antobot_devices_msgs.msg import GpsQual, GpsSignalHealth
 from .ublox_gps.ublox_gps import UbloxGps
+from .f9p_spi_stream import UBX_NAV_CLASS, UBX_NAV_SIG_ID, UbxFrame, nav_sig_health, parse_nav_sig
 import math
 
 SHM_KEY = 0x4E545030  # "NTP0" in ASCII, used for time sync
@@ -145,6 +146,7 @@ class F9P_GPS(Node):
         self.gps_qual_pub = self.create_publisher( GpsQual,"/antobot_gps/quality", 10)
         self.gga_msg_pub=self.create_publisher(String, "/antobot_gps/gga", 10)
         self.nmea_msg_pub=self.create_publisher(String, "/antobot_gps/nmea", 50)
+        self.signal_health_pub=self.create_publisher(GpsSignalHealth, "/antobot_gps/signal_health", 10)
         self._timer = self.create_timer(1 / 50, self.do_publish)
         
         
@@ -215,7 +217,13 @@ class F9P_GPS(Node):
                     # self.gps_pub.publish(self.gpsfix)
         if self.method == "stream":
             if self.dev_type =="urcu":
-                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') #stream method
+                streamed_frame = self.gps_dev.stream_mixed_frame()
+                if streamed_frame is None:
+                    return
+                if isinstance(streamed_frame, UbxFrame):
+                    self.handle_ubx_frame(streamed_frame)
+                    return
+                streamed_data = streamed_frame.sentence
             if self.dev_type == "usb":
                 streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') 1 self.poll_buff
             self.get_gps_quality(streamed_data)
@@ -246,6 +254,27 @@ class F9P_GPS(Node):
                            self.gps_pub.publish(self.gpsfix)
                    else:
                         self.gps_pub.publish(self.gpsfix)
+
+    def handle_ubx_frame(self, frame):
+        """Publish C/N0 health directly from a validated UBX-NAV-SIG frame."""
+        if frame.message_class != UBX_NAV_CLASS or frame.message_id != UBX_NAV_SIG_ID:
+            return
+        try:
+            health = nav_sig_health(parse_nav_sig(frame.payload))
+        except ValueError as error:
+            self.get_logger().warning("Ignoring invalid UBX-NAV-SIG: %s" % error)
+            return
+
+        message = GpsSignalHealth()
+        message.stamp = self.get_clock().now().to_msg()
+        message.valid = health.valid
+        message.satellites_in_view = health.satellites_in_view
+        message.constellation_count = health.constellation_count
+        message.weak_signal_count = health.weak_signal_count
+        message.cno_mean_dbhz = health.cno_mean_dbhz
+        message.cno_median_dbhz = health.cno_median_dbhz
+        message.cno_p10_dbhz = health.cno_p10_dbhz
+        self.signal_health_pub.publish(message)
 
     
 

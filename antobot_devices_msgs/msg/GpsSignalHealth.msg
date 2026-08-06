@@ -1,6 +1,6 @@
 builtin_interfaces/Time stamp
 
-# Aggregated from the latest NMEA GSV epoch. C/N0 values are in dB-Hz.
+# Aggregated from the active GNSS signal source. C/N0 values are in dB-Hz.
 bool valid
 uint8 satellites_in_view
 uint8 constellation_count

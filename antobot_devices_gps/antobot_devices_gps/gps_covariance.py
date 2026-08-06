@@ -24,7 +24,6 @@ class CovarianceResult:
     covariance_zz: float
     covariance_scale: float
     horizontal_stddev_m: float
-    vertical_stddev_m: float
     reason: str
 
 
@@ -34,9 +33,13 @@ class GpsCovarianceModel:
     def __init__(
         self,
         min_horizontal_stddev_m: float = 0.02,
-        vertical_stddev_multiplier: float = 4.0,
+        vertical_covariance_m2: float = 100.0,
         nominal_hdop: float = 1.0,
         fixed_covariance_multiplier: float = 1.0,
+        fixed_duration_short_s: float = 3.0,
+        fixed_duration_warmup_s: float = 5.0,
+        fixed_duration_short_covariance_multiplier: float = 9.0,
+        fixed_duration_warmup_covariance_multiplier: float = 4.0,
         float_covariance_multiplier: float = 25.0,
         differential_covariance_multiplier: float = 100.0,
         standalone_covariance_multiplier: float = 400.0,
@@ -54,19 +57,36 @@ class GpsCovarianceModel:
         require_signal_health: bool = False,
         require_rtcm: bool = True,
     ) -> None:
-        if min_horizontal_stddev_m <= 0.0 or vertical_stddev_multiplier <= 0.0:
-            raise ValueError("standard-deviation parameters must be positive")
+        if min_horizontal_stddev_m <= 0.0:
+            raise ValueError("minimum horizontal standard deviation must be positive")
+        if vertical_covariance_m2 <= 0.0:
+            raise ValueError("vertical covariance must be positive")
         if nominal_hdop <= 0.0 or unavailable_covariance_m2 <= 0.0:
             raise ValueError("covariance parameters must be positive")
+        if not 0.0 < fixed_duration_short_s < fixed_duration_warmup_s:
+            raise ValueError("fixed-duration thresholds must be ascending and positive")
+        if (
+            fixed_duration_short_covariance_multiplier < 1.0
+            or fixed_duration_warmup_covariance_multiplier < 1.0
+        ):
+            raise ValueError("fixed-duration covariance multipliers must be at least one")
         if not cno_good_dbhz > cno_warning_dbhz > cno_critical_dbhz >= 0.0:
             raise ValueError("C/N0 thresholds must be descending and non-negative")
         if not 0.0 <= rtcm_good_age_s < rtcm_warning_age_s < rtcm_critical_age_s:
             raise ValueError("RTCM age thresholds must be ascending and non-negative")
 
         self.min_horizontal_stddev_m = min_horizontal_stddev_m
-        self.vertical_stddev_multiplier = vertical_stddev_multiplier
+        self.vertical_covariance_m2 = vertical_covariance_m2
         self.nominal_hdop = nominal_hdop
         self.fixed_covariance_multiplier = fixed_covariance_multiplier
+        self.fixed_duration_short_s = fixed_duration_short_s
+        self.fixed_duration_warmup_s = fixed_duration_warmup_s
+        self.fixed_duration_short_covariance_multiplier = (
+            fixed_duration_short_covariance_multiplier
+        )
+        self.fixed_duration_warmup_covariance_multiplier = (
+            fixed_duration_warmup_covariance_multiplier
+        )
         self.float_covariance_multiplier = float_covariance_multiplier
         self.differential_covariance_multiplier = differential_covariance_multiplier
         self.standalone_covariance_multiplier = standalone_covariance_multiplier
@@ -90,6 +110,7 @@ class GpsCovarianceModel:
         horizontal_accuracy_m: float,
         hdop: float,
         gps_quality: int,
+        fixed_duration_s: Optional[float],
         integrity_ok: bool,
         signal_health: Optional[SignalHealthSample],
         rtcm_age_s: Optional[float],
@@ -111,11 +132,15 @@ class GpsCovarianceModel:
             return self._unavailable("hdop_invalid")
 
         quality_multiplier, quality_reason = self._quality_multiplier(gps_quality)
+        duration_multiplier, duration_reason = self._fixed_duration_multiplier(
+            gps_quality, fixed_duration_s
+        )
         hdop_multiplier = max(1.0, hdop / self.nominal_hdop) ** 2
         signal_multiplier, signal_reason = self._signal_multiplier(signal_health)
         rtcm_multiplier, rtcm_reason = self._rtcm_multiplier(rtcm_age_s)
         covariance_scale = (
             quality_multiplier
+            * duration_multiplier
             * hdop_multiplier
             * signal_multiplier
             * rtcm_multiplier
@@ -124,18 +149,14 @@ class GpsCovarianceModel:
             base_stddev * base_stddev * covariance_scale,
             self.unavailable_covariance_m2,
         )
-        vertical_variance = min(
-            horizontal_variance * self.vertical_stddev_multiplier ** 2,
-            self.unavailable_covariance_m2,
-        )
         return CovarianceResult(
             covariance_xx=horizontal_variance,
             covariance_yy=horizontal_variance,
-            covariance_zz=vertical_variance,
+            covariance_zz=self.vertical_covariance_m2,
             covariance_scale=covariance_scale,
             horizontal_stddev_m=math.sqrt(horizontal_variance),
-            vertical_stddev_m=math.sqrt(vertical_variance),
-            reason="%s,%s,%s" % (quality_reason, signal_reason, rtcm_reason),
+            reason="%s,%s,%s,%s"
+            % (quality_reason, duration_reason, signal_reason, rtcm_reason),
         )
 
     def _horizontal_stddev(
@@ -161,6 +182,19 @@ class GpsCovarianceModel:
         if gps_quality == 1:
             return self.standalone_covariance_multiplier, "standalone"
         return self.standalone_covariance_multiplier, "unknown_solution"
+
+    def _fixed_duration_multiplier(
+        self, gps_quality: int, fixed_duration_s: Optional[float]
+    ) -> tuple[float, str]:
+        if gps_quality != 4:
+            return 1.0, "fixed_duration_not_applicable"
+        if fixed_duration_s is None or not math.isfinite(fixed_duration_s):
+            return self.fixed_duration_short_covariance_multiplier, "fixed_duration_missing"
+        if fixed_duration_s < self.fixed_duration_short_s:
+            return self.fixed_duration_short_covariance_multiplier, "fixed_duration_short"
+        if fixed_duration_s < self.fixed_duration_warmup_s:
+            return self.fixed_duration_warmup_covariance_multiplier, "fixed_duration_warmup"
+        return 1.0, "fixed_duration_ready"
 
     def _signal_multiplier(
         self, signal_health: Optional[SignalHealthSample]
@@ -201,6 +235,5 @@ class GpsCovarianceModel:
             covariance_zz=self.unavailable_covariance_m2,
             covariance_scale=self.unavailable_covariance_m2,
             horizontal_stddev_m=stddev,
-            vertical_stddev_m=stddev,
             reason=reason,
         )

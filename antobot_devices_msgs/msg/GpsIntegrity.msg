@@ -22,9 +22,9 @@ float32 gpsfix_age_s
 float32 quality_age_s
 float32 rtcm_age_s
 float32 timestamp_delta_s
+float32 fixed_duration_s
 float32 covariance_scale
 float32 horizontal_stddev_m
-float32 vertical_stddev_m
 
 int8 navsat_status
 uint8 gps_quality

@@ -1,4 +1,5 @@
 from antobot_devices_gps.gps_integrity_checker import (
+    FixedDurationTracker,
     GpsFixSample,
     GpsIntegrityChecker,
     GpsQualitySample,
@@ -89,3 +90,12 @@ def test_missing_or_stale_rtcm_fails_integrity_check():
     assert stale.integrity_ok is False
     assert stale.rtcm_age_s == 6.0
     assert stale.reason == "rtcm_stale"
+
+
+def test_fixed_duration_resets_when_fixed_state_breaks():
+    tracker = FixedDurationTracker()
+
+    assert tracker.update(10.0, True) == 0.0
+    assert tracker.update(12.5, True) == 2.5
+    assert tracker.update(12.6, False) == 0.0
+    assert tracker.update(13.0, True) == 0.0

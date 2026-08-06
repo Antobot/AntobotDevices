@@ -50,6 +50,7 @@ import datetime
 
 from . import sparkfun_predefines as sp
 from . import core
+from ..f9p_spi_stream import F9PSpiFrameReader
 
 _DEFAULT_NAME = "Qwiic GPS"
 _AVAILABLE_I2C_ADDRESS = [0x42]
@@ -382,6 +383,12 @@ class UbloxGps(object):
         #print("sentence_stream_nmea:",sentence)
 
         return sentence
+
+    def stream_mixed_frame(self):
+        """Return one NMEA or UBX frame from the uRCU SPI stream."""
+        if not isinstance(self.hard_port, sfeSpiWrapper):
+            raise RuntimeError("mixed SPI streaming is only available on sfeSpiWrapper")
+        return self.hard_port.read_mixed_frame()
         
         
     def readbuffer(self, buff):
@@ -923,6 +930,7 @@ class sfeSpiWrapper(object):
         #self.spi_port.open(0,0) # This needs to be
         #self.spi_port.max_speed_hz = 5500 #Hz
         self.spi_port.mode = 0b00
+        self._mixed_frame_reader = F9PSpiFrameReader(self.read)
     
     def read(self, read_data = 1):
         """
@@ -935,11 +943,12 @@ class sfeSpiWrapper(object):
 
         data = self.spi_port.readbytes(read_data)
 
-        byte_data = bytes([])
-        for d in data:
-            byte_data = byte_data + bytes([d])
-        return byte_data
+        return bytes(data)
         #return data
+
+    def read_mixed_frame(self):
+        """Read one bounded NMEA or UBX frame from the F9P stream."""
+        return self._mixed_frame_reader.read_frame()
         
     def readbuffer(self, buff):
         """
@@ -1021,5 +1030,4 @@ class sfeSpiWrapper(object):
         self.spi_port.xfer2(list(data))
 
         return True
-
 

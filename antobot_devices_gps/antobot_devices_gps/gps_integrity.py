@@ -14,6 +14,7 @@ from antobot_devices_msgs.msg import GpsIntegrity, GpsQual, GpsSignalHealth, RTC
 
 from .gps_covariance import GpsCovarianceModel, SignalHealthSample
 from .gps_integrity_checker import (
+    FixedDurationTracker,
     GpsFixSample,
     GpsIntegrityChecker,
     GpsQualitySample,
@@ -58,9 +59,13 @@ class GpsIntegrityNode(Node):
         self.declare_parameter("signal_health_timeout_s", 2.0)
         self.declare_parameter("require_signal_health", False)
         self.declare_parameter("min_horizontal_stddev_m", 0.02)
-        self.declare_parameter("vertical_stddev_multiplier", 4.0)
+        self.declare_parameter("vertical_covariance_m2", 100.0)
         self.declare_parameter("nominal_hdop", 1.0)
         self.declare_parameter("fixed_covariance_multiplier", 1.0)
+        self.declare_parameter("fixed_duration_short_s", 3.0)
+        self.declare_parameter("fixed_duration_warmup_s", 5.0)
+        self.declare_parameter("fixed_duration_short_covariance_multiplier", 9.0)
+        self.declare_parameter("fixed_duration_warmup_covariance_multiplier", 4.0)
         self.declare_parameter("float_covariance_multiplier", 25.0)
         self.declare_parameter("differential_covariance_multiplier", 100.0)
         self.declare_parameter("standalone_covariance_multiplier", 400.0)
@@ -99,9 +104,17 @@ class GpsIntegrityNode(Node):
             raise ValueError("signal_health_timeout_s must be positive")
         self.covariance_model = GpsCovarianceModel(
             min_horizontal_stddev_m=self._double_parameter("min_horizontal_stddev_m"),
-            vertical_stddev_multiplier=self._double_parameter("vertical_stddev_multiplier"),
+            vertical_covariance_m2=self._double_parameter("vertical_covariance_m2"),
             nominal_hdop=self._double_parameter("nominal_hdop"),
             fixed_covariance_multiplier=self._double_parameter("fixed_covariance_multiplier"),
+            fixed_duration_short_s=self._double_parameter("fixed_duration_short_s"),
+            fixed_duration_warmup_s=self._double_parameter("fixed_duration_warmup_s"),
+            fixed_duration_short_covariance_multiplier=self._double_parameter(
+                "fixed_duration_short_covariance_multiplier"
+            ),
+            fixed_duration_warmup_covariance_multiplier=self._double_parameter(
+                "fixed_duration_warmup_covariance_multiplier"
+            ),
             float_covariance_multiplier=self._double_parameter("float_covariance_multiplier"),
             differential_covariance_multiplier=self._double_parameter(
                 "differential_covariance_multiplier"
@@ -138,6 +151,7 @@ class GpsIntegrityNode(Node):
         self.latest_rtcm: Optional[RtcmSample] = None
         self.latest_signal_health: Optional[SignalHealthSample] = None
         self.latest_signal_health_time: Optional[float] = None
+        self.fixed_duration_tracker = FixedDurationTracker()
         self.last_reported_reason: Optional[str] = None
 
         self.gps_sub = self.create_subscription(
@@ -214,7 +228,10 @@ class GpsIntegrityNode(Node):
         integrity = self.checker.evaluate(
             now, self.latest_gpsfix, self.latest_quality, self.latest_rtcm
         )
-        covariance = self.calculate_covariance(msg, integrity, now)
+        fixed_duration_s = self.fixed_duration_tracker.update(
+            now, integrity.integrity_ok and integrity.gps_quality == 4
+        )
+        covariance = self.calculate_covariance(msg, integrity, now, fixed_duration_s)
         output = copy.deepcopy(msg)
         output.position_covariance = [0.0] * 9
         output.position_covariance[0] = covariance.covariance_xx
@@ -223,7 +240,7 @@ class GpsIntegrityNode(Node):
         output.position_covariance_type = NavSatFix.COVARIANCE_TYPE_DIAGONAL_KNOWN
         self.gps_pub.publish(output)
 
-    def calculate_covariance(self, msg: NavSatFix, integrity, now: float):
+    def calculate_covariance(self, msg: NavSatFix, integrity, now: float, fixed_duration_s: float):
         quality = self.latest_quality
         signal_health = self.current_signal_health(now)
         return self.covariance_model.calculate(
@@ -231,6 +248,7 @@ class GpsIntegrityNode(Node):
             horizontal_accuracy_m=quality.horizontal_accuracy_m if quality else float("nan"),
             hdop=quality.hdop if quality else float("nan"),
             gps_quality=quality.gps_quality if quality else 0,
+            fixed_duration_s=fixed_duration_s,
             integrity_ok=integrity.integrity_ok,
             signal_health=signal_health,
             rtcm_age_s=integrity.rtcm_age_s if integrity.rtcm_received else None,
@@ -251,9 +269,14 @@ class GpsIntegrityNode(Node):
         result = self.checker.evaluate(
             now, self.latest_gpsfix, self.latest_quality, self.latest_rtcm
         )
+        fixed_duration_s = self.fixed_duration_tracker.update(
+            now, result.integrity_ok and result.gps_quality == 4
+        )
         covariance = None
         if self.latest_navsatfix is not None:
-            covariance = self.calculate_covariance(self.latest_navsatfix, result, now)
+            covariance = self.calculate_covariance(
+                self.latest_navsatfix, result, now, fixed_duration_s
+            )
         msg = GpsIntegrity()
         msg.stamp = self.get_clock().now().to_msg()
         msg.gpsfix_received = result.gpsfix_received
@@ -270,14 +293,13 @@ class GpsIntegrityNode(Node):
         msg.quality_age_s = result.quality_age_s
         msg.rtcm_age_s = result.rtcm_age_s
         msg.timestamp_delta_s = result.timestamp_delta_s
+        msg.fixed_duration_s = fixed_duration_s
         if covariance is not None:
             msg.covariance_scale = covariance.covariance_scale
             msg.horizontal_stddev_m = covariance.horizontal_stddev_m
-            msg.vertical_stddev_m = covariance.vertical_stddev_m
         else:
             msg.covariance_scale = 0.0
             msg.horizontal_stddev_m = 0.0
-            msg.vertical_stddev_m = 0.0
         msg.navsat_status = result.navsat_status
         msg.gps_quality = result.gps_quality
         msg.reason = (
