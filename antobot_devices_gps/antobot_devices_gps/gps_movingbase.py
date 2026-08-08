@@ -616,7 +616,7 @@ class MovingBase:
             heading_valid_last = False
             
             # Keep the event loop running
-            while True:
+            while rclpy.ok():
                 try:
                     # Process frames and handle any periodic tasks
                     frame = await self.get_relposned()
@@ -686,10 +686,11 @@ class MovingBase:
         finally:
             pass
 
-async def spin_ros(node, period=0.005):
+async def spin_ros(node, rtcm_buffer, period=0.005):
     while rclpy.ok():
         rclpy.spin_once(node, timeout_sec=0.0)
         await asyncio.sleep(period)
+    await rtcm_buffer.close()
         
 async def async_main():
     
@@ -708,7 +709,7 @@ async def async_main():
             return
         
         # Create tasks
-        tasks = [moving_base.run(), rtcm_buffer.run(), spin_ros(ros_node)]
+        tasks = [moving_base.run(), rtcm_buffer.run(), spin_ros(ros_node, rtcm_buffer)]
 
         # Run main loop
         await asyncio.gather(*tasks)
