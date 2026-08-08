@@ -439,6 +439,11 @@ class ROS2Interface(Node):
             dy = gps_y_1 - gps_y_2
             dz = gps_z_1 - gps_z_2
 
+            if gps_x_1 < 0:
+                self.heading_offset = 630
+            else:
+                self.heading_offset = 450
+
             import math
             self.antenna_baseline = math.sqrt(dx**2 + dy**2 + dz**2)
                 
@@ -646,8 +651,7 @@ class MovingBase:
                         self.msg_rec_heading_time.add_time_queue(time.time())
 
                         msg_heading.header.stamp = self.ros_node.get_clock().now().to_msg() 
-                        msg_heading.heading = (450 - frame.relPosHeading * 1e-5) % 360
-                        # msg_heading.heading = (630 - frame.relPosHeading * 1e-5) % 360
+                        msg_heading.heading = (self.ros_node.heading_offset - frame.relPosHeading * 1e-5) % 360
                         msg_heading.length = frame.relPosLength * 1e-2
                         msg_heading.rel_pos_n = frame.relPosN * 1e-2
                         msg_heading.rel_pos_e = frame.relPosE * 1e-2
