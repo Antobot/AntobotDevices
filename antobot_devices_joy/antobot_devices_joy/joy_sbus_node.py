@@ -227,6 +227,28 @@ class JoystickSbus(Node):
         if ch[2] < 50:
             self.axes = [0.0] * 8
             self.buttons = [0] * 11
+
+            if(self.current_state != RobotState.SHUTDOWN):
+                self.get_logger().info("State transition: -> SHUTDOWN (ch[2] < 50)")
+                self.current_state = RobotState.SHUTDOWN
+                self.activation_triggered = False
+                self.ch6_min_in_activation = float('inf')
+                self.ch6_trigger_2_done = False
+                self.ch6_trigger_3_done = False
+                self.ch7_min_in_activation = float('inf')
+                self.ch7_trigger_2_done = False
+                self.ch7_trigger_3_done = False
+                self.X = 3
+                self.BACK = 3
+
+                # Publish this exit signal immediately
+                self.axes = [0.0] * 8
+                self.buttons = [0, 0, self.X, 0, 0, 0, self.BACK, 0, 0, 0, 0]
+                self.joy_msg.axes = self.axes
+                self.joy_msg.buttons = self.buttons
+                self.joy_msg.header.stamp = self.get_clock().now().to_msg()
+
+                self.joy_pub.publish(self.joy_msg)
             return
 
         # Steps 2-3: update the state machine
