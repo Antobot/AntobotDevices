@@ -46,7 +46,7 @@ class F9PSpiFrameReader:
         max_nmea_bytes: int = 256,
         max_ubx_payload_bytes: int = 2048,
         ubx_chunk_size: int = 32,
-        idle_reads_before_return: int = 1,
+        idle_reads_before_return: int = 8,
     ) -> None:
         if max_nmea_bytes < 8:
             raise ValueError("max_nmea_bytes must be at least 8")
@@ -62,9 +62,16 @@ class F9PSpiFrameReader:
         self.max_ubx_payload_bytes = max_ubx_payload_bytes
         self.ubx_chunk_size = ubx_chunk_size
         self.idle_reads_before_return = idle_reads_before_return
+        self._nmea_buffer = bytearray()
+        self._ubx_buffer = bytearray()
 
     def read_frame(self) -> Optional[StreamFrame]:
         """Return the next complete frame, or None when SPI is idle."""
+        if self._nmea_buffer:
+            return self._read_nmea()
+        if self._ubx_buffer:
+            return self._read_ubx()
+
         idle_reads = 0
         while idle_reads < self.idle_reads_before_return:
             first = self._read_one()
@@ -74,17 +81,13 @@ class F9PSpiFrameReader:
             idle_reads = 0
 
             if first == ord("$"):
+                self._nmea_buffer = bytearray(b"$")
                 return self._read_nmea()
             if first != 0xB5:
                 continue
 
-            second = self._read_one()
-            if second is None:
-                return None
-            if second == ord("$"):
-                return self._read_nmea()
-            if second == 0x62:
-                return self._read_ubx()
+            self._ubx_buffer = bytearray(b"\xb5")
+            return self._read_ubx()
 
         return None
 
@@ -95,47 +98,71 @@ class F9PSpiFrameReader:
         return data[0]
 
     def _read_nmea(self) -> Optional[NmeaFrame]:
-        data = bytearray(b"$")
-        while len(data) < self.max_nmea_bytes:
+        idle_reads = 0
+        while len(self._nmea_buffer) < self.max_nmea_bytes:
             value = self._read_one()
             if value is None:
-                return None
-            data.append(value)
+                idle_reads += 1
+                if idle_reads >= self.idle_reads_before_return:
+                    return None
+                continue
+            idle_reads = 0
+            self._nmea_buffer.append(value)
             if value == ord("\n"):
-                return NmeaFrame(data.decode("ascii", errors="replace"))
+                sentence = self._nmea_buffer.decode("ascii", errors="replace")
+                self._nmea_buffer.clear()
+                return NmeaFrame(sentence)
+        self._nmea_buffer.clear()
         return None
 
     def _read_ubx(self) -> Optional[UbxFrame]:
-        header = bytearray(b"\xb5\x62")
-        for _ in range(4):
+        idle_reads = 0
+        while len(self._ubx_buffer) < 2:
             value = self._read_one()
             if value is None:
+                idle_reads += 1
+                if idle_reads >= self.idle_reads_before_return:
+                    return None
+                continue
+            if len(self._ubx_buffer) == 1 and value != 0x62:
+                self._ubx_buffer.clear()
+                if value == ord("$"):
+                    self._nmea_buffer = bytearray(b"$")
+                    return self._read_nmea()
                 return None
-            header.append(value)
+            self._ubx_buffer.append(value)
+            idle_reads = 0
 
-        payload_length = header[4] | (header[5] << 8)
+        while len(self._ubx_buffer) < 6:
+            value = self._read_one()
+            if value is None:
+                idle_reads += 1
+                if idle_reads >= self.idle_reads_before_return:
+                    return None
+                continue
+            self._ubx_buffer.append(value)
+            idle_reads = 0
+
+        payload_length = self._ubx_buffer[4] | (self._ubx_buffer[5] << 8)
         if payload_length > self.max_ubx_payload_bytes:
+            self._ubx_buffer.clear()
             return None
 
-        remainder = self._read_exact(payload_length + 2)
-        if remainder is None:
-            return None
-        raw_frame = bytes(header) + remainder
-        if _ubx_checksum(raw_frame[2:-2]) != raw_frame[-2:]:
-            return None
-        return UbxFrame(raw_frame[2], raw_frame[3], raw_frame[6:-2])
-
-    def _read_exact(self, size: int) -> Optional[bytes]:
-        data = bytearray()
-        while len(data) < size:
-            request_size = min(self.ubx_chunk_size, size - len(data))
+        frame_length = 8 + payload_length
+        while len(self._ubx_buffer) < frame_length:
+            request_size = min(self.ubx_chunk_size, frame_length - len(self._ubx_buffer))
             chunk = self._read(request_size)
             if len(chunk) != request_size:
                 return None
             # Once the frame length is known, 0xFF is legal payload/checksum
             # data and must not be interpreted as the SPI idle value.
-            data.extend(chunk)
-        return bytes(data)
+            self._ubx_buffer.extend(chunk)
+
+        raw_frame = bytes(self._ubx_buffer)
+        self._ubx_buffer.clear()
+        if _ubx_checksum(raw_frame[2:-2]) != raw_frame[-2:]:
+            return None
+        return UbxFrame(raw_frame[2], raw_frame[3], raw_frame[6:-2])
 
 
 def _ubx_checksum(data: bytes) -> bytes:

@@ -85,8 +85,18 @@ def test_nav_sig_uses_healthy_tracking_signals_before_carrier_solution_exists():
     assert health.cno_median_dbhz == 40.0
 
 
-def test_idle_poll_uses_one_spi_transfer():
-    transport = FakeSpiRead(b"\xff")
+def test_reader_retries_spi_idle_bytes_before_the_nmea_frame():
+    transport = FakeSpiRead(b"\xff\xff\xff$GNGGA,two*00\r\n")
 
-    assert F9PSpiFrameReader(transport).read_frame() is None
-    assert transport.requests == [1]
+    frame = F9PSpiFrameReader(transport).read_frame()
+
+    assert frame == NmeaFrame("$GNGGA,two*00\r\n")
+    assert transport.requests[:3] == [1, 1, 1]
+
+
+def test_partial_nmea_survives_an_idle_gap_between_reader_calls():
+    transport = FakeSpiRead(b"$GNGGA,partial\xff\xff\xff\xff\xff\xff\xff\xff,two*00\r\n")
+    reader = F9PSpiFrameReader(transport)
+
+    assert reader.read_frame() is None
+    assert reader.read_frame() == NmeaFrame("$GNGGA,partial,two*00\r\n")
