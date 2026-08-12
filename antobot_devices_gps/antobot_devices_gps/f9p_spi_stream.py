@@ -278,6 +278,6 @@ def nav_sig_health(report: NavSigReport, weak_cno_dbhz: float = 25.0) -> NavSigH
         constellation_count=len({signal.gnss_id for signal in selected}),
         weak_signal_count=sum(value < weak_cno_dbhz for value in values),
         cno_mean_dbhz=statistics.fmean(values),
-        cno_median_dbhz=statistics.median(values),
+        cno_median_dbhz=float(statistics.median(values)),
         cno_p10_dbhz=float(values[p10_index]),
     )

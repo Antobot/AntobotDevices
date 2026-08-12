@@ -75,6 +75,7 @@ def test_nav_sig_is_read_in_bounded_chunks_without_losing_following_nmea():
     assert health.valid
     assert health.satellites_in_view == 75
     assert health.cno_median_dbhz == 40.0
+    assert isinstance(health.cno_median_dbhz, float)
 
 
 def test_nav_sig_uses_healthy_tracking_signals_before_carrier_solution_exists():
