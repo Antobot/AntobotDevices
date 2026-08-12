@@ -436,9 +436,9 @@ class ROS2Interface(Node):
             dz = gps_z_1 - gps_z_2
 
             if gps_x_1 < 0:
-                self.heading_offset = 630
-            else:
                 self.heading_offset = 450
+            else:
+                self.heading_offset = 630
 
             import math
             self.antenna_baseline = math.sqrt(dx**2 + dy**2 + dz**2)
