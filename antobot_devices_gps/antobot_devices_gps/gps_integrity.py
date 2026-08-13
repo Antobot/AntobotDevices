@@ -310,8 +310,10 @@ class GpsIntegrityNode(Node):
         self.integrity_pub.publish(msg)
 
         if msg.reason != self.last_reported_reason:
-            log = self.get_logger().info if result.integrity_ok else self.get_logger().warn
-            log("GPS integrity: %s" % msg.reason)
+            state = "valid" if result.integrity_ok else "invalid"
+            # Keep one severity at this call site. rclpy rejects changing it
+            # between state transitions when logging is throttled/cached.
+            self.get_logger().info("GPS integrity (%s): %s" % (state, msg.reason))
             self.last_reported_reason = msg.reason
 
     def _string_parameter(self, name: str) -> str:
