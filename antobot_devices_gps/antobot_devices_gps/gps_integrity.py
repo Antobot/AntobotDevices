@@ -2,6 +2,7 @@
 """Quality-gate F9P NavSatFix messages and publish conservative covariance."""
 
 import copy
+import math
 import time
 from typing import Optional
 
@@ -12,7 +13,11 @@ from sensor_msgs.msg import NavSatFix
 
 from antobot_devices_msgs.msg import GpsIntegrity, GpsQual, GpsSignalHealth, RTCM
 
-from .gps_covariance import GpsCovarianceModel, SignalHealthSample
+from .gps_covariance import (
+    GpsCovarianceModel,
+    PersistentSignalFaultTracker,
+    SignalHealthSample,
+)
 from .gps_integrity_checker import (
     FixedDurationTracker,
     GpsFixSample,
@@ -50,17 +55,20 @@ class GpsIntegrityNode(Node):
         self.declare_parameter("max_h_acc_m", 10.0)
         self.declare_parameter("max_hdop", 5.0)
         self.declare_parameter("require_timestamp_alignment", True)
-        self.declare_parameter("rtcm_timeout_s", 5.0)
+        self.declare_parameter("rtcm_timeout_s", 10.0)
         self.declare_parameter("require_rtcm", True)
-        self.declare_parameter("rtcm_good_age_s", 1.0)
-        self.declare_parameter("rtcm_warning_age_s", 2.0)
-        self.declare_parameter("rtcm_warning_covariance_multiplier", 4.0)
-        self.declare_parameter("rtcm_critical_covariance_multiplier", 25.0)
+        self.declare_parameter("rtcm_good_age_s", 2.0)
+        self.declare_parameter("rtcm_warning_age_s", 5.0)
+        self.declare_parameter("rtcm_warning_covariance_multiplier", 2.0)
+        self.declare_parameter("rtcm_critical_covariance_multiplier", 9.0)
         self.declare_parameter("signal_health_timeout_s", 2.0)
         self.declare_parameter("require_signal_health", False)
         self.declare_parameter("min_horizontal_stddev_m", 0.02)
         self.declare_parameter("vertical_covariance_m2", 100.0)
-        self.declare_parameter("nominal_hdop", 1.0)
+        self.declare_parameter("hdop_good_threshold", 2.0)
+        self.declare_parameter("hdop_warning_threshold", 3.0)
+        self.declare_parameter("hdop_warning_covariance_multiplier", 2.0)
+        self.declare_parameter("hdop_critical_covariance_multiplier", 4.0)
         self.declare_parameter("fixed_covariance_multiplier", 1.0)
         self.declare_parameter("fixed_duration_short_s", 3.0)
         self.declare_parameter("fixed_duration_warmup_s", 5.0)
@@ -71,9 +79,17 @@ class GpsIntegrityNode(Node):
         self.declare_parameter("standalone_covariance_multiplier", 400.0)
         self.declare_parameter("cno_good_dbhz", 40.0)
         self.declare_parameter("cno_warning_dbhz", 35.0)
-        self.declare_parameter("cno_critical_dbhz", 25.0)
-        self.declare_parameter("cno_warning_covariance_multiplier", 4.0)
-        self.declare_parameter("cno_critical_covariance_multiplier", 25.0)
+        self.declare_parameter("cno_critical_dbhz", 30.0)
+        self.declare_parameter("cno_warning_covariance_multiplier", 2.0)
+        self.declare_parameter("cno_critical_covariance_multiplier", 4.0)
+        self.declare_parameter("cno_severe_covariance_multiplier", 9.0)
+        self.declare_parameter("cno_unavailable_grace_s", 2.0)
+        self.declare_parameter("cno_unavailable_critical_s", 10.0)
+        self.declare_parameter("cno_unavailable_warning_covariance_multiplier", 2.0)
+        self.declare_parameter("cno_unavailable_critical_covariance_multiplier", 4.0)
+        self.declare_parameter("cno_severe_persistent_epochs", 3)
+        self.declare_parameter("cno_satellite_drop_threshold", 3)
+        self.declare_parameter("max_covariance_scale", 400.0)
         self.declare_parameter("unavailable_covariance_m2", 1_000_000.0)
 
         input_gps_topic = self._string_parameter("input_gps_topic")
@@ -105,7 +121,15 @@ class GpsIntegrityNode(Node):
         self.covariance_model = GpsCovarianceModel(
             min_horizontal_stddev_m=self._double_parameter("min_horizontal_stddev_m"),
             vertical_covariance_m2=self._double_parameter("vertical_covariance_m2"),
-            nominal_hdop=self._double_parameter("nominal_hdop"),
+            hdop_good_threshold=self._double_parameter("hdop_good_threshold"),
+            hdop_warning_threshold=self._double_parameter("hdop_warning_threshold"),
+            hdop_max_threshold=self._double_parameter("max_hdop"),
+            hdop_warning_covariance_multiplier=self._double_parameter(
+                "hdop_warning_covariance_multiplier"
+            ),
+            hdop_critical_covariance_multiplier=self._double_parameter(
+                "hdop_critical_covariance_multiplier"
+            ),
             fixed_covariance_multiplier=self._double_parameter("fixed_covariance_multiplier"),
             fixed_duration_short_s=self._double_parameter("fixed_duration_short_s"),
             fixed_duration_warmup_s=self._double_parameter("fixed_duration_warmup_s"),
@@ -131,6 +155,19 @@ class GpsIntegrityNode(Node):
             cno_critical_covariance_multiplier=self._double_parameter(
                 "cno_critical_covariance_multiplier"
             ),
+            cno_severe_covariance_multiplier=self._double_parameter(
+                "cno_severe_covariance_multiplier"
+            ),
+            cno_unavailable_grace_s=self._double_parameter("cno_unavailable_grace_s"),
+            cno_unavailable_critical_s=self._double_parameter(
+                "cno_unavailable_critical_s"
+            ),
+            cno_unavailable_warning_covariance_multiplier=self._double_parameter(
+                "cno_unavailable_warning_covariance_multiplier"
+            ),
+            cno_unavailable_critical_covariance_multiplier=self._double_parameter(
+                "cno_unavailable_critical_covariance_multiplier"
+            ),
             rtcm_good_age_s=self._double_parameter("rtcm_good_age_s"),
             rtcm_warning_age_s=self._double_parameter("rtcm_warning_age_s"),
             rtcm_critical_age_s=self._double_parameter("rtcm_timeout_s"),
@@ -140,6 +177,7 @@ class GpsIntegrityNode(Node):
             rtcm_critical_covariance_multiplier=self._double_parameter(
                 "rtcm_critical_covariance_multiplier"
             ),
+            max_covariance_scale=self._double_parameter("max_covariance_scale"),
             unavailable_covariance_m2=self._double_parameter("unavailable_covariance_m2"),
             require_signal_health=self._bool_parameter("require_signal_health"),
             require_rtcm=self._bool_parameter("require_rtcm"),
@@ -151,6 +189,18 @@ class GpsIntegrityNode(Node):
         self.latest_rtcm: Optional[RtcmSample] = None
         self.latest_signal_health: Optional[SignalHealthSample] = None
         self.latest_signal_health_time: Optional[float] = None
+        # A receiver that never publishes NAV-SIG must eventually be treated
+        # like any other persistent C/N0 outage.
+        self.signal_health_unavailable_since: Optional[float] = time.monotonic()
+        self.signal_fault_tracker = PersistentSignalFaultTracker(
+            severe_cno_dbhz=self._double_parameter("cno_critical_dbhz"),
+            min_consecutive_epochs=self._integer_parameter(
+                "cno_severe_persistent_epochs"
+            ),
+            min_satellite_drop=self._integer_parameter(
+                "cno_satellite_drop_threshold"
+            ),
+        )
         self.fixed_duration_tracker = FixedDurationTracker()
         self.last_reported_reason: Optional[str] = None
 
@@ -212,13 +262,19 @@ class GpsIntegrityNode(Node):
         )
 
     def signal_health_callback(self, msg: GpsSignalHealth) -> None:
-        self.latest_signal_health = SignalHealthSample(
+        now = time.monotonic()
+        self.latest_signal_health = self.signal_fault_tracker.update(SignalHealthSample(
             fresh=True,
             valid=bool(msg.valid),
             cno_median_dbhz=float(msg.cno_median_dbhz),
             cno_p10_dbhz=float(msg.cno_p10_dbhz),
-        )
-        self.latest_signal_health_time = time.monotonic()
+            satellites_in_view=int(msg.satellites_in_view),
+        ))
+        self.latest_signal_health_time = now
+        if self._signal_health_usable(self.latest_signal_health):
+            self.signal_health_unavailable_since = None
+        elif self.signal_health_unavailable_since is None:
+            self.signal_health_unavailable_since = now
 
     def rtcm_callback(self, msg: RTCM) -> None:
         """Record the arrival of a base-station RTCM message at this rover."""
@@ -256,13 +312,35 @@ class GpsIntegrityNode(Node):
 
     def current_signal_health(self, now: float) -> Optional[SignalHealthSample]:
         if self.latest_signal_health is None or self.latest_signal_health_time is None:
-            return None
+            return SignalHealthSample(
+                fresh=False,
+                valid=False,
+                cno_median_dbhz=float("nan"),
+                cno_p10_dbhz=float("nan"),
+                unavailable_duration_s=max(
+                    0.0, now - self.signal_health_unavailable_since
+                ),
+            )
+        fresh = now - self.latest_signal_health_time <= self.signal_health_timeout_s
+        if fresh and self._signal_health_usable(self.latest_signal_health):
+            unavailable_duration_s = 0.0
+        else:
+            if self.signal_health_unavailable_since is None:
+                self.signal_health_unavailable_since = self.latest_signal_health_time
+            unavailable_duration_s = max(0.0, now - self.signal_health_unavailable_since)
         return SignalHealthSample(
-            fresh=now - self.latest_signal_health_time <= self.signal_health_timeout_s,
+            fresh=fresh,
             valid=self.latest_signal_health.valid,
             cno_median_dbhz=self.latest_signal_health.cno_median_dbhz,
             cno_p10_dbhz=self.latest_signal_health.cno_p10_dbhz,
+            satellites_in_view=self.latest_signal_health.satellites_in_view,
+            severe_persistent_fault=self.latest_signal_health.severe_persistent_fault,
+            unavailable_duration_s=unavailable_duration_s,
         )
+
+    @staticmethod
+    def _signal_health_usable(signal_health: SignalHealthSample) -> bool:
+        return signal_health.valid and math.isfinite(signal_health.cno_median_dbhz)
 
     def publish_integrity(self) -> None:
         now = time.monotonic()

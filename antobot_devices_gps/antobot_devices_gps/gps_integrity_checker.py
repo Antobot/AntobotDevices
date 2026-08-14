@@ -88,7 +88,7 @@ class GpsIntegrityChecker:
         max_h_acc_m: float = 10.0,
         max_hdop: float = 5.0,
         require_timestamp_alignment: bool = True,
-        rtcm_timeout_s: float = 5.0,
+        rtcm_timeout_s: float = 10.0,
         require_rtcm: bool = True,
     ) -> None:
         if gpsfix_timeout_s <= 0.0 or quality_timeout_s <= 0.0 or rtcm_timeout_s <= 0.0:

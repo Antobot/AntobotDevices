@@ -80,15 +80,15 @@ def test_invalid_fix_and_quality_payloads_are_reported():
 
 
 def test_missing_or_stale_rtcm_fails_integrity_check():
-    checker = GpsIntegrityChecker(rtcm_timeout_s=5.0)
+    checker = GpsIntegrityChecker(rtcm_timeout_s=10.0)
 
     missing = checker.evaluate(10.2, valid_fix(), valid_quality(), None)
-    stale = checker.evaluate(16.0, valid_fix(15.8), valid_quality(15.8), valid_rtcm(10.0))
+    stale = checker.evaluate(21.0, valid_fix(20.8), valid_quality(20.8), valid_rtcm(10.0))
 
     assert missing.integrity_ok is False
     assert missing.reason == "rtcm_missing"
     assert stale.integrity_ok is False
-    assert stale.rtcm_age_s == 6.0
+    assert stale.rtcm_age_s == 11.0
     assert stale.reason == "rtcm_stale"
 
 
