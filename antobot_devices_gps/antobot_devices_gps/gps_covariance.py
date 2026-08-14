@@ -1,8 +1,51 @@
 """Covariance policy for quality-gated F9P NavSatFix messages."""
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import math
 from typing import Optional, Sequence
+
+
+@dataclass(frozen=True)
+class CovariancePolicy:
+    """Tunable covariance thresholds shared by ROS parameters and the model."""
+
+    min_horizontal_stddev_m: float = 0.02
+    vertical_covariance_m2: float = 100.0
+    hdop_good_threshold: float = 2.0
+    hdop_warning_threshold: float = 3.0
+    max_hdop: float = 5.0
+    hdop_warning_covariance_multiplier: float = 2.0
+    hdop_critical_covariance_multiplier: float = 4.0
+    fixed_covariance_multiplier: float = 1.0
+    fixed_duration_short_s: float = 3.0
+    fixed_duration_warmup_s: float = 5.0
+    fixed_duration_short_covariance_multiplier: float = 9.0
+    fixed_duration_warmup_covariance_multiplier: float = 4.0
+    float_covariance_multiplier: float = 25.0
+    differential_covariance_multiplier: float = 100.0
+    standalone_covariance_multiplier: float = 400.0
+    cno_good_dbhz: float = 40.0
+    cno_warning_dbhz: float = 35.0
+    cno_critical_dbhz: float = 30.0
+    cno_warning_covariance_multiplier: float = 2.0
+    cno_critical_covariance_multiplier: float = 4.0
+    cno_severe_covariance_multiplier: float = 9.0
+    cno_unavailable_grace_s: float = 2.0
+    cno_unavailable_critical_s: float = 10.0
+    cno_unavailable_warning_covariance_multiplier: float = 2.0
+    cno_unavailable_critical_covariance_multiplier: float = 4.0
+    rtcm_good_age_s: float = 2.0
+    rtcm_warning_age_s: float = 5.0
+    rtcm_timeout_s: float = 10.0
+    rtcm_warning_covariance_multiplier: float = 2.0
+    rtcm_critical_covariance_multiplier: float = 9.0
+    max_covariance_scale: float = 400.0
+    unavailable_covariance_m2: float = 1_000_000.0
+    require_signal_health: bool = False
+    require_rtcm: bool = True
+
+
+COVARIANCE_PARAMETER_DEFAULTS = asdict(CovariancePolicy())
 
 
 @dataclass(frozen=True)
@@ -90,118 +133,42 @@ class PersistentSignalFaultTracker:
 class GpsCovarianceModel:
     """Convert receiver quality into conservative NavSatFix covariance."""
 
-    def __init__(
-        self,
-        min_horizontal_stddev_m: float = 0.02,
-        vertical_covariance_m2: float = 100.0,
-        hdop_good_threshold: float = 2.0,
-        hdop_warning_threshold: float = 3.0,
-        hdop_max_threshold: float = 5.0,
-        hdop_warning_covariance_multiplier: float = 2.0,
-        hdop_critical_covariance_multiplier: float = 4.0,
-        fixed_covariance_multiplier: float = 1.0,
-        fixed_duration_short_s: float = 3.0,
-        fixed_duration_warmup_s: float = 5.0,
-        fixed_duration_short_covariance_multiplier: float = 9.0,
-        fixed_duration_warmup_covariance_multiplier: float = 4.0,
-        float_covariance_multiplier: float = 25.0,
-        differential_covariance_multiplier: float = 100.0,
-        standalone_covariance_multiplier: float = 400.0,
-        cno_good_dbhz: float = 40.0,
-        cno_warning_dbhz: float = 35.0,
-        cno_critical_dbhz: float = 30.0,
-        cno_warning_covariance_multiplier: float = 2.0,
-        cno_critical_covariance_multiplier: float = 4.0,
-        cno_severe_covariance_multiplier: float = 9.0,
-        cno_unavailable_grace_s: float = 2.0,
-        cno_unavailable_critical_s: float = 10.0,
-        cno_unavailable_warning_covariance_multiplier: float = 2.0,
-        cno_unavailable_critical_covariance_multiplier: float = 4.0,
-        rtcm_good_age_s: float = 2.0,
-        rtcm_warning_age_s: float = 5.0,
-        rtcm_critical_age_s: float = 10.0,
-        rtcm_warning_covariance_multiplier: float = 2.0,
-        rtcm_critical_covariance_multiplier: float = 9.0,
-        max_covariance_scale: float = 400.0,
-        unavailable_covariance_m2: float = 1_000_000.0,
-        require_signal_health: bool = False,
-        require_rtcm: bool = True,
-    ) -> None:
-        if min_horizontal_stddev_m <= 0.0:
+    def __init__(self, policy: Optional[CovariancePolicy] = None) -> None:
+        self.policy = policy or CovariancePolicy()
+        p = self.policy
+        if p.min_horizontal_stddev_m <= 0.0:
             raise ValueError("minimum horizontal standard deviation must be positive")
-        if vertical_covariance_m2 <= 0.0:
+        if p.vertical_covariance_m2 <= 0.0:
             raise ValueError("vertical covariance must be positive")
-        if unavailable_covariance_m2 <= 0.0 or max_covariance_scale < 1.0:
+        if p.unavailable_covariance_m2 <= 0.0 or p.max_covariance_scale < 1.0:
             raise ValueError("covariance parameters must be positive")
-        if not 0.0 < hdop_good_threshold < hdop_warning_threshold < hdop_max_threshold:
+        if not 0.0 < p.hdop_good_threshold < p.hdop_warning_threshold < p.max_hdop:
             raise ValueError("HDOP thresholds must be ascending and positive")
         if (
-            hdop_warning_covariance_multiplier < 1.0
-            or hdop_critical_covariance_multiplier < hdop_warning_covariance_multiplier
+            p.hdop_warning_covariance_multiplier < 1.0
+            or p.hdop_critical_covariance_multiplier
+            < p.hdop_warning_covariance_multiplier
         ):
             raise ValueError("HDOP covariance multipliers must be ascending and at least one")
-        if not 0.0 < fixed_duration_short_s < fixed_duration_warmup_s:
+        if not 0.0 < p.fixed_duration_short_s < p.fixed_duration_warmup_s:
             raise ValueError("fixed-duration thresholds must be ascending and positive")
         if (
-            fixed_duration_short_covariance_multiplier < 1.0
-            or fixed_duration_warmup_covariance_multiplier < 1.0
+            p.fixed_duration_short_covariance_multiplier < 1.0
+            or p.fixed_duration_warmup_covariance_multiplier < 1.0
         ):
             raise ValueError("fixed-duration covariance multipliers must be at least one")
-        if not cno_good_dbhz > cno_warning_dbhz > cno_critical_dbhz >= 0.0:
+        if not p.cno_good_dbhz > p.cno_warning_dbhz > p.cno_critical_dbhz >= 0.0:
             raise ValueError("C/N0 thresholds must be descending and non-negative")
-        if not 0.0 <= cno_unavailable_grace_s < cno_unavailable_critical_s:
+        if not 0.0 <= p.cno_unavailable_grace_s < p.cno_unavailable_critical_s:
             raise ValueError("C/N0 unavailable thresholds must be ascending and non-negative")
         if (
-            cno_unavailable_warning_covariance_multiplier < 1.0
-            or cno_unavailable_critical_covariance_multiplier
-            < cno_unavailable_warning_covariance_multiplier
+            p.cno_unavailable_warning_covariance_multiplier < 1.0
+            or p.cno_unavailable_critical_covariance_multiplier
+            < p.cno_unavailable_warning_covariance_multiplier
         ):
             raise ValueError("C/N0 unavailable covariance multipliers must be ascending")
-        if not 0.0 <= rtcm_good_age_s < rtcm_warning_age_s < rtcm_critical_age_s:
+        if not 0.0 <= p.rtcm_good_age_s < p.rtcm_warning_age_s < p.rtcm_timeout_s:
             raise ValueError("RTCM age thresholds must be ascending and non-negative")
-
-        self.min_horizontal_stddev_m = min_horizontal_stddev_m
-        self.vertical_covariance_m2 = vertical_covariance_m2
-        self.hdop_good_threshold = hdop_good_threshold
-        self.hdop_warning_threshold = hdop_warning_threshold
-        self.hdop_max_threshold = hdop_max_threshold
-        self.hdop_warning_covariance_multiplier = hdop_warning_covariance_multiplier
-        self.hdop_critical_covariance_multiplier = hdop_critical_covariance_multiplier
-        self.fixed_covariance_multiplier = fixed_covariance_multiplier
-        self.fixed_duration_short_s = fixed_duration_short_s
-        self.fixed_duration_warmup_s = fixed_duration_warmup_s
-        self.fixed_duration_short_covariance_multiplier = (
-            fixed_duration_short_covariance_multiplier
-        )
-        self.fixed_duration_warmup_covariance_multiplier = (
-            fixed_duration_warmup_covariance_multiplier
-        )
-        self.float_covariance_multiplier = float_covariance_multiplier
-        self.differential_covariance_multiplier = differential_covariance_multiplier
-        self.standalone_covariance_multiplier = standalone_covariance_multiplier
-        self.cno_good_dbhz = cno_good_dbhz
-        self.cno_warning_dbhz = cno_warning_dbhz
-        self.cno_critical_dbhz = cno_critical_dbhz
-        self.cno_warning_covariance_multiplier = cno_warning_covariance_multiplier
-        self.cno_critical_covariance_multiplier = cno_critical_covariance_multiplier
-        self.cno_severe_covariance_multiplier = cno_severe_covariance_multiplier
-        self.cno_unavailable_grace_s = cno_unavailable_grace_s
-        self.cno_unavailable_critical_s = cno_unavailable_critical_s
-        self.cno_unavailable_warning_covariance_multiplier = (
-            cno_unavailable_warning_covariance_multiplier
-        )
-        self.cno_unavailable_critical_covariance_multiplier = (
-            cno_unavailable_critical_covariance_multiplier
-        )
-        self.rtcm_good_age_s = rtcm_good_age_s
-        self.rtcm_warning_age_s = rtcm_warning_age_s
-        self.rtcm_critical_age_s = rtcm_critical_age_s
-        self.rtcm_warning_covariance_multiplier = rtcm_warning_covariance_multiplier
-        self.rtcm_critical_covariance_multiplier = rtcm_critical_covariance_multiplier
-        self.max_covariance_scale = max_covariance_scale
-        self.unavailable_covariance_m2 = unavailable_covariance_m2
-        self.require_signal_health = require_signal_health
-        self.require_rtcm = require_rtcm
 
     def calculate(
         self,
@@ -217,11 +184,11 @@ class GpsCovarianceModel:
         """Return a covariance based on the latest receiver-quality evidence."""
         if not integrity_ok:
             return self._unavailable("integrity_invalid")
-        if self.require_signal_health and (
+        if self.policy.require_signal_health and (
             signal_health is None or not signal_health.fresh or not signal_health.valid
         ):
             return self._unavailable("signal_health_missing")
-        if self.require_rtcm and not self._valid_rtcm_age(rtcm_age_s):
+        if self.policy.require_rtcm and not self._valid_rtcm_age(rtcm_age_s):
             return self._unavailable("rtcm_missing")
 
         base_stddev = self._horizontal_stddev(source_covariance, horizontal_accuracy_m)
@@ -229,7 +196,7 @@ class GpsCovarianceModel:
             return self._unavailable("horizontal_accuracy_missing")
         if not math.isfinite(hdop) or hdop < 0.0:
             return self._unavailable("hdop_invalid")
-        if hdop > self.hdop_max_threshold:
+        if hdop > self.policy.max_hdop:
             return self._unavailable("hdop_excessive")
         if self._rtcm_expired(rtcm_age_s):
             return self._unavailable("rtcm_stale")
@@ -255,13 +222,13 @@ class GpsCovarianceModel:
         )
         covariance_scale = min(
             quality_multiplier * duration_multiplier * auxiliary_multiplier,
-            self.max_covariance_scale,
+            self.policy.max_covariance_scale,
         )
         horizontal_variance = base_stddev * base_stddev * covariance_scale
         return CovarianceResult(
             covariance_xx=horizontal_variance,
             covariance_yy=horizontal_variance,
-            covariance_zz=self.vertical_covariance_m2,
+            covariance_zz=self.policy.vertical_covariance_m2,
             covariance_scale=covariance_scale,
             horizontal_stddev_m=math.sqrt(horizontal_variance),
             reason="%s,%s,%s,%s,%s"
@@ -277,7 +244,7 @@ class GpsCovarianceModel:
     def _horizontal_stddev(
         self, source_covariance: Sequence[float], horizontal_accuracy_m: float
     ) -> Optional[float]:
-        candidates = [self.min_horizontal_stddev_m]
+        candidates = [self.policy.min_horizontal_stddev_m]
         if math.isfinite(horizontal_accuracy_m) and horizontal_accuracy_m > 0.0:
             candidates.append(horizontal_accuracy_m)
         for index in (0, 4):
@@ -289,14 +256,14 @@ class GpsCovarianceModel:
 
     def _quality_multiplier(self, gps_quality: int) -> tuple[float, str]:
         if gps_quality == 4:
-            return self.fixed_covariance_multiplier, "rtk_fixed"
+            return self.policy.fixed_covariance_multiplier, "rtk_fixed"
         if gps_quality == 5:
-            return self.float_covariance_multiplier, "rtk_float"
+            return self.policy.float_covariance_multiplier, "rtk_float"
         if gps_quality == 2:
-            return self.differential_covariance_multiplier, "differential"
+            return self.policy.differential_covariance_multiplier, "differential"
         if gps_quality == 1:
-            return self.standalone_covariance_multiplier, "standalone"
-        return self.standalone_covariance_multiplier, "unknown_solution"
+            return self.policy.standalone_covariance_multiplier, "standalone"
+        return self.policy.standalone_covariance_multiplier, "unknown_solution"
 
     def _fixed_duration_multiplier(
         self, gps_quality: int, fixed_duration_s: Optional[float]
@@ -304,11 +271,11 @@ class GpsCovarianceModel:
         if gps_quality != 4:
             return 1.0, "fixed_duration_not_applicable"
         if fixed_duration_s is None or not math.isfinite(fixed_duration_s):
-            return self.fixed_duration_short_covariance_multiplier, "fixed_duration_missing"
-        if fixed_duration_s < self.fixed_duration_short_s:
-            return self.fixed_duration_short_covariance_multiplier, "fixed_duration_short"
-        if fixed_duration_s < self.fixed_duration_warmup_s:
-            return self.fixed_duration_warmup_covariance_multiplier, "fixed_duration_warmup"
+            return self.policy.fixed_duration_short_covariance_multiplier, "fixed_duration_missing"
+        if fixed_duration_s < self.policy.fixed_duration_short_s:
+            return self.policy.fixed_duration_short_covariance_multiplier, "fixed_duration_short"
+        if fixed_duration_s < self.policy.fixed_duration_warmup_s:
+            return self.policy.fixed_duration_warmup_covariance_multiplier, "fixed_duration_warmup"
         return 1.0, "fixed_duration_ready"
 
     def _signal_multiplier(
@@ -319,13 +286,13 @@ class GpsCovarianceModel:
         cno = signal_health.cno_median_dbhz
         if not math.isfinite(cno):
             return self._unavailable_signal_multiplier(signal_health)
-        if cno >= self.cno_good_dbhz:
+        if cno >= self.policy.cno_good_dbhz:
             return 1.0, "cno_good"
-        if cno >= self.cno_warning_dbhz:
-            return self.cno_warning_covariance_multiplier, "cno_warning"
-        if cno >= self.cno_critical_dbhz:
-            return self.cno_critical_covariance_multiplier, "cno_low"
-        return self.cno_severe_covariance_multiplier, "cno_severe"
+        if cno >= self.policy.cno_warning_dbhz:
+            return self.policy.cno_warning_covariance_multiplier, "cno_warning"
+        if cno >= self.policy.cno_critical_dbhz:
+            return self.policy.cno_critical_covariance_multiplier, "cno_low"
+        return self.policy.cno_severe_covariance_multiplier, "cno_severe"
 
     def _unavailable_signal_multiplier(
         self, signal_health: Optional[SignalHealthSample]
@@ -337,24 +304,24 @@ class GpsCovarianceModel:
         duration_s = signal_health.unavailable_duration_s
         if not math.isfinite(duration_s) or duration_s < 0.0:
             return 1.0, "signal_health_unavailable_grace"
-        if duration_s <= self.cno_unavailable_grace_s:
+        if duration_s <= self.policy.cno_unavailable_grace_s:
             return 1.0, "signal_health_unavailable_grace"
-        if duration_s < self.cno_unavailable_critical_s:
+        if duration_s < self.policy.cno_unavailable_critical_s:
             return (
-                self.cno_unavailable_warning_covariance_multiplier,
+                self.policy.cno_unavailable_warning_covariance_multiplier,
                 "signal_health_unavailable_warning",
             )
         return (
-            self.cno_unavailable_critical_covariance_multiplier,
+            self.policy.cno_unavailable_critical_covariance_multiplier,
             "signal_health_unavailable_critical",
         )
 
     def _hdop_multiplier(self, hdop: float) -> tuple[float, str]:
-        if hdop <= self.hdop_good_threshold:
+        if hdop <= self.policy.hdop_good_threshold:
             return 1.0, "hdop_good"
-        if hdop <= self.hdop_warning_threshold:
-            return self.hdop_warning_covariance_multiplier, "hdop_warning"
-        return self.hdop_critical_covariance_multiplier, "hdop_critical"
+        if hdop <= self.policy.hdop_warning_threshold:
+            return self.policy.hdop_warning_covariance_multiplier, "hdop_warning"
+        return self.policy.hdop_critical_covariance_multiplier, "hdop_critical"
 
     @staticmethod
     def _valid_rtcm_age(rtcm_age_s: Optional[float]) -> bool:
@@ -363,27 +330,27 @@ class GpsCovarianceModel:
     def _rtcm_multiplier(self, rtcm_age_s: Optional[float]) -> tuple[float, str]:
         if not self._valid_rtcm_age(rtcm_age_s):
             return 1.0, "rtcm_unavailable"
-        if rtcm_age_s <= self.rtcm_good_age_s:
+        if rtcm_age_s <= self.policy.rtcm_good_age_s:
             return 1.0, "rtcm_fresh"
-        if rtcm_age_s <= self.rtcm_warning_age_s:
-            return self.rtcm_warning_covariance_multiplier, "rtcm_warning"
-        if rtcm_age_s <= self.rtcm_critical_age_s:
-            return self.rtcm_critical_covariance_multiplier, "rtcm_aging"
-        return self.rtcm_critical_covariance_multiplier, "rtcm_stale"
+        if rtcm_age_s <= self.policy.rtcm_warning_age_s:
+            return self.policy.rtcm_warning_covariance_multiplier, "rtcm_warning"
+        if rtcm_age_s <= self.policy.rtcm_timeout_s:
+            return self.policy.rtcm_critical_covariance_multiplier, "rtcm_aging"
+        return self.policy.rtcm_critical_covariance_multiplier, "rtcm_stale"
 
     def _rtcm_expired(self, rtcm_age_s: Optional[float]) -> bool:
         return (
             self._valid_rtcm_age(rtcm_age_s)
-            and rtcm_age_s > self.rtcm_critical_age_s
+            and rtcm_age_s > self.policy.rtcm_timeout_s
         )
 
     def _unavailable(self, reason: str) -> CovarianceResult:
-        stddev = math.sqrt(self.unavailable_covariance_m2)
+        stddev = math.sqrt(self.policy.unavailable_covariance_m2)
         return CovarianceResult(
-            covariance_xx=self.unavailable_covariance_m2,
-            covariance_yy=self.unavailable_covariance_m2,
-            covariance_zz=self.unavailable_covariance_m2,
-            covariance_scale=self.unavailable_covariance_m2,
+            covariance_xx=self.policy.unavailable_covariance_m2,
+            covariance_yy=self.policy.unavailable_covariance_m2,
+            covariance_zz=self.policy.unavailable_covariance_m2,
+            covariance_scale=self.policy.unavailable_covariance_m2,
             horizontal_stddev_m=stddev,
             reason=reason,
         )

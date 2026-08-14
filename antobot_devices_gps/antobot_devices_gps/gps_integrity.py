@@ -14,6 +14,8 @@ from sensor_msgs.msg import NavSatFix
 from antobot_devices_msgs.msg import GpsIntegrity, GpsQual, GpsSignalHealth, RTCM
 
 from .gps_covariance import (
+    COVARIANCE_PARAMETER_DEFAULTS,
+    CovariancePolicy,
     GpsCovarianceModel,
     PersistentSignalFaultTracker,
     SignalHealthSample,
@@ -33,155 +35,69 @@ def stamp_to_seconds(stamp) -> Optional[float]:
     return seconds if seconds > 0.0 else None
 
 
+NODE_PARAMETER_DEFAULTS = {
+    "input_gps_topic": "/antobot_gps",
+    "input_quality_topic": "/antobot_gps/quality",
+    "input_signal_health_topic": "/antobot_gps/signal_health",
+    "input_rtcm_topic": "/antobot_gps/rtcm",
+    "output_integrity_topic": "/antobot_gps/integrity",
+    "output_gps_topic": "/antobot_gps/quality_checked",
+    "publish_rate_hz": 10.0,
+    "gpsfix_timeout_s": 1.0,
+    "quality_timeout_s": 1.0,
+    "max_timestamp_delta_s": 0.25,
+    "min_navsat_status": 0,
+    "min_gps_quality": 1,
+    "min_num_sats": 4,
+    "max_h_acc_m": 10.0,
+    "require_timestamp_alignment": True,
+    "signal_health_timeout_s": 2.0,
+    "cno_severe_persistent_epochs": 3,
+    "cno_satellite_drop_threshold": 3,
+    **COVARIANCE_PARAMETER_DEFAULTS,
+}
+
+
 class GpsIntegrityNode(Node):
     """Publish an integrity state and a quality-gated NavSatFix copy."""
 
     def __init__(self) -> None:
         super().__init__("gps_integrity")
 
-        self.declare_parameter("input_gps_topic", "/antobot_gps")
-        self.declare_parameter("input_quality_topic", "/antobot_gps/quality")
-        self.declare_parameter("input_signal_health_topic", "/antobot_gps/signal_health")
-        self.declare_parameter("input_rtcm_topic", "/antobot_gps/rtcm")
-        self.declare_parameter("output_integrity_topic", "/antobot_gps/integrity")
-        self.declare_parameter("output_gps_topic", "/antobot_gps/quality_checked")
-        self.declare_parameter("publish_rate_hz", 10.0)
-        self.declare_parameter("gpsfix_timeout_s", 1.0)
-        self.declare_parameter("quality_timeout_s", 1.0)
-        self.declare_parameter("max_timestamp_delta_s", 0.25)
-        self.declare_parameter("min_navsat_status", 0)
-        self.declare_parameter("min_gps_quality", 1)
-        self.declare_parameter("min_num_sats", 4)
-        self.declare_parameter("max_h_acc_m", 10.0)
-        self.declare_parameter("max_hdop", 5.0)
-        self.declare_parameter("require_timestamp_alignment", True)
-        self.declare_parameter("rtcm_timeout_s", 10.0)
-        self.declare_parameter("require_rtcm", True)
-        self.declare_parameter("rtcm_good_age_s", 2.0)
-        self.declare_parameter("rtcm_warning_age_s", 5.0)
-        self.declare_parameter("rtcm_warning_covariance_multiplier", 2.0)
-        self.declare_parameter("rtcm_critical_covariance_multiplier", 9.0)
-        self.declare_parameter("signal_health_timeout_s", 2.0)
-        self.declare_parameter("require_signal_health", False)
-        self.declare_parameter("min_horizontal_stddev_m", 0.02)
-        self.declare_parameter("vertical_covariance_m2", 100.0)
-        self.declare_parameter("hdop_good_threshold", 2.0)
-        self.declare_parameter("hdop_warning_threshold", 3.0)
-        self.declare_parameter("hdop_warning_covariance_multiplier", 2.0)
-        self.declare_parameter("hdop_critical_covariance_multiplier", 4.0)
-        self.declare_parameter("fixed_covariance_multiplier", 1.0)
-        self.declare_parameter("fixed_duration_short_s", 3.0)
-        self.declare_parameter("fixed_duration_warmup_s", 5.0)
-        self.declare_parameter("fixed_duration_short_covariance_multiplier", 9.0)
-        self.declare_parameter("fixed_duration_warmup_covariance_multiplier", 4.0)
-        self.declare_parameter("float_covariance_multiplier", 25.0)
-        self.declare_parameter("differential_covariance_multiplier", 100.0)
-        self.declare_parameter("standalone_covariance_multiplier", 400.0)
-        self.declare_parameter("cno_good_dbhz", 40.0)
-        self.declare_parameter("cno_warning_dbhz", 35.0)
-        self.declare_parameter("cno_critical_dbhz", 30.0)
-        self.declare_parameter("cno_warning_covariance_multiplier", 2.0)
-        self.declare_parameter("cno_critical_covariance_multiplier", 4.0)
-        self.declare_parameter("cno_severe_covariance_multiplier", 9.0)
-        self.declare_parameter("cno_unavailable_grace_s", 2.0)
-        self.declare_parameter("cno_unavailable_critical_s", 10.0)
-        self.declare_parameter("cno_unavailable_warning_covariance_multiplier", 2.0)
-        self.declare_parameter("cno_unavailable_critical_covariance_multiplier", 4.0)
-        self.declare_parameter("cno_severe_persistent_epochs", 3)
-        self.declare_parameter("cno_satellite_drop_threshold", 3)
-        self.declare_parameter("max_covariance_scale", 400.0)
-        self.declare_parameter("unavailable_covariance_m2", 1_000_000.0)
-
-        input_gps_topic = self._string_parameter("input_gps_topic")
-        input_quality_topic = self._string_parameter("input_quality_topic")
-        input_signal_health_topic = self._string_parameter("input_signal_health_topic")
-        input_rtcm_topic = self._string_parameter("input_rtcm_topic")
-        output_integrity_topic = self._string_parameter("output_integrity_topic")
-        output_gps_topic = self._string_parameter("output_gps_topic")
-        publish_rate_hz = self._double_parameter("publish_rate_hz")
+        self.declare_parameters("", list(NODE_PARAMETER_DEFAULTS.items()))
+        parameters = {
+            name: self.get_parameter(name).value for name in NODE_PARAMETER_DEFAULTS
+        }
+        input_gps_topic = parameters["input_gps_topic"]
+        input_quality_topic = parameters["input_quality_topic"]
+        input_signal_health_topic = parameters["input_signal_health_topic"]
+        input_rtcm_topic = parameters["input_rtcm_topic"]
+        output_integrity_topic = parameters["output_integrity_topic"]
+        output_gps_topic = parameters["output_gps_topic"]
+        publish_rate_hz = parameters["publish_rate_hz"]
         if publish_rate_hz <= 0.0:
             raise ValueError("publish_rate_hz must be positive")
 
         self.checker = GpsIntegrityChecker(
-            gpsfix_timeout_s=self._double_parameter("gpsfix_timeout_s"),
-            quality_timeout_s=self._double_parameter("quality_timeout_s"),
-            max_timestamp_delta_s=self._double_parameter("max_timestamp_delta_s"),
-            min_navsat_status=self._integer_parameter("min_navsat_status"),
-            min_gps_quality=self._integer_parameter("min_gps_quality"),
-            min_num_sats=self._integer_parameter("min_num_sats"),
-            max_h_acc_m=self._double_parameter("max_h_acc_m"),
-            max_hdop=self._double_parameter("max_hdop"),
-            require_timestamp_alignment=self._bool_parameter("require_timestamp_alignment"),
-            rtcm_timeout_s=self._double_parameter("rtcm_timeout_s"),
-            require_rtcm=self._bool_parameter("require_rtcm"),
+            gpsfix_timeout_s=parameters["gpsfix_timeout_s"],
+            quality_timeout_s=parameters["quality_timeout_s"],
+            max_timestamp_delta_s=parameters["max_timestamp_delta_s"],
+            min_navsat_status=parameters["min_navsat_status"],
+            min_gps_quality=parameters["min_gps_quality"],
+            min_num_sats=parameters["min_num_sats"],
+            max_h_acc_m=parameters["max_h_acc_m"],
+            max_hdop=parameters["max_hdop"],
+            require_timestamp_alignment=parameters["require_timestamp_alignment"],
+            rtcm_timeout_s=parameters["rtcm_timeout_s"],
+            require_rtcm=parameters["require_rtcm"],
         )
-        self.signal_health_timeout_s = self._double_parameter("signal_health_timeout_s")
+        self.signal_health_timeout_s = parameters["signal_health_timeout_s"]
         if self.signal_health_timeout_s <= 0.0:
             raise ValueError("signal_health_timeout_s must be positive")
-        self.covariance_model = GpsCovarianceModel(
-            min_horizontal_stddev_m=self._double_parameter("min_horizontal_stddev_m"),
-            vertical_covariance_m2=self._double_parameter("vertical_covariance_m2"),
-            hdop_good_threshold=self._double_parameter("hdop_good_threshold"),
-            hdop_warning_threshold=self._double_parameter("hdop_warning_threshold"),
-            hdop_max_threshold=self._double_parameter("max_hdop"),
-            hdop_warning_covariance_multiplier=self._double_parameter(
-                "hdop_warning_covariance_multiplier"
-            ),
-            hdop_critical_covariance_multiplier=self._double_parameter(
-                "hdop_critical_covariance_multiplier"
-            ),
-            fixed_covariance_multiplier=self._double_parameter("fixed_covariance_multiplier"),
-            fixed_duration_short_s=self._double_parameter("fixed_duration_short_s"),
-            fixed_duration_warmup_s=self._double_parameter("fixed_duration_warmup_s"),
-            fixed_duration_short_covariance_multiplier=self._double_parameter(
-                "fixed_duration_short_covariance_multiplier"
-            ),
-            fixed_duration_warmup_covariance_multiplier=self._double_parameter(
-                "fixed_duration_warmup_covariance_multiplier"
-            ),
-            float_covariance_multiplier=self._double_parameter("float_covariance_multiplier"),
-            differential_covariance_multiplier=self._double_parameter(
-                "differential_covariance_multiplier"
-            ),
-            standalone_covariance_multiplier=self._double_parameter(
-                "standalone_covariance_multiplier"
-            ),
-            cno_good_dbhz=self._double_parameter("cno_good_dbhz"),
-            cno_warning_dbhz=self._double_parameter("cno_warning_dbhz"),
-            cno_critical_dbhz=self._double_parameter("cno_critical_dbhz"),
-            cno_warning_covariance_multiplier=self._double_parameter(
-                "cno_warning_covariance_multiplier"
-            ),
-            cno_critical_covariance_multiplier=self._double_parameter(
-                "cno_critical_covariance_multiplier"
-            ),
-            cno_severe_covariance_multiplier=self._double_parameter(
-                "cno_severe_covariance_multiplier"
-            ),
-            cno_unavailable_grace_s=self._double_parameter("cno_unavailable_grace_s"),
-            cno_unavailable_critical_s=self._double_parameter(
-                "cno_unavailable_critical_s"
-            ),
-            cno_unavailable_warning_covariance_multiplier=self._double_parameter(
-                "cno_unavailable_warning_covariance_multiplier"
-            ),
-            cno_unavailable_critical_covariance_multiplier=self._double_parameter(
-                "cno_unavailable_critical_covariance_multiplier"
-            ),
-            rtcm_good_age_s=self._double_parameter("rtcm_good_age_s"),
-            rtcm_warning_age_s=self._double_parameter("rtcm_warning_age_s"),
-            rtcm_critical_age_s=self._double_parameter("rtcm_timeout_s"),
-            rtcm_warning_covariance_multiplier=self._double_parameter(
-                "rtcm_warning_covariance_multiplier"
-            ),
-            rtcm_critical_covariance_multiplier=self._double_parameter(
-                "rtcm_critical_covariance_multiplier"
-            ),
-            max_covariance_scale=self._double_parameter("max_covariance_scale"),
-            unavailable_covariance_m2=self._double_parameter("unavailable_covariance_m2"),
-            require_signal_health=self._bool_parameter("require_signal_health"),
-            require_rtcm=self._bool_parameter("require_rtcm"),
-        )
+        policy_values = {
+            name: parameters[name] for name in COVARIANCE_PARAMETER_DEFAULTS
+        }
+        self.covariance_model = GpsCovarianceModel(CovariancePolicy(**policy_values))
 
         self.latest_gpsfix: Optional[GpsFixSample] = None
         self.latest_quality: Optional[GpsQualitySample] = None
@@ -193,13 +109,9 @@ class GpsIntegrityNode(Node):
         # like any other persistent C/N0 outage.
         self.signal_health_unavailable_since: Optional[float] = time.monotonic()
         self.signal_fault_tracker = PersistentSignalFaultTracker(
-            severe_cno_dbhz=self._double_parameter("cno_critical_dbhz"),
-            min_consecutive_epochs=self._integer_parameter(
-                "cno_severe_persistent_epochs"
-            ),
-            min_satellite_drop=self._integer_parameter(
-                "cno_satellite_drop_threshold"
-            ),
+            severe_cno_dbhz=parameters["cno_critical_dbhz"],
+            min_consecutive_epochs=parameters["cno_severe_persistent_epochs"],
+            min_satellite_drop=parameters["cno_satellite_drop_threshold"],
         )
         self.fixed_duration_tracker = FixedDurationTracker()
         self.last_reported_reason: Optional[str] = None
@@ -216,7 +128,9 @@ class GpsIntegrityNode(Node):
             self.signal_health_callback,
             10,
         )
-        self.rtcm_sub = self.create_subscription(RTCM, input_rtcm_topic, self.rtcm_callback, 10)
+        self.rtcm_sub = self.create_subscription(
+            RTCM, input_rtcm_topic, self.rtcm_callback, 10
+        )
         status_qos = QoSProfile(
             depth=1,
             reliability=ReliabilityPolicy.RELIABLE,
@@ -296,7 +210,9 @@ class GpsIntegrityNode(Node):
         output.position_covariance_type = NavSatFix.COVARIANCE_TYPE_DIAGONAL_KNOWN
         self.gps_pub.publish(output)
 
-    def calculate_covariance(self, msg: NavSatFix, integrity, now: float, fixed_duration_s: float):
+    def calculate_covariance(
+        self, msg: NavSatFix, integrity, now: float, fixed_duration_s: float
+    ):
         quality = self.latest_quality
         signal_health = self.current_signal_health(now)
         return self.covariance_model.calculate(
@@ -393,19 +309,6 @@ class GpsIntegrityNode(Node):
             # between state transitions when logging is throttled/cached.
             self.get_logger().info("GPS integrity (%s): %s" % (state, msg.reason))
             self.last_reported_reason = msg.reason
-
-    def _string_parameter(self, name: str) -> str:
-        return self.get_parameter(name).get_parameter_value().string_value
-
-    def _double_parameter(self, name: str) -> float:
-        return self.get_parameter(name).get_parameter_value().double_value
-
-    def _integer_parameter(self, name: str) -> int:
-        return self.get_parameter(name).get_parameter_value().integer_value
-
-    def _bool_parameter(self, name: str) -> bool:
-        return self.get_parameter(name).get_parameter_value().bool_value
-
 
 def main(args=None) -> None:
     rclpy.init(args=args)

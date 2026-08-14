@@ -1,6 +1,7 @@
 import math
 
 from antobot_devices_gps.gps_covariance import (
+    CovariancePolicy,
     GpsCovarianceModel,
     PersistentSignalFaultTracker,
     SignalHealthSample,
@@ -8,7 +9,7 @@ from antobot_devices_gps.gps_covariance import (
 
 
 def model():
-    return GpsCovarianceModel(vertical_covariance_m2=100.0)
+    return GpsCovarianceModel(CovariancePolicy(vertical_covariance_m2=100.0))
 
 
 def healthy_signal(satellites=15):
