@@ -435,6 +435,11 @@ class ROS2Interface(Node):
             dy = gps_y_1 - gps_y_2
             dz = gps_z_1 - gps_z_2
 
+            if gps_x_1 < 0:
+                self.heading_offset = 450
+            else:
+                self.heading_offset = 630
+
             import math
             self.antenna_baseline = math.sqrt(dx**2 + dy**2 + dz**2)
                 
@@ -616,7 +621,7 @@ class MovingBase:
             heading_valid_last = False
             
             # Keep the event loop running
-            while True:
+            while rclpy.ok():
                 try:
                     # Process frames and handle any periodic tasks
                     frame = await self.get_relposned()
@@ -626,8 +631,7 @@ class MovingBase:
                         self.msg_rec_heading_time.add_time_queue(time.time())
 
                         msg_heading.header.stamp = self.ros_node.get_clock().now().to_msg() 
-                        msg_heading.heading = (450 - frame.relPosHeading * 1e-5) % 360
-                        # msg_heading.heading = (630 - frame.relPosHeading * 1e-5) % 360
+                        msg_heading.heading = (self.ros_node.heading_offset - frame.relPosHeading * 1e-5) % 360
                         msg_heading.length = frame.relPosLength * 1e-2
                         msg_heading.rel_pos_n = frame.relPosN * 1e-2
                         msg_heading.rel_pos_e = frame.relPosE * 1e-2
@@ -686,10 +690,11 @@ class MovingBase:
         finally:
             pass
 
-async def spin_ros(node, period=0.005):
+async def spin_ros(node, rtcm_buffer, period=0.005):
     while rclpy.ok():
         rclpy.spin_once(node, timeout_sec=0.0)
         await asyncio.sleep(period)
+    await rtcm_buffer.close()
         
 async def async_main():
     
@@ -708,7 +713,7 @@ async def async_main():
             return
         
         # Create tasks
-        tasks = [moving_base.run(), rtcm_buffer.run(), spin_ros(ros_node)]
+        tasks = [moving_base.run(), rtcm_buffer.run(), spin_ros(ros_node, rtcm_buffer)]
 
         # Run main loop
         await asyncio.gather(*tasks)

@@ -25,8 +25,12 @@ import rospkg
 import spidev
 import sys
 from builtin_interfaces.msg import Time
-from datetime import datetime
+from datetime import datetime, timezone
 import pynmea2
+import time
+import ctypes
+import sysv_ipc
+import struct
 
 import serial
 from std_msgs.msg import  String
@@ -36,6 +40,26 @@ from std_msgs.msg import UInt8, Float32, Header
 from antobot_devices_msgs.msg import GpsQual
 from .ublox_gps.ublox_gps import UbloxGps
 import math
+
+SHM_KEY = 0x4E545030  # "NTP0" in ASCII, used for time sync
+
+### Shared memory structure for Chrony time sync
+class ShmTime(ctypes.Structure):
+    _fields_ = [
+        ("mode", ctypes.c_int),
+        ("count", ctypes.c_int),
+        ("clockTimeStampSec", ctypes.c_long),
+        ("clockTimeStampUSec", ctypes.c_int),
+        ("receiveTimeStampSec", ctypes.c_long),
+        ("receiveTimeStampUSec", ctypes.c_int),
+        ("leap", ctypes.c_int),
+        ("precision", ctypes.c_int),
+        ("nsamples", ctypes.c_int),
+        ("valid", ctypes.c_int),
+        ("clockTimeStampNSec", ctypes.c_uint),
+        ("receiveTimeStampNSec", ctypes.c_uint),
+        ("dummy", ctypes.c_int * 8),
+    ]
 
 class F9P_GPS(Node):
 
@@ -102,6 +126,8 @@ class F9P_GPS(Node):
         self.gps_status = "Critical"
         self.gps_freq_status = "Critical"
         self.gps_time_buf = []
+        self.gps_rmc_timestamp = None
+        self.gps_rmc_datestamp = None
         self.hAcc = 500
         self.h_acc_thresh = 0.1  # 
         clock = Clock()
@@ -135,9 +161,18 @@ class F9P_GPS(Node):
         self.last_good_lat = None
         self.last_good_lon = None
         self.last_good_time_s = None
-        
-        return
 
+        # for Chrony time sync
+        self.time_sync_finished = False
+        self.shm = None
+        for _ in range(10):
+            try:
+                self.shm = sysv_ipc.SharedMemory(SHM_KEY)
+                break
+            except Exception:
+                time.sleep(0.5)
+
+        return
 
 
 
@@ -367,7 +402,6 @@ class F9P_GPS(Node):
         print("pulled sentence:",self.poll_buff)            
         
     def get_gps_timestamp_utc(self):
-
         today_date = datetime.today()
         year=today_date.year
         month=today_date.month
@@ -382,7 +416,54 @@ class F9P_GPS(Node):
         except:
             print("GPS timestamp invalid")
         
+    def send_chrony_shm_sample(self, gps_dt: datetime) -> None:
+        if(self.shm is None):
+            return 
+    
+        if(self.time_sync_finished):
+            return
 
+        if gps_dt.tzinfo is None:
+            raise ValueError("gps_dt must be timezone-aware UTC datetime")
+
+        raw = self.shm.read(ctypes.sizeof(ShmTime))
+        shm_time = ShmTime.from_buffer_copy(raw)
+
+        true_ts = gps_dt.timestamp()
+        true_sec = int(true_ts)
+        true_usec = int((true_ts - true_sec) * 1_000_000)
+        true_nsec = int((true_ts - true_sec) * 1_000_000_000)
+
+        recv_ts = time.time()
+        recv_sec = int(recv_ts)
+        recv_usec = int((recv_ts - recv_sec) * 1_000_000)
+        recv_nsec = int((recv_ts - recv_sec) * 1_000_000_000)
+
+        shm_time.valid = 0
+        shm_time.mode = 0
+        shm_time.count += 1
+
+        shm_time.clockTimeStampSec = true_sec
+        shm_time.clockTimeStampUSec = true_usec
+        shm_time.clockTimeStampNSec = true_nsec
+
+        shm_time.receiveTimeStampSec = recv_sec
+        shm_time.receiveTimeStampUSec = recv_usec
+        shm_time.receiveTimeStampNSec = recv_nsec
+
+        shm_time.leap = 0
+        shm_time.precision = -20
+        shm_time.nsamples = 3
+
+        shm_time.count += 1
+        shm_time.valid = 1
+
+        self.shm.write(bytes(shm_time))
+
+        # Check if time offset is within acceptable range to consider time sync successful
+        system_time_diff = abs(time.time() - gps_dt.timestamp())
+        if system_time_diff <= 5.0:
+            self.time_sync_finished = True
         
 
     def get_gps_freq(self):
@@ -468,7 +549,17 @@ class F9P_GPS(Node):
                     pass
                     #print("VTG information invalid")
                 # TODO: Calculate ENU velocity
-            
+            if self.shm is not None and not self.time_sync_finished and streamed_data.startswith("$GNRMC"):
+                rmc_parse = pynmea2.parse(streamed_data)
+                try:
+                    self.gps_rmc_timestamp = rmc_parse.timestamp
+                    self.gps_rmc_datestamp = rmc_parse.datestamp
+                    gps_dt = datetime.combine(self.gps_rmc_datestamp, self.gps_rmc_timestamp)
+                    self.send_chrony_shm_sample(gps_dt)
+
+                except Exception as e:
+                    self.get_logger().error(f"RMC timestamp invalid: {e}")
+
         return
 
     def create_quality_msg(self):

@@ -9,7 +9,7 @@ from ament_index_python.packages import get_package_share_directory
 from antobot_com_postgresql.db_config_loader import get_robot_config
 
 ################### user configure parameters for ros2 start ###################
-xfer_format   = 4    # 0-Pointcloud2(PointXYZRTL), 1-customized pointcloud format
+xfer_format   = 0    # 0-Pointcloud2(PointXYZRTL), 1-customized pointcloud format
 multi_topic   = 1    # 0-All LiDARs share the same topic, 1-One LiDAR one topic
 data_src      = 0    # 0-lidar, others-Invalid data src
 publish_freq  = 10.0 # freqency of publish, 5.0, 10.0, 20.0, 50.0, etc.
@@ -41,11 +41,16 @@ def generate_launch_description():
             user_config_path = os.path.join(cur_config_path, 'MID360_config_aRCU.json')
         elif mid360_count == 2:
             user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config_aRCU.json')
+        elif mid360_count == 4:
+            user_config_path = os.path.join(cur_config_path, 'U501_MID360_config_aRCU.json')
+
     else:
         if mid360_count == 1:
             user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
         elif mid360_count == 2:
             user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config.json')
+        elif mid360_count == 4:
+            user_config_path = os.path.join(cur_config_path, 'U501_MID360_config_aRCU.json')
 
     livox_ros2_params = [
         {"xfer_format": xfer_format},
