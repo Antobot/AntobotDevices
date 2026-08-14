@@ -39,6 +39,9 @@ class JoystickSbus(Node):
         self.channel5_pre = None
         self.channel6_pre = None
         self.buttons_reset = True 
+        self.ch6_min_in_activation = float('inf')
+        self.ch6_trigger = False
+        self.ch6_last_trigger_knob1 = 0  # prevent jumping around 1000
 
         # Buttons
         self.A = self.B = self.X = self.Y = 0
@@ -98,13 +101,13 @@ class JoystickSbus(Node):
         ch = SbusFrame.sbusChannels
 
         right_rocker_LR = ch[0] #  右摇杆左右
-        print(f"channel1 {ch[0]}")
+        # print(f"channel1 {ch[0]}")
         right_rocker_FB = ch[2] #  右摇杆上下 只有右遥感前后能设置教练锁死
-        print(f"channel3 {ch[2]}")
+        # print(f"channel3 {ch[2]}")
         left_rocker_FB = ch[1] #  左摇杆前后
-        print(f"channel2 {ch[1]}")
+        # print(f"channel2 {ch[1]}")
         left_rocker_LR = ch[3] #  左摇杆左右
-        print(f"channel4 {ch[3]}")
+        # print(f"channel4 {ch[3]}")
         channel5 = ch[4] # CH5/CH6: 三挡开关 (SWA)
         channel6 = ch[5] # CH5/CH6: 三挡开关 (SWB)
         knob1 = ch[6] # CH7/CH8: 两个旋钮（200~1800）
@@ -117,9 +120,23 @@ class JoystickSbus(Node):
         left_FB = self.normalize_axis(left_rocker_FB)
         right_LR = self.normalize_axis(right_rocker_LR)
         right_FB = self.normalize_axis(right_rocker_FB)
-        knob1_norm = self.normalize_axis(knob1)
-        knob2_norm = self.normalize_axis(knob2)
 
+        # four speed mode
+        speed_mode = 1
+        if(knob2 <= 600):
+            speed_mode = 1
+        elif(knob2 > 600 and knob2 <= 1000):
+            speed_mode = 2
+        elif(knob2 > 1000 and knob2 <= 1400):
+            speed_mode = 3
+        elif(knob2 > 1400 and knob2 <= 1800):
+            speed_mode = 4
+
+        speed_rate = speed_mode * 0.25
+        right_LR = right_LR * speed_rate
+        right_FB = right_FB * speed_rate
+
+        print(f"speed_rate: {speed_rate}, right_LR: {right_LR}, right_FB: {right_FB}")
 
         if right_rocker_FB < 50:
             self.axes = [0.0] * 8
@@ -131,9 +148,9 @@ class JoystickSbus(Node):
 
         ch5_val = self.translate_buttons(channel5)
         ch6_val = self.translate_buttons(channel6)
-        print("ch5_val: ", ch5_val)
-        print("ch6_val: ", ch6_val)
-        print("right_FB: ", right_FB)
+        # print("ch5_val: ", ch5_val)
+        # print("ch6_val: ", ch6_val)
+        # print("right_FB: ", right_FB)
 
         # ========= 4WS steering mode selection =========
         # NOTE:
@@ -190,6 +207,36 @@ class JoystickSbus(Node):
             self.RB = 0
         # ============================
 
+        if self.flag == 1 and self.blockOut == 0:
+            self.ch6_min_in_activation = min(self.ch6_min_in_activation, knob1)
+
+            if (not self.ch6_trigger and
+                    knob1 > 1000 and
+                    knob1 - self.ch6_last_trigger_knob1 > 50 and
+                    knob1 - self.ch6_min_in_activation > 800):
+                self.X = 2
+                self.BACK = 2
+                self.ch6_trigger = True
+                self.ch6_last_trigger_knob1 = knob1
+                self.get_logger().info(
+                    f"[4WS] UV ON trigger: X=2, BACK=2 (ch[6]={knob1}, min={self.ch6_min_in_activation})"
+                )
+
+            if (self.ch6_trigger and 
+                knob1 < 1000 and
+                self.ch6_last_trigger_knob1 - knob1 > 50):
+                self.X = 3
+                self.BACK = 3
+                self.ch6_trigger = False
+                self.ch6_last_trigger_knob1 = knob1
+                self.get_logger().info(f"[4WS] UV OFF trigger: X=3, BACK=3 (ch[6]={knob1})")
+
+        else:
+            self.ch6_min_in_activation = float('inf')
+            self.ch6_trigger = False
+            self.ch6_last_trigger_knob1 = 0
+        # ============================
+
         # 映射到 Joy 消息,axes共8通道, 无旋钮消息
         self.axes = [
             0.0, left_FB, 0.0, right_LR, right_FB, self.RT, 0.0, left_LR
@@ -197,17 +244,18 @@ class JoystickSbus(Node):
         self.buttons = [self.A, self.B, self.X, self.Y,
                         self.LB, self.RB, self.BACK, 0, 0, 0, self.flag]
 
-        print(f'axes: {self.axes}')
-        print(f'buttons: {self.buttons}')
+        # print(f'axes: {self.axes}')
+        # print(f'buttons: {self.buttons}')
 
         # 数据变化时发布
         if (self.axes != self.axes_pre or self.buttons != self.buttons_pre
                 or abs(self.axes[1]) > 0.9 or abs(self.axes[3]) > 0.9):
-            print(f'axes: {self.axes}')
-            print(f'buttons: {self.buttons}')
+            # print(f'axes: {self.axes}')
+            # print(f'buttons: {self.buttons}')
             self.joy_msg.axes = self.axes
             self.joy_msg.buttons = self.buttons
             self.joy_msg.header.stamp = self.get_clock().now().to_msg()
+            
             self.joy_pub.publish(self.joy_msg)
 
         self.axes_pre = list(self.axes)

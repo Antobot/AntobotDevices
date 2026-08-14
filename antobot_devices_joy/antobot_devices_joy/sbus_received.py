@@ -145,7 +145,7 @@ class SBUSReceiver:
         self.frames = asyncio.Queue()
 
     @staticmethod
-    async def create(port='/dev/ttyUSB0'):
+    async def create(port='/dev/ttyCH341USB0'):
         loop = asyncio.get_running_loop()
         receiver = SBUSReceiver()
         receiver._transport, receiver._protocol = await serial_asyncio.create_serial_connection(
@@ -165,7 +165,7 @@ class SBUSReceiver:
 
 
 async def main():
-    sbus = await SBUSReceiver.create("/dev/ttyUSB0")
+    sbus = await SBUSReceiver.create("/dev/ttyCH341USB0")
 
     while True:
 
