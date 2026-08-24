@@ -1,0 +1,907 @@
+#!/usr/bin/env python3
+# Copyright (c) 2023, ANTOBOT LTD.
+# All rights reserved
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+# # # Code Description:     The purpose of this code is to process the GPS data received via SPI from the Ublox F9P chip
+# # #                       and publish a GPS message as a rostopic using this data.
+
+#This script reports the following on GPS status:
+# GPS status : Critical ; GPS status = 0
+# GPS status : Warning ;GPS status = 1 - Float
+# GPS status : Good ; GPS status = 3 - Fix
+
+# Contact: Daniel Freer 
+# email: daniel.freer@antobot.ai
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+import threading
+import rclpy
+from rclpy.executors import ExternalShutdownException
+from rclpy.node import Node
+from rclpy.clock import Clock
+import rospkg
+import spidev
+import sys
+from builtin_interfaces.msg import Time
+from datetime import datetime, timezone
+import pynmea2
+import time
+import ctypes
+import sysv_ipc
+import struct
+
+import serial
+from std_msgs.msg import  String
+from sensor_msgs.msg import NavSatFix
+from geometry_msgs.msg import TwistWithCovarianceStamped
+from std_msgs.msg import UInt8, Float32, Header
+from antobot_devices_msgs.msg import GpsQual, GnssConstellation, GnssSystem, GnssSat
+from .ublox_gps.ublox_gps import UbloxGps
+import math
+
+SHM_KEY = 0x4E545030  # "NTP0" in ASCII, used for time sync
+
+# NMEA GSV talker ID -> uRCU GNS System id (uRCU Data Exchange System PRNs Block)
+GSV_TALKER_TO_SYSID = {
+    "GP": 1,  # GPS
+    "GL": 2,  # GLONASS
+    "GA": 3,  # Galileo
+    "GB": 4,  # BeiDou
+    "BD": 4,  # BeiDou (alternative talker)
+    "GQ": 6,  # QZSS
+    "GI": 7,  # IRNSS / NavIC
+}
+
+# NMEA GSA "GNSS System ID" (NMEA 4.11 trailing field) -> uRCU GNS System id.
+# GPS/GLONASS/Galileo/BeiDou map 1:1; QZSS/NavIC/SBAS numbering is receiver
+# dependent - validate against the live stream before trusting them.
+GSA_NMEA_TO_SYSID = {
+    1: 1,  # GPS
+    2: 2,  # GLONASS
+    3: 3,  # Galileo
+    4: 4,  # BeiDou
+}
+
+### Shared memory structure for Chrony time sync
+class ShmTime(ctypes.Structure):
+    _fields_ = [
+        ("mode", ctypes.c_int),
+        ("count", ctypes.c_int),
+        ("clockTimeStampSec", ctypes.c_long),
+        ("clockTimeStampUSec", ctypes.c_int),
+        ("receiveTimeStampSec", ctypes.c_long),
+        ("receiveTimeStampUSec", ctypes.c_int),
+        ("leap", ctypes.c_int),
+        ("precision", ctypes.c_int),
+        ("nsamples", ctypes.c_int),
+        ("valid", ctypes.c_int),
+        ("clockTimeStampNSec", ctypes.c_uint),
+        ("receiveTimeStampNSec", ctypes.c_uint),
+        ("dummy", ctypes.c_int * 8),
+    ]
+
+class F9P_GPS(Node):
+
+
+    def __init__(self, dev_type="urcu", serial_port=None, method="stream", pub_name="antobot_gps", pub_name_qual="antobot_gps/quality"):
+
+        # # # GPS class initialisation
+        #     Inputs: dev_type - the device type of the F9P chip. 
+        #           "urcu" - if using the F9P inside of the URCU
+        #           "usb" - if using an external F9P conncected via USB
+
+        self.node_type = ""
+        print("in gps_f9p")
+        super().__init__("gps_f9p")
+        
+        
+        self.declare_parameter("enable_gps_filter", True)
+        self.enable_gps_filter = self.get_parameter("enable_gps_filter").value
+
+        self.declare_parameter("inject_test_bad_fix", False)
+        self.inject_test_bad_fix = self.get_parameter("inject_test_bad_fix").value
+
+        self.inject_test_bad_fix_once_done = False
+        self.good_fix_count = 0
+        
+        
+        if self.enable_gps_filter:
+            self.get_logger().info("GPS jump filter is ENABLED")
+        else:
+            self.get_logger().warn("GPS jump filter is DISABLED, publishing raw GPS")
+        
+        
+        
+        self.gpsfix = NavSatFix()
+        self.gpsfix.header= Header()
+        self.gpsfix.header.frame_id = 'gps_frame'  # FRAME_ID
+        self.message = "GGA" #or"GNS"
+        self.dev_type = dev_type
+        self.method = method
+        self.poll_buff = 1
+        self.poll_buff_pre =1
+        self.base_station = False
+        if self.dev_type == "urcu":
+            self.port = spidev.SpiDev()
+        elif self.dev_type == "usb":
+            if serial_port == None:
+                self.baud = 460800  # 460800 38400?? Need to resolve baudrate difference with baudrate_rtk below
+                self.port = serial.Serial("/dev/ttyUSB4", self.baud)
+            else:
+                self.port = serial_port
+        self.gps_dev = UbloxGps(self.port)
+        if (self.base_station==True):
+            baud_uart2 = self.gps_dev.ubx_set_val(0x40530001,460800)
+            set_uart2=self.gps_dev.ubx_set_val(0x10530005,0x01)
+            print("configed")
+            
+        self.gps_dev.ubx_set_val(0x40530001,460800)
+        #set the uart2 enable true
+        self.gps_dev.ubx_set_val(0x10530005,0x01) #cfg-uart2-enable
+        #print("config uart2 successful")
+
+        self.geo = None
+        self.fix_status = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+        self.gps_status = "Critical"
+        self.gps_freq_status = "Critical"
+        self.gps_time_buf = []
+        self.gps_rmc_timestamp = None
+        self.gps_rmc_datestamp = None
+        self.hAcc = 500
+        self.h_acc_thresh = 0.1  # 
+        clock = Clock()
+        current_time = clock.now().to_msg()
+        self.gps_time_i=0.1
+        self.gpsfix.header.stamp = current_time
+        self.gps_timestamp = current_time
+        self.gps_time_offset=2
+        # Initial parameters for quality
+        self.geo_sep = 0
+        self.cogt = 0
+        self.sogk = 0
+        self.gps_hz = 0
+        self.gps_pub = self.create_publisher( NavSatFix,pub_name, 10)
+        self.gps_qual_pub = self.create_publisher( GpsQual,"/antobot_gps/quality", 10)
+        self.gga_msg_pub=self.create_publisher(String, "/antobot_gps/gga", 10)
+        self.constellation_pub = self.create_publisher(GnssConstellation, "/antobot_gps/constellation", 5)
+
+        # GSV (satellites-in-view / constellation) accumulation state
+        self._gsv_partial = {}   # sys_id -> list[GnssSat] currently being collected
+        self._gsv_systems = {}   # sys_id -> list[GnssSat] completed for this cycle
+        # GSA (satellites used in the solution): sys_id -> list[svid]
+        self._gsa_used_systems = {}
+        # Differential block (1.2.0): correction age (s) and reference station ID
+        self.corr_age = -1.0
+        self.station_id = -1
+        self._timer = self.create_timer(1 / 50, self.do_publish)
+        
+        
+         # ---------------- GPS jump filter parameters ----------------
+        self.low_speed_threshold_mps = 0.3              
+        self.max_low_speed_jump_distance_m = 1.0        
+
+        self.base_jump_margin_m = 2.0                   
+        self.max_speed_mps = 3.0                      
+        self.hard_jump_distance_m = 20.0                
+        self.hard_jump_dt_s = 1.0                      
+        self.max_time_gap_s = 2.0                       
+
+        # last accepted GPS point
+        self.last_good_lat = None
+        self.last_good_lon = None
+        self.last_good_time_s = None
+
+        # for Chrony time sync
+        self.time_sync_finished = False
+        self.shm = None
+        for _ in range(10):
+            try:
+                self.shm = sysv_ipc.SharedMemory(SHM_KEY)
+                break
+            except Exception:
+                time.sleep(0.5)
+
+        return
+
+
+
+    def do_publish(self):
+         self.get_gps()
+         print("do_publish")
+        
+
+    def uart2_config(self,baud):
+        #set the baud rate of uart2 to appropriate value (38400?)
+        self.gps_dev.ubx_set_val(0x40530001,baud)
+        #set the uart2 enable true
+        self.gps_dev.ubx_set_val(0x10530005,0x01) #cfg-uart2-enable
+        print("config uart2 successful")
+
+        
+    def get_gps(self):
+        # Get the data from the F9P
+        print("get_gps")
+        if self.method == "poll":
+            self.geo = self.gps_dev.geo_coords() #poll method
+            self.hAcc=self.geo.hAcc
+            if  self.geo.lat is not None and self.geo.lat != 0:
+                self.create_gps_msg_poll()
+                self.get_gps_freq()
+                
+                
+                ## only for testing - inject a bad fix after 5 good fixes to test the filter --- IGNORE ---
+                # self.good_fix_count += 1
+                # self.maybe_inject_test_bad_fix()
+                
+                
+                if self.hAcc < 500:
+                    if self.enable_gps_filter:
+                        if self.should_publish_gps(self.gpsfix):    # add the filtering condition here
+                            self.gps_pub.publish(self.gpsfix)
+                    else:
+                        self.gps_pub.publish(self.gpsfix)
+                    # self.gps_pub.publish(self.gpsfix)
+        if self.method == "stream":
+            if self.dev_type =="urcu":
+                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') #stream method
+            if self.dev_type == "usb":
+                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') 1 self.poll_buff
+            self.get_gps_quality(streamed_data)
+
+
+            print("streamed_data:",streamed_data)
+
+
+            # Check the new data is viable and update message
+            if self.correct_gps_format(streamed_data):
+                self.create_gps_msg()
+                self.get_gps_freq()
+
+                self.create_quality_msg()
+
+                ## only for testing - inject a bad fix after 5 good fixes to test the filter --- IGNORE ---
+                # self.good_fix_count += 1
+                # self.maybe_inject_test_bad_fix()
+
+                if self.hAcc < 5000:
+                   if self.enable_gps_filter: # self.gps_pub.publish(self.gpsfix)
+                       if self.should_publish_gps(self.gpsfix):   # add the filtering condition here
+                           self.gps_pub.publish(self.gpsfix)
+                   else:
+                        self.gps_pub.publish(self.gpsfix)
+
+
+
+
+    def correct_gps_format(self, streamed_data):
+        # Function to check whether the streamed data matches the desired 
+        if self.message == "GGA":
+            if isinstance(streamed_data,str) and streamed_data.startswith("$GNGGA"):
+                self.geo = pynmea2.parse(streamed_data)
+                print("gps_format_true")
+                return True
+        if self.message == "GNS":
+            if isinstance(streamed_data,str) and streamed_data.startswith("$GNGNS"):
+                self.geo = pynmea2.parse(streamed_data)
+                self.fix_status = 4
+                return True
+
+        return False
+
+    def get_fix_status(self):
+        # print(self.geo.gps_qual)
+        if self.geo.gps_qual == 4 and self.gps_status != 'Good':
+            self.get_logger().info("SN4010: GPS Fix Status: Fixed Mode")
+            self.gps_status = 'Good'
+            self.fix_status = 3
+        elif self.geo.gps_qual == 2 or self.geo.gps_qual == 5:
+            if self.hAcc < self.h_acc_thresh:
+                self.fix_status = 3
+                if self.gps_status != 'Good':
+                    self.get_logger().info("SN4010: GPS Fix Status: Fixed Mode")
+                    self.gps_status = 'Good'
+            else:   
+                self.fix_status = 1
+                if self.gps_status != 'Warning':
+                    self.get_logger().warn("SN4010: GPS Fix Status: Float Mode")
+                    self.gps_status = 'Warning'
+        elif self.geo.gps_qual < 2:
+            self.fix_status = 0 #no fix
+            if self.gps_status != 'Critical':
+                self.get_logger().error("SN4010: GPS Fix Status: Critical")
+                self.gps_status = 'Critical'
+        
+        return self.fix_status
+
+    def get_fix_status_poll(self):
+        h_acc = 75
+
+        if self.geo.flags.carrSoln == 2:  #fix mode =2 ; float mode = 1
+            self.fix_status = self.geo.fixType #3: 3Dfix, 2:2Dfix
+
+            if self.fix_status == 3 and self.gps_status != 'Good':
+                rclpy.loginfo("SN4010: GPS Fix Status: Fixed Mode")
+                self.gps_status = 'Good'
+
+        elif self.geo.flags.carrSoln == 1: #float conditions
+            #PPP-IP can show float even if the horizontal accuracy is good, so adding another loop to check the fix mode
+            if self.hAcc < self.h_acc_thresh:
+                self.fix_status = 3
+                if self.gps_status != 'Good':
+                    self.get_logger().info("SN4010: GPS Fix Status: Fixed Mode")
+                    self.gps_status = 'Good'
+            elif self.geo.hAcc > h_acc :
+                self.fix_status = 1
+                if self.gps_status != 'Warning':
+                    self.get_logger().warn("SN4010: GPS Fix Status: Float Mode")
+                    self.gps_status = 'Warning'
+
+        else:
+            self.fix_status = 0 #no fix
+            if self.gps_status != 'Critical':
+                self.get_logger().error("SN4010: GPS Fix Status: Critical")
+                self.gps_status = 'Critical'
+
+        return self.fix_status
+
+    def create_gps_msg(self):
+        print("create_gps_msg")
+        self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
+
+        self.gpsfix.altitude = 0.0
+        self.gpsfix.latitude = 0.0
+        self.gpsfix.longitude = 0.0
+        if self.message == "GGA":
+             if  self.geo.latitude is not None and self.geo.latitude != 0:
+                self.gpsfix.latitude = float(self.geo.latitude)
+                self.gpsfix.longitude = float(self.geo.longitude)
+
+                self.gpsfix.altitude = float(self.geo.altitude)
+        
+        # Get GPS fix status
+        self.gpsfix.status.status = self.get_fix_status()
+
+        # Assumptions made on covariance
+        self.gpsfix.position_covariance[0] = (self.hAcc)**2 
+        self.gpsfix.position_covariance[4] = (self.hAcc)**2 
+        self.gpsfix.position_covariance[8] = (4*self.hAcc)**2 
+
+        # Set the time of the GPS message
+        self.set_gps_msg_time()
+        
+        return
+
+    def create_gps_msg_poll(self):
+
+        self.gpsfix.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
+
+        self.gpsfix.altitude = 0
+
+        self.gpsfix.latitude = self.geo.lat
+        self.gpsfix.longitude = self.geo.lon
+        self.gpsfix.altitude = self.geo.height
+        
+        # Get GPS fix status
+        self.gpsfix.status.status = self.get_fix_status_poll()
+
+        # Assumptions made on covariance  ###hAcc unit might be different, tbd
+        self.gpsfix.position_covariance[0] = (self.hAcc*0.001)**2 
+        self.gpsfix.position_covariance[4] = (self.hAcc*0.001)**2 
+        self.gpsfix.position_covariance[8] = (4*self.hAcc*0.001)**2 
+
+        # Set the time of the GPS message
+        self.set_gps_msg_time()
+
+        return
+
+    def set_gps_msg_time(self):
+
+        # Getting time
+        print("set_gps_msg_time")
+        current_time = self.get_clock().now().to_msg()
+        dt0 = self.get_gps_timestamp_utc()
+        #print("current time (ROS): {}".format(current_time.to_sec()))
+        #print("datetime timestamp: {}".format(dt0.timestamp()))
+        if (dt0!=None):
+            rostimestamp = self.gpsfix.header.stamp
+            rostimestamp_tosec = rostimestamp.sec + rostimestamp.nanosec / 1e9  # Convert to seconds
+            self.gps_time_i = dt0.timestamp() - rostimestamp_tosec
+            current_time_to_sec=current_time.sec +current_time.nanosec/1e9
+            self.gps_time_offset = current_time_to_sec - dt0.timestamp()      # Calculating offset between current time and GPS timestamp
+
+            # # Assigning timestamp part of NavSatFix message
+            sec=int(dt0.timestamp())
+            nanosec = int((dt0.timestamp() - sec) * 1e9)
+            self.gps_timestamp = Time(sec=sec, nanosec=nanosec)
+            self.gpsfix.header.stamp = self.gps_timestamp            # Assigning time received from F9P
+        # self.gpsfix.header.stamp = current_time.to_sec()       # Assigning current time (ROS) - DEPRECATED
+        else:
+            self.gps_time_offset = 99
+        if self.gps_time_offset > 0.5 and self.gps_time_offset != 99:
+            self.get_logger().error("SN4013: GPS time offset is high: {}s".format(self.gps_time_offset))
+            self.poll_buff =(self.gps_time_offset//0.125)*3
+            if self.poll_buff_pre !=1 and  self.poll_buff_pre!= 24 and self.poll_buff_pre!= 3:
+                self.poll_buff = 3
+            
+        elif self.gps_time_offset!=99:
+            self.poll_buff = 1
+        else:
+            self.poll_buff = 24
+        self.poll_buff_pre=self.poll_buff
+        
+        print("pulled sentence:",self.poll_buff)            
+        
+    def get_gps_timestamp_utc(self):
+        today_date = datetime.today()
+        year=today_date.year
+        month=today_date.month
+        day=today_date.day
+        try:
+            hour_i = self.geo.timestamp.hour
+            minute_i = self.geo.timestamp.minute
+            second_i = self.geo.timestamp.second
+            mic_sec_i = self.geo.timestamp.microsecond
+            dt0 = datetime(year, month, day, hour=hour_i, minute=minute_i, second=second_i, microsecond=mic_sec_i)
+            return dt0 
+        except:
+            print("GPS timestamp invalid")
+        
+    def send_chrony_shm_sample(self, gps_dt: datetime) -> None:
+        if(self.shm is None):
+            return 
+    
+        if(self.time_sync_finished):
+            return
+
+        if gps_dt.tzinfo is None:
+            raise ValueError("gps_dt must be timezone-aware UTC datetime")
+
+        raw = self.shm.read(ctypes.sizeof(ShmTime))
+        shm_time = ShmTime.from_buffer_copy(raw)
+
+        true_ts = gps_dt.timestamp()
+        true_sec = int(true_ts)
+        true_usec = int((true_ts - true_sec) * 1_000_000)
+        true_nsec = int((true_ts - true_sec) * 1_000_000_000)
+
+        recv_ts = time.time()
+        recv_sec = int(recv_ts)
+        recv_usec = int((recv_ts - recv_sec) * 1_000_000)
+        recv_nsec = int((recv_ts - recv_sec) * 1_000_000_000)
+
+        shm_time.valid = 0
+        shm_time.mode = 0
+        shm_time.count += 1
+
+        shm_time.clockTimeStampSec = true_sec
+        shm_time.clockTimeStampUSec = true_usec
+        shm_time.clockTimeStampNSec = true_nsec
+
+        shm_time.receiveTimeStampSec = recv_sec
+        shm_time.receiveTimeStampUSec = recv_usec
+        shm_time.receiveTimeStampNSec = recv_nsec
+
+        shm_time.leap = 0
+        shm_time.precision = -20
+        shm_time.nsamples = 3
+
+        shm_time.count += 1
+        shm_time.valid = 1
+
+        self.shm.write(bytes(shm_time))
+
+        # Check if time offset is within acceptable range to consider time sync successful
+        system_time_diff = abs(time.time() - gps_dt.timestamp())
+        if system_time_diff <= 5.0:
+            self.time_sync_finished = True
+        
+
+    def get_gps_freq(self):
+        # # # Gets the frequency of the published GPS message and sends a message if there has been a significant change
+
+        # Create a buffer to find the average frequency
+        time_buf_len = 10
+        self.gps_time_buf.append(self.gps_time_i)
+        if len(self.gps_time_buf) > time_buf_len:
+            self.gps_time_buf.pop(0)
+
+        # Inverted average time to calculate hertz
+        gps_hz = len(self.gps_time_buf) / sum(self.gps_time_buf)
+        self.gps_hz = gps_hz
+        
+        #rospy.loginfo(f'GPS Frequency: {self.gps_hz} Hz')
+        if gps_hz < 2 and self.gps_freq_status != "Critical":
+            self.get_logger().error("SN4012: GPS Frequency status: Critical (<2 hz)")
+            self.gps_freq_status = "Critical"
+        elif gps_hz >=2 and gps_hz < 6 and self.gps_freq_status != "Warning":
+            self.get_logger().warn("SN4012: GPS Frequency status: Warning (<6 hz)")
+            self.gps_freq_status = "Warning"
+        elif gps_hz >= 6 and self.gps_freq_status != "Good":
+            self.get_logger().info("SN4012: GPS Frequency status: Good (>6 hz)")
+            self.gps_freq_status = "Good" 
+
+    def get_gps_quality(self, streamed_data):
+
+        if isinstance(streamed_data,str):
+            # GSV talkers are per-constellation ($GPGSV, $GLGSV, $GAGSV, ...),
+            # so match on the sentence type rather than a fixed talker.
+            if len(streamed_data) > 6 and streamed_data[0] == "$" and streamed_data[3:6] == "GSV":
+                self._handle_gsv(streamed_data)
+            if streamed_data.startswith("$GNGST"):
+                gst_parse = pynmea2.parse(streamed_data)
+
+                try:
+                    self.hAcc=((gst_parse.std_dev_latitude)**2+(gst_parse.std_dev_longitude)**2)**0.5
+                except:
+                    print("hAcc is invalid")
+
+                #print(self.hAcc)
+            if streamed_data.startswith("$GNGGA"):
+                gga_parse = pynmea2.parse(streamed_data)
+                try:
+                    self.gga_gps_qual = int(gga_parse.gps_qual)
+                    self.num_sats = int(gga_parse.num_sats)         # Number of satellites
+                    print("self.gps_time_offset:",self.gps_time_offset)
+                    print("num_sats:",self.num_sats)
+                    if self.gps_time_offset < 0.5 and self.num_sats >0:
+                        print("publish gga")
+                        msg=String()
+                        msg.data = streamed_data
+                        self.gga_msg_pub.publish(msg)
+                except Exception as e:
+                    print(e)
+                
+                try:
+                    self.hor_dil = float(gga_parse.horizontal_dil)  # Horizontal dilution of precision (HDOP)
+                except:
+                    print("hor_dil value invalid") 
+                try:
+                    self.geo_sep = float(gga_parse.geo_sep)         # Geoid separation
+                except:
+                    print("Geoid separation value invalid")
+                # Differential block (1.2.0): correction age + reference station ID
+                try:
+                    age = gga_parse.age_gps_data
+                    self.corr_age = float(age) if age not in (None, "") else -1.0
+                except (ValueError, TypeError, AttributeError):
+                    self.corr_age = -1.0
+                try:
+                    sid = gga_parse.ref_station_id
+                    self.station_id = int(sid) if sid not in (None, "") else -1
+                except (ValueError, TypeError, AttributeError):
+                    self.station_id = -1
+            if streamed_data.startswith("$GNGNS"):
+                gns_parse = pynmea2.parse(streamed_data)
+                # self.pos_mode = int(gns_parse.mode_indicator)
+
+                try:
+                    self.num_sats = int(gns_parse.num_sats)             # Number of satellites
+                    self.hor_dil = float(gns_parse.hdop)                # Horizontal dilution of precision (HDOP)
+                    self.geo_sep = float(gns_parse.geo_sep)         # Geoid separation
+                except:
+                    print("GNS information invalid")
+            if streamed_data.startswith("$GNGSA"):      # Satellites used in the solution
+                self._handle_gsa(streamed_data)
+            if streamed_data.startswith("$GNVTG"):      # Velocity
+                vtg_parse = pynmea2.parse(streamed_data)
+                try:
+                    self.cogt = float(vtg_parse.true_track)                  # Course over ground (true)
+                    # self.cogm = vtg_parse.mag_track                 # Course over ground (magnetic)
+                    # self.sogn = vtg_parse.spd_over_grnd_kts         # Speed over ground (knots)
+                    self.sogk = float(vtg_parse.spd_over_grnd_kmph)          # Speed over ground (km/h)
+                except TypeError:
+                    pass
+                    #print("VTG information invalid")
+                # TODO: Calculate ENU velocity
+            if self.shm is not None and not self.time_sync_finished and streamed_data.startswith("$GNRMC"):
+                rmc_parse = pynmea2.parse(streamed_data)
+                try:
+                    self.gps_rmc_timestamp = rmc_parse.timestamp
+                    self.gps_rmc_datestamp = rmc_parse.datestamp
+                    gps_dt = datetime.combine(self.gps_rmc_datestamp, self.gps_rmc_timestamp)
+                    self.send_chrony_shm_sample(gps_dt)
+
+                except Exception as e:
+                    self.get_logger().error(f"RMC timestamp invalid: {e}")
+
+        return
+
+    def _handle_gsv(self, sentence):
+        """Accumulate GSV (satellites in view) across the multi-sentence,
+        multi-constellation set and publish a GnssConstellation snapshot once a
+        full cycle has been collected (uRCU Data Exchange msg 1.2.1)."""
+        talker = sentence[1:3]
+        sys_id = GSV_TALKER_TO_SYSID.get(talker)
+        if sys_id is None:
+            return
+        try:
+            gsv = pynmea2.parse(sentence)
+            total = int(gsv.num_messages)
+            msg_num = int(gsv.msg_num)
+        except Exception:
+            return
+
+        # msg_num == 1 for a constellation already completed => a new cycle has
+        # started: publish what we have and reset the accumulator.
+        if msg_num == 1 and sys_id in self._gsv_systems:
+            self._publish_constellation()
+            self._gsv_partial = {}
+            self._gsv_systems = {}
+
+        if msg_num == 1 or sys_id not in self._gsv_partial:
+            self._gsv_partial[sys_id] = []
+        sats = self._gsv_partial[sys_id]
+
+        # Up to 4 satellites per GSV sentence
+        for i in range(1, 5):
+            prn = getattr(gsv, "sv_prn_num_%d" % i, "")
+            if prn in (None, ""):
+                continue
+            try:
+                svid = int(prn) & 0xFF
+            except (ValueError, TypeError):
+                continue   # skip malformed / non-numeric PRN (corrupt sentence)
+            sat = GnssSat()
+            sat.svid = svid
+            ele = getattr(gsv, "elevation_deg_%d" % i, "")
+            azi = getattr(gsv, "azimuth_%d" % i, "")
+            snr = getattr(gsv, "snr_%d" % i, "")
+            try:
+                sat.elevation = int(ele) if ele not in (None, "") else -1
+            except (ValueError, TypeError):
+                sat.elevation = -1
+            try:
+                sat.azimuth = int(azi) if azi not in (None, "") else 0
+            except (ValueError, TypeError):
+                sat.azimuth = 0
+            try:
+                sat.cno = int(snr) if snr not in (None, "") else 0
+            except (ValueError, TypeError):
+                sat.cno = 0
+            sats.append(sat)
+
+        # This constellation's set is complete
+        if msg_num == total:
+            self._gsv_systems[sys_id] = sats
+
+    def _handle_gsa(self, sentence):
+        """Parse a $xxGSA sentence to collect the satellites USED in the solution,
+        grouped by constellation (uRCU Data Exchange 1.2.0 PRN block). Relies on the
+        NMEA 4.11 trailing 'GNSS System ID' field to attribute SVs to a system."""
+        core = sentence.split("*")[0]
+        fields = core.split(",")
+        # $xxGSA,mode,fix,[12 SV ids],pdop,hdop,vdop,systemId
+        if len(fields) < 19:
+            return
+        try:
+            nmea_sysid = int(fields[18]) if fields[18] != "" else None
+        except ValueError:
+            nmea_sysid = None
+        if nmea_sysid is None:
+            return
+        sys_id = GSA_NMEA_TO_SYSID.get(nmea_sysid)
+        if sys_id is None:
+            return
+        svids = []
+        for f in fields[3:15]:   # 12 SV-ID slots
+            if f != "":
+                try:
+                    svids.append(int(f) & 0xFF)
+                except ValueError:
+                    pass
+        # Overwrite this system's used list each cycle (~1 Hz)
+        self._gsa_used_systems[sys_id] = svids
+
+    def _publish_constellation(self):
+        if not self._gsv_systems:
+            return
+        msg = GnssConstellation()
+        ts = getattr(self, "gps_timestamp", None)
+        msg.stamp = ts if ts is not None else self.get_clock().now().to_msg()
+        for sys_id, sats in sorted(self._gsv_systems.items()):
+            gs = GnssSystem()
+            gs.system_id = sys_id
+            gs.satellites = sats
+            msg.systems.append(gs)
+        self.constellation_pub.publish(msg)
+
+    def create_quality_msg(self):
+        gpsQualMsg = GpsQual()
+        gpsQualMsg.stamp = self.gps_timestamp
+        gpsQualMsg.t_offset = float(self.gps_time_offset)
+        gpsQualMsg.h_acc = float(self.hAcc)
+        gpsQualMsg.gps_qual_val = self.gga_gps_qual
+        gpsQualMsg.num_sats = self.num_sats
+        gpsQualMsg.hor_dil = float(self.hor_dil)
+        gpsQualMsg.geo_sep = float(self.geo_sep)
+        # gpsQualMsg.satInfo = ???
+        # PRN block (1.2.0): satellites used in the solution, per constellation
+        gpsQualMsg.used_systems = []
+        for sys_id, svids in sorted(self._gsa_used_systems.items()):
+            gs = GnssSystem()
+            gs.system_id = sys_id
+            gs.satellites = [GnssSat(svid=s) for s in svids]
+            gpsQualMsg.used_systems.append(gs)
+        # Differential block (1.2.0): correction age + reference station ID
+        gpsQualMsg.corr_age = float(self.corr_age)
+        gpsQualMsg.station_id = int(self.station_id)
+        gpsQualMsg.v_cog = float(self.cogt)
+        gpsQualMsg.v_sog = float(self.sogk)
+        gpsQualMsg.frequency = self.gps_hz
+        self.gps_qual_pub.publish(gpsQualMsg)
+     
+     
+    def stamp_to_sec(self, stamp):
+        return float(stamp.sec) + float(stamp.nanosec) / 1e9
+     
+     
+    def haversine_distance_m(self, lat1, lon1, lat2, lon2):
+        r = 6371000.0  # earth radius in meters
+
+        phi1 = math.radians(lat1)
+        phi2 = math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlambda = math.radians(lon2 - lon1)
+
+        a = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+        c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+        return r * c
+    
+    
+    def accept_fix(self, msg, reason="accepted"):
+        self.last_good_lat = msg.latitude
+        self.last_good_lon = msg.longitude
+        self.last_good_time_s = self.stamp_to_sec(msg.header.stamp)
+        # self.get_logger().info(
+        #     f"GPS accepted: {reason}, lat={msg.latitude:.8f}, lon={msg.longitude:.8f}"
+        # )
+        
+        
+    def reject_fix(self, msg, reason="rejected"):
+        self.get_logger().warn(
+            f"GPS rejected: {reason}, lat={msg.latitude:.8f}, lon={msg.longitude:.8f}"
+        )
+        
+        
+    def should_publish_gps(self, msg):
+
+        current_time_s = self.stamp_to_sec(msg.header.stamp)
+
+        # first good point: accept directly
+        if self.last_good_lat is None or self.last_good_lon is None or self.last_good_time_s is None:
+            self.accept_fix(msg, "first_fix")
+            return True
+
+        dt = current_time_s - self.last_good_time_s
+
+        # time gap too large or invalid: reset reference
+        if dt <= 0.0 or dt > self.max_time_gap_s:
+            self.accept_fix(msg, f"reset_by_time_gap dt={dt:.3f}")
+            return True
+
+        dist_m = self.haversine_distance_m(
+            self.last_good_lat,
+            self.last_good_lon,
+            msg.latitude,
+            msg.longitude
+        )
+
+        speed_mps = 0.0
+        try:
+            speed_mps = float(self.sogk) / 3.6   # VTG gives km/h
+        except Exception:
+            speed_mps = 0.0
+
+        # Rule 1: low speed jump reject
+        if speed_mps < self.low_speed_threshold_mps and dist_m > self.max_low_speed_jump_distance_m:
+            self.reject_fix(
+                msg,
+                f"low_speed_jump_reject dist={dist_m:.2f}m speed={speed_mps:.2f}mps"
+            )
+            return False
+
+        # Rule 2: hard jump reject
+        if dt < self.hard_jump_dt_s and dist_m > self.hard_jump_distance_m:
+            self.reject_fix(
+                msg,
+                f"hard_jump_reject dist={dist_m:.2f}m dt={dt:.3f}s"
+            )
+            return False
+
+        # Rule 3: general dynamic jump reject
+        max_allowed_dist = self.base_jump_margin_m + self.max_speed_mps * dt
+        if dist_m > max_allowed_dist:
+            self.reject_fix(
+                msg,
+                f"dynamic_jump_reject dist={dist_m:.2f}m max_allowed={max_allowed_dist:.2f}m dt={dt:.3f}s"
+            )
+            return False
+
+        self.accept_fix(
+            msg,
+            f"normal dist={dist_m:.2f}m dt={dt:.3f}s speed={speed_mps:.2f}mps"
+        )
+        return True
+     
+     
+     
+    def maybe_inject_test_bad_fix(self):
+        if not self.inject_test_bad_fix:
+            return
+
+        if self.inject_test_bad_fix_once_done:
+            return
+
+        if self.good_fix_count < 5:
+            return
+
+        self.gpsfix.latitude = self.gpsfix.latitude + 0.3
+        self.gpsfix.longitude = self.gpsfix.longitude + 0.3
+
+        self.inject_test_bad_fix_once_done = True
+        self.get_logger().warn(
+            f"Injected TEST bad GPS fix: lat={self.gpsfix.latitude:.8f}, lon={self.gpsfix.longitude:.8f}"
+        )
+ 
+     
+def spin_in_background(self):
+    executor = rclpy.get_global_executor()
+    try:
+        executor.spin()
+    except ExternalShutdownException:
+        pass 
+
+
+
+
+def main(args=None):
+    rclpy.init()
+    '''
+    mqtt_publish = False
+    t = threading.Thread(target=spin_in_background)
+    t.start()
+
+    # init node
+    node=rclpy.create_node('rtk')
+    rclpy.get_global_executor().add_node(node)
+    
+        #rclpy.init(args=args)
+    gps_node = F9P_GPS()
+    gps_pub = node.create_publisher( NavSatFix,"/antobot_gps", 10)
+    gps_qual_pub = node.create_publisher( GpsQual,"/antobot_gps/quality", 10)
+    print(gps_node.method)
+    if gps_node.method == "poll":
+        rate = node.creat_rate(8)  # 8hz
+    if gps_node.method == "stream":
+        rate = node.create_rate(50)  # 8hz
+
+    baudrate_rtk = 460800#38400            # Need to resolve baudrate
+    #gps_node.uart2_config(baudrate_rtk)
+
+    mode = 2 # 1: RTK base station; 2: PPP-IP; 3: LBand
+    while rclpy.ok():
+        gps_node.get_gps()
+        print("running")
+        rate.sleep()
+        
+    t.join()
+            
+   '''
+    try:
+        #node = F9P_GPS()  # Create an instance of the F9P_GPS class
+        
+        #baudrate_rtk = 460800#38400            # Need to resolve baudrate
+        #node.uart2_config(baudrate_rtk)
+        rclpy.spin(F9P_GPS())
+    except (ExternalShutdownException, KeyboardInterrupt):
+        pass
+    finally:
+        rclpy.try_shutdown()
+
+
+
+if __name__ == '__main__':   
+    main()
+
