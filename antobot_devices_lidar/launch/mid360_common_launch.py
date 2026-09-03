@@ -34,23 +34,32 @@ def generate_launch_description():
     platform_config = get_robot_config("platform_config", platform_config_path)
 
     aRCU_enable = platform_config.get('aRCU_enable', False)
-    mid360_count = sum(1 for cfg in platform_config["lidar"].values() if cfg["type"] == "mid360")
 
+    # Count mid360 entries. An entry counts if its 'type' is mid360, or, when no
+    # type is given (e.g. a bare "mid360:" key), if its name contains mid360.
+    mid360_count = 0
+    for lidar_name, lidar_cfg in (platform_config.get('lidar', {}) or {}).items():
+        lidar_cfg = lidar_cfg or {}
+        if 'mid360' in str(lidar_cfg.get('type', lidar_name)).lower():
+            mid360_count += 1
+
+    # The json files carry the host/lidar IPs; pick by lidar count. Anything
+    # other than 2 or 4 lidars falls back to the single-lidar config.
     if aRCU_enable:
-        if mid360_count == 1:
-            user_config_path = os.path.join(cur_config_path, 'MID360_config_aRCU.json')
-        elif mid360_count == 2:
+        if mid360_count == 2:
             user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config_aRCU.json')
         elif mid360_count == 4:
             user_config_path = os.path.join(cur_config_path, 'U501_MID360_config_aRCU.json')
-
+        else:
+            user_config_path = os.path.join(cur_config_path, 'MID360_config_aRCU.json')
     else:
-        if mid360_count == 1:
-            user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
-        elif mid360_count == 2:
+        if mid360_count == 2:
             user_config_path = os.path.join(cur_config_path, 'Multi_MID360_config.json')
         elif mid360_count == 4:
             user_config_path = os.path.join(cur_config_path, 'U501_MID360_config_aRCU.json')
+        else:
+            user_config_path = os.path.join(cur_config_path, 'MID360_config.json')
+    print(f"[mid360 launch] {mid360_count} mid360 lidar(s) in platform_config -> {os.path.basename(user_config_path)}")
 
     livox_ros2_params = [
         {"xfer_format": xfer_format},
