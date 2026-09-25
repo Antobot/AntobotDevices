@@ -245,33 +245,42 @@ class F9P_GPS(Node):
                         self.gps_pub.publish(self.gpsfix)
                     # self.gps_pub.publish(self.gpsfix)
         if self.method == "stream":
-            if self.dev_type =="urcu":
-                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') #stream method
-            if self.dev_type == "usb":
-                streamed_data = self.gps_dev.stream_nmea(self.poll_buff) #.decode('utf-8') 1 self.poll_buff
-            self.get_gps_quality(streamed_data)
+            # Over SPI (urcu), handle every sentence already waiting rather than one per 20 ms
+            # tick: the F9P can output more than 50 sentences/s (GGA, RMC, VTG, GST, GSA/GSV), and
+            # a backlog delays sentences and triggers the GGA-only drain (poll_buff > 1), which
+            # drops RMC. The SPI read returns None once the receiver buffer is empty; the USB
+            # serial read blocks until a full line, so it stays at one sentence per tick.
+            max_sentences = 40 if (self.dev_type == "urcu" and self.poll_buff == 1) else 1
+            for _ in range(max_sentences):
+                streamed_data = self.gps_dev.stream_nmea(self.poll_buff)
+                if streamed_data is None:
+                    break
+                self.process_streamed_sentence(streamed_data)
+
+    def process_streamed_sentence(self, streamed_data):
+        self.get_gps_quality(streamed_data)
 
 
-            print("streamed_data:",streamed_data)
+        print("streamed_data:",streamed_data)
 
 
-            # Check the new data is viable and update message
-            if self.correct_gps_format(streamed_data):
-                self.create_gps_msg()
-                self.get_gps_freq()
+        # Check the new data is viable and update message
+        if self.correct_gps_format(streamed_data):
+            self.create_gps_msg()
+            self.get_gps_freq()
 
-                self.create_quality_msg()
+            self.create_quality_msg()
 
-                ## only for testing - inject a bad fix after 5 good fixes to test the filter --- IGNORE ---
-                # self.good_fix_count += 1
-                # self.maybe_inject_test_bad_fix()
+            ## only for testing - inject a bad fix after 5 good fixes to test the filter --- IGNORE ---
+            # self.good_fix_count += 1
+            # self.maybe_inject_test_bad_fix()
 
-                if self.hAcc < 5000:
-                   if self.enable_gps_filter: # self.gps_pub.publish(self.gpsfix)
-                       if self.should_publish_gps(self.gpsfix):   # add the filtering condition here
-                           self.gps_pub.publish(self.gpsfix)
-                   else:
-                        self.gps_pub.publish(self.gpsfix)
+            if self.hAcc < 5000:
+               if self.enable_gps_filter: # self.gps_pub.publish(self.gpsfix)
+                   if self.should_publish_gps(self.gpsfix):   # add the filtering condition here
+                       self.gps_pub.publish(self.gpsfix)
+               else:
+                    self.gps_pub.publish(self.gpsfix)
 
 
 
