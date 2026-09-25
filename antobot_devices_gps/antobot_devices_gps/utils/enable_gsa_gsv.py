@@ -24,7 +24,7 @@
 import time
 import spidev
 
-SPI_BUS, SPI_DEV = 2, 0      # spi1 - same as f9p_config / sfeSpiWrapper
+SPI_BUS, SPI_DEV = 1, 0      # spi1 - same as f9p_config / sfeSpiWrapper
 SPI_SPEED = 7800000
 LAYERS = 0x05                # RAM + Flash (persist)
 
