@@ -38,10 +38,21 @@ def generate_launch_description():
     # Count mid360 entries. An entry counts if its 'type' is mid360, or, when no
     # type is given (e.g. a bare "mid360:" key), if its name contains mid360.
     mid360_count = 0
+    pps_count = 0
     for lidar_name, lidar_cfg in (platform_config.get('lidar', {}) or {}).items():
         lidar_cfg = lidar_cfg or {}
         if 'mid360' in str(lidar_cfg.get('type', lidar_name)).lower():
             mid360_count += 1
+            # 'pps: true' on a lidar entry = GPS PPS is wired to it; the driver then forwards the
+            # GPS RMC sentence of each second so the lidar timestamps switch to GPS time.
+            if str(lidar_cfg.get('pps', False)).lower() in ('true', '1', 'yes'):
+                pps_count += 1
+
+    # The driver sends RMC to every lidar it streams from and cuts frames on one shared clock, so
+    # sync is only usable when every mid360 on this computer has PPS wired.
+    pps_sync = mid360_count > 0 and pps_count == mid360_count
+    if 0 < pps_count < mid360_count:
+        print(f"[mid360 launch] WARNING: only {pps_count}/{mid360_count} mid360 lidars have 'pps: true'; PPS time sync disabled")
 
     # The json files carry the host/lidar IPs; pick by lidar count. Anything
     # other than 2 or 4 lidars falls back to the single-lidar config.
@@ -70,15 +81,19 @@ def generate_launch_description():
         {"lvx_file_path": lvx_file_path},
         {"user_config_path": user_config_path},
         {"cmdline_input_bd_code": cmdline_bd_code},
-
+        {"rmc_topic": '/antobot_gps/rmc' if pps_sync else ''},
     ]
+    print(f"[mid360 launch] PPS time sync: {'on (RMC from /antobot_gps/rmc)' if pps_sync else 'off'}")
 
     livox_driver = Node(
         package='livox_ros_driver2',
         executable='livox_ros_driver2_node',
         name='livox_lidar_publisher',
         output='screen',
-        parameters=livox_ros2_params
+        parameters=livox_ros2_params,
+        # The Livox SDK converts the RMC date/time with mktime(), i.e. in local time; UTC keeps
+        # GPS-synced lidar timestamps correct whatever the host's timezone is.
+        additional_env={'TZ': 'UTC'} if pps_sync else None
     )
 
 

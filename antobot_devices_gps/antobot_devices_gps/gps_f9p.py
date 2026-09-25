@@ -165,6 +165,7 @@ class F9P_GPS(Node):
         self.gps_pub = self.create_publisher( NavSatFix,pub_name, 10)
         self.gps_qual_pub = self.create_publisher( GpsQual,"/antobot_gps/quality", 10)
         self.gga_msg_pub=self.create_publisher(String, "/antobot_gps/gga", 10)
+        self.rmc_pub = self.create_publisher(String, "/antobot_gps/rmc", 10)
         self.constellation_pub = self.create_publisher(GnssConstellation, "/antobot_gps/constellation", 5)
 
         # GSV (satellites-in-view / constellation) accumulation state
@@ -595,6 +596,8 @@ class F9P_GPS(Node):
                     pass
                     #print("VTG information invalid")
                 # TODO: Calculate ENU velocity
+            if streamed_data.startswith(("$GNRMC", "$GPRMC")):
+                self._publish_rmc(streamed_data)
             if self.shm is not None and not self.time_sync_finished and streamed_data.startswith("$GNRMC"):
                 rmc_parse = pynmea2.parse(streamed_data)
                 try:
@@ -607,6 +610,20 @@ class F9P_GPS(Node):
                     self.get_logger().error(f"RMC timestamp invalid: {e}")
 
         return
+
+    def _publish_rmc(self, sentence):
+        """Forward the RMC of each whole second (valid fix only) on /antobot_gps/rmc. A lidar with
+        the GPS PPS wired to it needs this to know which UTC second each pulse marks."""
+        sentence = sentence.strip()
+        try:
+            rmc = pynmea2.parse(sentence)
+            if rmc.status != 'A' or rmc.timestamp is None or rmc.timestamp.microsecond != 0:
+                return
+        except (pynmea2.ParseError, ValueError, TypeError, AttributeError):
+            return
+        msg = String()
+        msg.data = sentence
+        self.rmc_pub.publish(msg)
 
     def _handle_gsv(self, sentence):
         """Accumulate GSV (satellites in view) across the multi-sentence,
